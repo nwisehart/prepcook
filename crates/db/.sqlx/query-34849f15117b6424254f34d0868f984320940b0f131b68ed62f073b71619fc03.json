@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO execution_process_seat_stall (execution_process_id)\n               VALUES (?)\n               ON CONFLICT(execution_process_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "34849f15117b6424254f34d0868f984320940b0f131b68ed62f073b71619fc03"
+}

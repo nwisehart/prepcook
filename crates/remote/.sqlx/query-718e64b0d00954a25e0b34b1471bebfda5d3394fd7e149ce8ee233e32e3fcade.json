@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO users (id, email, first_name, username, is_agent, agent_password_hash)\n            VALUES ($1, $2, $3, $4, TRUE, $5)\n            RETURNING\n                id           AS \"id!: Uuid\",\n                email        AS \"email!\",\n                first_name   AS \"first_name?\",\n                last_name    AS \"last_name?\",\n                username     AS \"username?\",\n                created_at   AS \"created_at!\",\n                updated_at   AS \"updated_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "first_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "username?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "718e64b0d00954a25e0b34b1471bebfda5d3394fd7e149ce8ee233e32e3fcade"
+}

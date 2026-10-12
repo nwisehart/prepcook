@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n               SET agent_password_hash = $2, updated_at = NOW()\n             WHERE id = $1 AND is_agent\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "29b7afc6fed0cc4e4e56351bef6482d7a216590452d0d3feea6f6a52c4ec824a"
+}

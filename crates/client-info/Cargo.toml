@@ -1,0 +1,5 @@
+[package]
+name = "client-info"
+version = "0.1.44"
+edition = "2024"
+license = "Apache-2.0"

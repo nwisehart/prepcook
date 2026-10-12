@@ -1,0 +1,178 @@
+name: Release
+
+# A `v<version>` tag publishes:
+#   - a GitHub release with prepcook-<version>-<target>.tar.gz for linux-x64,
+#     macos-x64 and macos-arm64 (each holding prepcook, prepcook-mcp, LICENSE and
+#     NOTICE; see scripts/package-release.sh) and SHA256SUMS, with the tag's
+#     annotation as the release notes;
+#   - ghcr.io/nwisehart/prepcook-board:<version> and :latest, the board image that
+#     `prepcook up` runs.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: 'true'
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The server crate's version is what the binary reports and which board
+      # image `prepcook up` pulls; the npx CLI downloads the release named by its
+      # own version. All three must be the tag's.
+      - name: The tag matches the versions in the repository
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/server/Cargo.toml | head -n1)
+          root=$(node -p "require('./package.json').version")
+          npx_cli=$(node -p "require('./npx-cli/package.json').version")
+          echo "tag=$version crates/server=$crate package.json=$root npx-cli=$npx_cli"
+          if [ "$crate" != "$version" ] || [ "$root" != "$version" ] || [ "$npx_cli" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the versions in the repository"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node
+
+      - name: Build the web app
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm -C packages/local-web build
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: local-web-dist
+          path: packages/local-web/dist
+          if-no-files-found: error
+
+  binaries:
+    needs: [version, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: macos-arm64
+          # GitHub's Intel macOS runner (macos-13 is retired).
+          - os: macos-15-intel
+            target: macos-x64
+          - os: ubuntu-latest
+            target: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The server embeds packages/local-web/dist at compile time.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: local-web-dist
+          path: packages/local-web/dist
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: release-${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --bin prepcook --bin prepcook-mcp
+
+      - name: Package
+        run: bash scripts/package-release.sh "${{ needs.version.outputs.version }}" "${{ matrix.target }}" dist
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prepcook-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [version, binaries]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: prepcook-*
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      # actions/checkout leaves the tag lightweight; fetch the annotated tag
+      # object so its message can be the release notes.
+      - name: Release notes from the tag
+        run: |
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > release-notes.md
+          if [ -z "$(tr -d '[:space:]' < release-notes.md)" ]; then
+            echo "Prep Cook ${{ needs.version.outputs.version }}" > release-notes.md
+          fi
+          cat release-notes.md
+
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3 trufflehog:ignore
+        with:
+          name: Prep Cook ${{ needs.version.outputs.version }}
+          body_path: release-notes.md
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+
+  board-image:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: crates/remote/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/nwisehart/prepcook-board:${{ needs.version.outputs.version }}
+            ghcr.io/nwisehart/prepcook-board:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.licenses=Apache-2.0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

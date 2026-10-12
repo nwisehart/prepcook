@@ -1,0 +1,36 @@
+{
+  "name": "Prep Cook",
+  "short_name": "Prep Cook",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "purpose": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-maskable.png",
+      "sizes": "512x512",
+      "purpose": "maskable",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#f2f2f2",
+  "background_color": "#f2f2f2",
+  "display": "standalone"
+}

@@ -1,0 +1,29 @@
+{
+  "agents": {
+    "title": "Agent users",
+    "description": "Automation identities for always-on runners. Agents sign in with email + secret (no SSO), get their own lane on the board, and wear a robot badge.",
+    "secretTitle": "Secret for {{email}} — shown once",
+    "secretHelper": "Store it in the runner (sign-in email + this secret). It cannot be retrieved later — only rotated.",
+    "copySecret": "Copy secret",
+    "copied": "Copied",
+    "none": "No agent users yet — create one below.",
+    "rotate": "Rotate secret",
+    "createLabel": "Create agent",
+    "createHelper": "The email does not need a real inbox — it is only the sign-in identity.",
+    "namePlaceholder": "Prep Cook",
+    "creating": "Creating…",
+    "createButton": "Create",
+    "createError": "Failed to create agent",
+    "rotateError": "Failed to rotate secret",
+    "adminOnly": "Only admins can manage agent users."
+  },
+  "settings": {
+    "noOrganizations": "Not available",
+    "loadingOrganizations": "Loading...",
+    "loadError": "Failed to load"
+  },
+  "boardRequired": {
+    "title": "No board",
+    "description": "Agent users live on the board, and this server cannot reach one. See Board."
+  }
+}

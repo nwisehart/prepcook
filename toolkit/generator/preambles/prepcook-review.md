@@ -1,0 +1,1 @@
+Run this in a fresh session — not the one that wrote the fix — with the ticket key as the argument. The branch to review is the one checked out. `/prepcook-self-review` has usually run before this; it fixed what was mechanical, and this read is the one that owes it nothing.

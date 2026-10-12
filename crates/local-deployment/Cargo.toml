@@ -1,0 +1,40 @@
+[package]
+name = "local-deployment"
+version = "0.1.44"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
+api-types = { path = "../api-types" }
+db = { path = "../db" }
+executors = { path="../executors" }
+deployment = { path = "../deployment" }
+client-info = { path = "../client-info" }
+remote-info = { path = "../remote-info" }
+preview-proxy = { path = "../preview-proxy" }
+services = { path = "../services" }
+worktree-manager = { path = "../worktree-manager" }
+workspace-manager = { path = "../workspace-manager" }
+utils = { path = "../utils" }
+git = { path = "../git" }
+tokio-util = { version = "0.7", features = ["io"] }
+serde_json = { workspace = true }
+serde = { workspace = true }
+base64 = "0.22"
+ed25519-dalek = "2.2.0"
+anyhow = { workspace = true }
+tracing = { workspace = true }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+command-group = { version = "5.0", features = ["with-tokio"] }
+futures = "0.3"
+tokio = { workspace = true }
+globwalk = "0.9"
+portable-pty = "0.8"
+
+[build-dependencies]
+dotenv = "0.15"
+
+[dev-dependencies]
+tempfile = "3.8"

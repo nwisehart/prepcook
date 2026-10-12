@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO merge_request_reviews (\n                   id, project_id, issue_id, jira_key, mr_url, mr_number,\n                   comment_kind, comment_id, author, is_bot, body, path, line,\n                   commented_at\n               )\n               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n               ON CONFLICT(project_id, mr_number, comment_kind, comment_id)\n               DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "80c3f22bf190f8d9cb8f275959b6b475d5e77245f634281d4a30f093306d4a26"
+}

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                u.id           AS \"id!: Uuid\",\n                u.email        AS \"email!\",\n                u.first_name   AS \"first_name?\",\n                u.last_name    AS \"last_name?\",\n                u.username     AS \"username?\",\n                u.created_at   AS \"created_at!\",\n                u.updated_at   AS \"updated_at!\"\n            FROM users u\n            JOIN organization_member_metadata om ON om.user_id = u.id\n            WHERE om.organization_id = $1 AND u.is_agent\n            ORDER BY u.created_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "first_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "username?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "eec6fa253d7a13084c51df974b144cf55a607ebdcf6b6238b8a5d50f2619ee94"
+}

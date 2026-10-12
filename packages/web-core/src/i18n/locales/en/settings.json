@@ -1,0 +1,1092 @@
+{
+  "settings": {
+    "common": {
+      "unsavedChanges": "• You have unsaved changes",
+      "discardChangesConfirm": "Discard unsaved changes?"
+    },
+    "unsavedChanges": {
+      "title": "Unsaved Changes",
+      "message": "You have unsaved changes. Are you sure you want to close without saving?",
+      "discard": "Discard Changes",
+      "cancel": "Keep Editing"
+    },
+    "layout": {
+      "nav": {
+        "title": "Settings",
+        "machineSettings": "Machine Settings",
+        "accountSettings": "Account Settings",
+        "pairOtherMachines": "Pair other machines",
+        "selectHost": "Select host",
+        "general": "General",
+        "generalDesc": "Theme, notifications, and preferences",
+        "projects": "Projects",
+        "projectsDesc": "Project repositories and configuration",
+        "repos": "Repositories",
+        "reposDesc": "Repository scripts and configuration",
+        "secrets": "Secrets",
+        "secretsDesc": "Values the repository scripts need",
+        "agents": "Agents",
+        "agentsDesc": "Coding agent configurations",
+        "mcp": "MCP Servers",
+        "mcpDesc": "Model Context Protocol servers",
+        "tracker": "Tracker",
+        "trackerDesc": "Issue tracker connection, ticket pickup and approvers",
+        "playbooks": "Playbooks",
+        "playbooksDesc": "Stage prompt templates for bug and story work",
+        "orchestrator": "Orchestrator",
+        "orchestratorDesc": "Automatic agent launches per kanban column",
+        "integrations": "Integrations",
+        "integrationsDesc": "Optional connectors for agents (Sentry)",
+        "claude": "Claude",
+        "claudeDesc": "Subscription seat health and re-authentication",
+        "connectors": "Connectors",
+        "connectorsDesc": "MCP server health for agent sessions",
+        "worktree-pool": "Worktree pool",
+        "worktree-poolDesc": "Reusable warm worktrees via treehouse",
+        "board": "Board",
+        "boardDesc": "The board this server works with",
+        "organizations": "Agent Users",
+        "organizationsDesc": "Agent accounts that sign in with an email and secret",
+        "remote-projects": "Projects",
+        "remote-projectsDesc": "Manage projects",
+        "relay": "Remote Access",
+        "relayDesc": "Relay tunnel and enrollment",
+        "usage": "Usage",
+        "usageDesc": "Token spend per model and workspace"
+      }
+    },
+    "board": {
+      "title": "Board",
+      "description": "Prep Cook signs its requests to the board with the board's secret; there is nothing to sign in to. prepcook up reads the secret from the .env of the board it starts; for a board on another machine, set PREPCOOK_BOARD_SECRET to that board's PREPCOOK_JWT_SECRET.",
+      "url": "URL",
+      "noUrl": "not set",
+      "connected": "Connected",
+      "notAnswering": "Not answering",
+      "noSecret": "No board secret",
+      "noBoard": "No board URL"
+    },
+    "hostPicker": {
+      "thisMachine": "This machine",
+      "localHost": "Local host",
+      "remoteHost": "Remote host",
+      "noHostAvailable": "No host is available for host-specific settings yet.",
+      "pairMachineHint": "Pair a machine to open machine settings.",
+      "selectMachineHint": "Select a machine to open machine settings."
+    },
+    "general": {
+      "loading": "Loading settings...",
+      "loadError": "Failed to load configuration.",
+      "save": {
+        "button": "Save Settings",
+        "success": "✓ Settings saved successfully!",
+        "error": "Failed to save configuration",
+        "unsavedChanges": "• You have unsaved changes",
+        "discard": "Discard"
+      },
+      "appearance": {
+        "title": "Appearance",
+        "description": "Customize how the application looks and feels.",
+        "theme": {
+          "label": "Theme",
+          "placeholder": "Select theme",
+          "helper": "Choose your preferred color scheme."
+        },
+        "language": {
+          "label": "Language",
+          "placeholder": "Select language",
+          "helper": "Choose your preferred language. Browser Default follows your system language."
+        }
+      },
+      "taskExecution": {
+        "title": "Default Coding Agent",
+        "description": "Choose the default coding agent for tasks.",
+        "executor": {
+          "label": "Default Agent Configuration",
+          "placeholder": "Select profile",
+          "helper": "Choose the default agent configuration to use when creating a workspace."
+        },
+        "variant": "DEFAULT",
+        "defaultLabel": "Default"
+      },
+      "editor": {
+        "title": "Editor",
+        "description": "Configure your code editing experience.",
+        "type": {
+          "label": "Editor Type",
+          "placeholder": "Select editor",
+          "helper": "Choose your preferred code editor interface."
+        },
+        "customCommand": {
+          "label": "Custom Editor Command",
+          "placeholder": "e.g., code, subl, vim",
+          "helper": "Enter the command to launch your custom editor. This will be used to open files."
+        },
+        "remoteSsh": {
+          "host": {
+            "label": "Remote SSH Host (Optional)",
+            "placeholder": "e.g., hostname or IP address",
+            "helper": "Set this if Prep Cook is running on a remote server. When set, clicking \"Open in Editor\" will generate a URL to open your editor via SSH instead of spawning a local command."
+          },
+          "user": {
+            "label": "Remote SSH User (Optional)",
+            "placeholder": "e.g., username",
+            "helper": "SSH username for the remote connection. If not set, VS Code will use your SSH config or prompt you."
+          }
+        },
+        "availability": {
+          "checking": "Checking availability...",
+          "available": "Available",
+          "notFound": "Not found in PATH"
+        }
+      },
+      "github": {
+        "title": "GitHub Integration",
+        "cliSetup": {
+          "title": "GitHub CLI Setup",
+          "description": "GitHub CLI authentication is required to create pull requests and interact with GitHub repositories.",
+          "setupWillTitle": "This setup will:",
+          "steps": {
+            "checkInstalled": "Check if GitHub CLI (gh) is installed",
+            "installHomebrew": "Install it via Homebrew if needed (macOS)",
+            "authenticate": "Authenticate with GitHub using OAuth"
+          },
+          "setupNote": "The setup will run in the chat window. You'll need to complete the authentication in your browser.",
+          "runSetup": "Run Setup",
+          "running": "Running...",
+          "errors": {
+            "brewMissing": "Homebrew is not installed. Install it to enable automatic setup.",
+            "notSupported": "Automatic setup is not supported on this platform. Install GitHub CLI manually.",
+            "setupFailed": "Failed to run GitHub CLI setup."
+          },
+          "help": {
+            "homebrew": {
+              "description": "Automatic installation requires Homebrew. Install Homebrew from",
+              "brewSh": "brew.sh",
+              "manualInstall": "and then rerun the setup. Alternatively, install GitHub CLI manually with:",
+              "afterInstall": "After installation, authenticate with:"
+            },
+            "manual": {
+              "description": "Install GitHub CLI from the",
+              "officialDocs": "official documentation",
+              "andAuthenticate": "and then authenticate with your GitHub account."
+            }
+          }
+        }
+      },
+      "git": {
+        "title": "Git",
+        "description": "Configure git branch naming preferences",
+        "branchPrefix": {
+          "label": "Branch Prefix",
+          "placeholder": "prepcook",
+          "helper": "Prefix for auto-generated branch names. Leave empty for no prefix.",
+          "preview": "Preview:",
+          "previewWithPrefix": "{{prefix}}/1a2b-task-name",
+          "previewNoPrefix": "1a2b-task-name",
+          "errors": {
+            "slash": "Prefix cannot contain '/'.",
+            "startsWithDot": "Prefix cannot start with '.'.",
+            "endsWithDot": "Prefix cannot end with '.' or '.lock'.",
+            "invalidSequence": "Contains invalid sequence (.., @{).",
+            "invalidChars": "Contains invalid characters.",
+            "controlChars": "Contains control characters."
+          }
+        },
+        "workspaceDir": {
+          "label": "Workspace Directory",
+          "placeholder": "~/",
+          "helper": "Workspaces will be created in a .prepcook-workspaces subdirectory within this path. Leave empty to use the system default. Changes require an app restart.",
+          "browse": "Browse",
+          "dialogTitle": "Select Workspace Directory",
+          "dialogDescription": "Choose a directory. Workspaces will be created in a .prepcook-workspaces subdirectory within it."
+        }
+      },
+      "pullRequests": {
+        "title": "Pull Requests",
+        "description": "Configure PR creation behavior",
+        "autoDescription": {
+          "label": "Auto-generate PR description by default",
+          "helper": "When enabled, the AI agent will automatically update the PR title and description after creation."
+        },
+        "customPrompt": {
+          "useCustom": "Use custom prompt",
+          "helper": "Custom prompt for the AI agent when generating PR descriptions. Use {pr_number} and {pr_url} as placeholders."
+        }
+      },
+      "commits": {
+        "title": "Commits",
+        "description": "Configure commit behavior for workspaces",
+        "reminder": {
+          "label": "Commit reminder",
+          "helper": "Prompt supported agents to commit changes before stopping."
+        },
+        "customPrompt": {
+          "useCustom": "Use custom prompt",
+          "helper": "Custom prompt for the commit reminder. The git status will be appended automatically."
+        }
+      },
+      "notifications": {
+        "title": "Notifications",
+        "description": "Control when and how you receive notifications.",
+        "sound": {
+          "label": "Sound Notifications",
+          "helper": "Play a sound when workspaces finish running.",
+          "fileLabel": "Sound",
+          "filePlaceholder": "Select sound",
+          "fileHelper": "Choose the sound to play when tasks complete. Click the volume button to preview."
+        },
+        "push": {
+          "label": "Push Notifications",
+          "helper": "Show system notifications when workspaces finish running."
+        }
+      },
+      "messageInput": {
+        "title": "Message Input",
+        "description": "Configure how messages are sent in the chat input.",
+        "shortcut": {
+          "label": "Send message with",
+          "helper": "Choose the keyboard shortcut to send messages.",
+          "enterLabel": "Enter (Shift+Enter for new line)"
+        }
+      },
+      "privacy": {
+        "title": "Privacy",
+        "description": "Help improve Prep Cook by sharing anonymous usage data.",
+        "telemetry": {
+          "label": "Enable Telemetry",
+          "helper": "Enables anonymous usage events tracking to help improve the application. No prompts or project information are collected."
+        }
+      },
+      "taskTemplates": {
+        "title": "Tags",
+        "description": "Create reusable text snippets that can be inserted into task descriptions using @tag_name."
+      },
+      "tags": {
+        "manager": {
+          "title": "Task Tags",
+          "addTag": "Add Tag",
+          "noTags": "No tags yet. Create reusable text snippets for common task descriptions. Use @tag_name in any task.",
+          "table": {
+            "tagName": "Tag Name",
+            "content": "Content",
+            "actions": "Actions"
+          },
+          "actions": {
+            "editTag": "Edit tag",
+            "deleteTag": "Delete tag"
+          },
+          "deleteConfirm": "Are you sure you want to delete the tag \"{{tagName}}\"?"
+        },
+        "dialog": {
+          "createTitle": "Create Tag",
+          "editTitle": "Edit Tag",
+          "tagName": {
+            "label": "Tag Name",
+            "required": "*",
+            "hint": "Use this name with @ in task descriptions: @{{tagName}}",
+            "placeholder": "e.g., bug_fix, test_plan, api_docs",
+            "error": "Tag name cannot contain spaces. Use underscores instead (e.g., my_tag)"
+          },
+          "content": {
+            "label": "Content",
+            "required": "*",
+            "hint": "Text that will be inserted when you use @{{tagName}} in task descriptions",
+            "placeholder": "Enter the text that will be inserted when you use this tag"
+          },
+          "errors": {
+            "nameRequired": "Tag name is required",
+            "saveFailed": "Failed to save tag"
+          },
+          "buttons": {
+            "cancel": "Cancel",
+            "create": "Create",
+            "update": "Update"
+          }
+        }
+      },
+      "safety": {
+        "title": "Safety & Disclaimers",
+        "description": "Reset acknowledgments for safety warnings and onboarding.",
+        "disclaimer": {
+          "title": "Disclaimer Acknowledgment",
+          "description": "Reset the safety disclaimer.",
+          "button": "Reset"
+        },
+        "onboarding": {
+          "title": "Onboarding",
+          "description": "Reset the onboarding flow.",
+          "button": "Reset"
+        }
+      },
+      "beta": {
+        "title": "Beta Features",
+        "description": "Try out experimental features before they're released.",
+        "workspaces": {
+          "label": "Enable Workspaces Beta",
+          "helper": "Use the new workspaces interface when viewing workspaces. Tasks will open in task view first, and attempts will open in the new workspaces view."
+        }
+      }
+    },
+    "agents": {
+      "title": "Coding Agent Configurations",
+      "description": "Customize the behavior of coding agents with different configurations.",
+      "loading": "Loading agent configurations...",
+      "selectAgent": "Select agent",
+      "save": {
+        "button": "Save Agent Configurations",
+        "success": "✓ Executor configurations saved successfully!",
+        "unsavedChanges": "• You have unsaved changes"
+      },
+      "availability": {
+        "checking": "Checking...",
+        "checkingAvailability": "Checking availability...",
+        "available": "Agent available",
+        "notFoundSimple": "Agent not found",
+        "loginDetected": "Recent Usage Detected",
+        "loginDetectedTooltip": "Recent authentication credentials found for this agent",
+        "installationFound": "Previous Usage Detected",
+        "installationFoundTooltip": "Agent configuration found. You may need to log in to use it."
+      },
+      "editor": {
+        "formLabel": "Edit JSON",
+        "agentLabel": "Agent",
+        "agentPlaceholder": "Select executor type",
+        "configLabel": "Configuration",
+        "configPlaceholder": "Select configuration",
+        "createNew": "Create new...",
+        "deleteTitle": "Cannot delete the last configuration",
+        "deleteButton": "Delete {{name}}",
+        "deleteText": "Delete",
+        "makeDefault": "Make Default",
+        "isDefault": "Default",
+        "jsonLabel": "Agent Configuration (JSON)",
+        "jsonPlaceholder": "Loading profiles...",
+        "jsonLoading": "Loading...",
+        "pathLabel": "Configuration file location:"
+      },
+      "errors": {
+        "deleteFailed": "Failed to delete configuration. Please try again.",
+        "saveFailed": "Failed to save agent configurations. Please try again.",
+        "saveConfigFailed": "Failed to save configuration. Please try again.",
+        "schemaNotFound": "Schema not found for executor type: {{executor}}"
+      },
+      "tree": {
+        "search": "Search configurations...",
+        "expandAll": "Expand All",
+        "collapseAll": "Collapse All",
+        "noResults": "No matching configurations",
+        "noConfigs": "No configurations available",
+        "selectConfig": "Select a configuration from the sidebar to view and edit its settings."
+      },
+      "deleteConfigDialog": {
+        "title": "Delete Configuration?",
+        "description": "This will permanently remove \"{{configName}}\" from the {{executorType}} executor. You can't undo this action."
+      }
+    },
+    "mcp": {
+      "title": "MCP Server Configuration",
+      "description": "Configure Model Context Protocol servers to extend coding agent capabilities with custom tools and resources.",
+      "loading": "Loading MCP configuration...",
+      "applying": "Applying configuration...",
+      "labels": {
+        "agent": "Agent",
+        "agentPlaceholder": "Select executor",
+        "agentHelper": "Choose which agent to configure MCP servers for.",
+        "serverConfig": "Server Configuration (JSON)",
+        "popularServers": "Popular servers",
+        "serverHelper": "Click a card to insert that MCP Server into the JSON above.",
+        "saveLocation": "Changes will be saved to:"
+      },
+      "loadingStates": {
+        "jsonEditor": "Loading...",
+        "configuration": "Loading current MCP server configuration..."
+      },
+      "errors": {
+        "loadFailed": "Failed to load configuration.",
+        "invalidJson": "Invalid JSON format",
+        "validationError": "Validation error",
+        "saveFailed": "Failed to save MCP servers",
+        "applyFailed": "Failed to apply MCP server configuration",
+        "addServerFailed": "Failed to add preconfigured server",
+        "mcpError": "MCP Configuration Error: {{error}}",
+        "notSupported": "MCP Not Supported",
+        "supportMessage": "To use MCP servers, please select a different executor that supports MCP (Claude, Amp, Gemini, Codex, or Opencode) above."
+      },
+      "save": {
+        "button": "Save MCP Configuration",
+        "success": "Settings Saved!",
+        "successMessage": "✓ MCP configuration saved successfully!",
+        "loading": "Loading current MCP server configuration...",
+        "unsavedChanges": "• You have unsaved changes"
+      }
+    },
+    "tracker": {
+      "kind": {
+        "title": "Tracker",
+        "description": "Where tickets come from. Prep Cook reads tickets, posts updates and takes plan decisions through this tracker.",
+        "options": {
+          "jira": "Jira",
+          "github_issues": "GitHub Issues",
+          "linear": "Linear"
+        },
+        "notSupported": "Not yet supported"
+      },
+      "connection": {
+        "title": "Connection",
+        "description": "The account Prep Cook uses to read and write tickets."
+      },
+      "site": {
+        "label": "Site",
+        "helper": "Your Atlassian site hostname."
+      },
+      "email": {
+        "label": "Email",
+        "placeholder": "you@example.com",
+        "helper": "The account email the API token belongs to."
+      },
+      "apiToken": {
+        "label": "API token",
+        "placeholder": "API token",
+        "helper": "Stored locally and used to authenticate with the tracker.",
+        "helpLink": "Create an API token"
+      },
+      "botIdentity": {
+        "label": "Agent account id",
+        "placeholder": "Leave blank to use the token's account",
+        "helper": "The account the agent's own tracker comments are recognised by. Blank uses the account the API token belongs to."
+      },
+      "import": {
+        "title": "Import",
+        "description": "Defaults used when previewing tickets to import."
+      },
+      "projectKey": {
+        "label": "Project key",
+        "placeholder": "e.g. BUG",
+        "helper": "The tracker project tickets are imported from and filed into."
+      },
+      "importFilter": {
+        "label": "Import filter",
+        "placeholder": "e.g. sprint in openSprints() AND assignee = currentUser()",
+        "helper": "Optional query (JQL for Jira) applied when previewing tickets to import. {project_key} is substituted."
+      },
+      "watcher": {
+        "title": "Ticket pickup",
+        "description": "Polls the tracker for newly created high-priority bugs and imports them straight into Plan, assigned to you, so the orchestrator starts the RCA immediately. Meant for an always-on machine.",
+        "enabledLabel": "Pick up new tickets automatically",
+        "enabledHelper": "Only tickets created while the watcher is running (24h lookback) are picked up; already-imported keys are skipped.",
+        "projectLabel": "Import into project",
+        "projectHelper": "The board that receives the imported tickets.",
+        "projectPlaceholder": "Select a project…",
+        "pickupLabel": "Pickup filter",
+        "pickupHelper": "Which new tickets to pick up. {project_key} is substituted; a created-recently window is added automatically. Leave empty for the default P0/P1 bug filter.",
+        "assignedLabel": "Assigned pickup filter",
+        "assignedHelper": "Tickets assigned to the orchestrator's tracker account start automatically, whatever their priority: new keys import straight into Plan, already-imported tickets sitting in To Do advance to Plan. Watches the updated timestamp, so assigning an existing ticket works. Empty disables it globally; only boards with pickup enabled are polled. Leave the status out of this filter — the watcher decides on status itself. Suggested: project = {project_key} AND assignee = currentUser()",
+        "pollLabel": "Poll interval (seconds)",
+        "pollHelper": "How often the tracker is checked for new tickets.",
+        "boardsHint": "Defaults for the board selected here. Other boards are watched with their own filter — see Board overrides under Orchestrator."
+      },
+      "workflow": {
+        "title": "Workflow",
+        "description": "How the board's stages show on the ticket, which statuses mean the work shipped, and which priorities are blockers.",
+        "statusLabel": "Stage statuses",
+        "statusHelper": "The tracker status a ticket moves to when Prep Cook starts each stage. Blank leaves the ticket where it is (Planning falls back to In Progress).",
+        "stageColumn": "Stage",
+        "statusColumn": "Tracker status",
+        "stages": {
+          "planning": "Planning",
+          "executing": "Executing",
+          "reviewing": "Reviewing",
+          "pushed_mr": "Pushed MR",
+          "done": "Clean-up"
+        },
+        "unmapped": "Not moved",
+        "shippedLabel": "Shipped statuses",
+        "shippedHelper": "Comma-separated status names that mean the work shipped. Comments on these tickets go to triage, and a ticket that leaves them can file a follow-up.",
+        "blockerLabel": "Blocker priorities",
+        "blockerHelper": "Comma-separated priorities whose merge requests are labelled Blocker and announced in Slack."
+      },
+      "approvers": {
+        "title": "Plan approvers",
+        "description": "Who may approve, request changes on or re-plan a plan from a tracker comment.",
+        "label": "Approvers",
+        "helper": "Import the people who can be assigned tickets in this project, then tick the ones allowed to decide. Nobody ticked means nobody can decide from the tracker. The orchestrator's own account is never eligible, so it cannot sign off its own analysis.",
+        "import": "Import from tracker",
+        "refresh": "Refresh from tracker",
+        "loading": "Loading…",
+        "error": "Could not load users from the tracker. Check the connection settings above.",
+        "selected": "{{count}} selected",
+        "empty": "No one imported yet — import from the tracker to choose approvers."
+      },
+      "save": {
+        "success": "Tracker settings saved.",
+        "error": "Failed to save tracker settings."
+      }
+    },
+    "playbooks": {
+      "section": {
+        "title": "Stage Playbooks",
+        "description": "Prompt templates used when launching an agent for a workflow stage, keyed by \"{work class}:{stage}\". Planning playbooks open with the target repository's slash commands and must record a planning verdict on the issue before it can move to Executing."
+      },
+      "entry": {
+        "helper": "Supports the placeholders jira_key, title, description, and spec_path, written inside double curly braces; they are substituted when the agent is launched.",
+        "usingGlobal": "Inheriting the global text — editing here overrides it for this board only.",
+        "overridden": "Overridden for this board.",
+        "useGlobal": "Use global text"
+      },
+      "reset": "Reset to default",
+      "save": {
+        "success": "Playbook settings saved.",
+        "error": "Failed to save playbook settings."
+      },
+      "scope": {
+        "label": "Editing",
+        "global": "All boards (global)",
+        "helper": "Pick a board to override individual stage playbooks for that repo only."
+      }
+    },
+    "worktreePool": {
+      "pool": {
+        "title": "Worktree Pool",
+        "description": "Reuse warm worktrees (with dependencies and build caches intact) across tasks instead of creating a fresh temp worktree per workspace. Requires the treehouse CLI on this machine; changes take effect after a restart."
+      },
+      "enabled": {
+        "label": "Enable worktree pool",
+        "helper": "When treehouse is missing or the pool is full, workspaces silently fall back to regular temp worktrees."
+      },
+      "maxTrees": {
+        "label": "Max worktrees per repository",
+        "helper": "Upper bound on pooled worktrees kept per repository (1-9). Each slot holds a full checkout plus its build caches on disk; slot numbers drive per-stack port offsets (slot × 10) and offset 90 is the highest the dev stack tooling accepts, so 9 is the ceiling."
+      },
+      "root": {
+        "label": "Pool root directory",
+        "placeholder": "~/.treehouse (default)",
+        "helper": "Optional. Directory holding the pools; treehouse stores them under <root>/.treehouse. Leave empty for the default."
+      },
+      "save": {
+        "success": "Worktree pool settings saved. Restart the app to apply them.",
+        "error": "Failed to save worktree pool settings."
+      }
+    },
+    "orchestrator": {
+      "general": {
+        "title": "Stage Orchestrator",
+        "description": "Background automation that watches the kanban board and acts on tickets assigned to you: launches planning/execution/review agents, creates MRs, and runs clean-up. Changes apply on the next poll — no restart needed."
+      },
+      "mode": {
+        "label": "Enable automatic agent launches",
+        "helper": "When off, nothing runs automatically; stage playbooks can still be started manually from the issue panel."
+      },
+      "pollInterval": {
+        "label": "Poll interval (seconds)",
+        "helper": "How often the board is scanned for eligible tickets."
+      },
+      "deployedRetention": {
+        "label": "Auto clean-up after (days in Deployed)",
+        "helper": "Tickets sitting in Deployed longer than this move to Clean-up automatically (archiving workspaces and closing the Jira ticket). Leave empty to disable.",
+        "placeholder": "Off"
+      },
+      "cleanupRetention": {
+        "label": "Delete after (days in Clean-up)",
+        "helper": "Tickets sitting in Clean-up longer than this are deleted from the board. The MR, the Jira ticket and any RCA in the knowledge base all survive; only the card and its comments go. Tickets with a pinned workspace or a human takeover are never deleted. Leave empty to keep cards forever.",
+        "placeholder": "Keep forever"
+      },
+      "autonomy": {
+        "label": "Autonomy mode (drive tickets through the gates)",
+        "helper": "High-confidence plans self-approve and advance; finished implementations move to Review; reviewer verdicts are acted on (approve → Push MR, request-changes → fix loop). Low confidence escalates to Slack. MRs stay drafts — a human always merges. Meant for the always-on teammate runner."
+      },
+      "autonomyIterations": {
+        "label": "Review-fix rounds before escalating",
+        "helper": "How many request-changes → fix → re-review cycles autonomy runs before pinging Slack and leaving the ticket for a human."
+      },
+      "investigationThreshold": {
+        "label": "Investigation threshold (RCAs per pattern)",
+        "helper": "When an RCA-graph node accumulates this many linked root-cause analyses, a P2 [Investigation] Jira story is created and imported into To Do. Re-fires after the same number of new RCAs land on the node."
+      },
+      "hostSharing": {
+        "title": "Host sharing",
+        "description": "Lets teammates open this machine's workspaces through the relay — the gesture for an agent runner, so anyone can inspect the agent's sessions from their own app.",
+        "label": "Share this machine's workspaces with my organization",
+        "helper": "Applies immediately on save (the relay must be enabled and this machine signed in). Turning it off makes the host private again."
+      },
+      "approvals": {
+        "title": "Plan approvals",
+        "description": "How a planning agent puts its spec or RCA in front of a person. Whatever is chosen here, a decision can also be made from the card, the tracker ticket or the approvals API.",
+        "lavishLabel": "Approve in the document (Lavish)",
+        "lavishHelper": "The document carries Approve and Request changes buttons and opens in a Lavish review session. Off: the document has no buttons, and the agent waits for a decision from the card, the ticket or the API."
+      },
+      "slack": {
+        "title": "Slack notifications",
+        "description": "Best-effort notifications for events that need a human: low-confidence RCA escalations, autonomy review-loop caps, and repeated launch failures.",
+        "webhookLabel": "Incoming webhook URL",
+        "webhookHelper": "A Slack incoming-webhook URL (https://hooks.slack.com/services/…). Leave empty to disable.",
+        "botTokenLabel": "Bot token (for reply polling)",
+        "botTokenHelper": "A Slack bot token (xoxb-…). When set together with a channel, planning escalations post via the Slack API so teammate replies in the escalation thread are fed back to the blocked agent. Requires chat:write and channels:history (or groups:history) scopes, and the bot must be in the channel. Leave empty to post via the webhook only (no reply polling).",
+        "channelLabel": "Channel ID (for reply polling)",
+        "channelHelper": "The channel escalations post to when a bot token is set, e.g. C0123456."
+      },
+      "projects": {
+        "title": "Automated projects",
+        "description": "Only tickets in these projects are automated. Pick which local repositories agent workspaces check out for each project.",
+        "empty": "No projects configured yet — add one below.",
+        "reposLabel": "Repositories",
+        "reposHelper": "Local repositories checked out for auto-launched agent workspaces. At least one is required.",
+        "noRepos": "No local repositories found. Add one under Settings → Repositories first.",
+        "addLabel": "Add project",
+        "addHelper": "Remote kanban projects from your organizations.",
+        "addPlaceholder": "Select a project…",
+        "remove": "Remove project",
+        "boardHint": "Connect a board to list projects",
+        "notFound": "This board no longer exists on the remote, so the orchestrator can't scan it — remove the entry."
+      },
+      "save": {
+        "success": "Orchestrator settings saved. They apply on the next poll.",
+        "error": "Failed to save orchestrator settings."
+      },
+      "maxLaunchesPerTick": {
+        "label": "Max launches per tick",
+        "helper": "New agent launches allowed per scan (P0s first). Keeps a backlog from bursting the Claude seat when a pause lifts."
+      },
+      "board": {
+        "overridesTitle": "Board overrides",
+        "overridesNone": "(all inherited)",
+        "overridesCount": "({{total}} set)",
+        "overridesHelper": "Anything left on Inherit — or blank — uses the global setting above. Record only what differs for this board.",
+        "labelLabel": "Board label",
+        "labelHelper": "Short name tagged onto this board's RCAs as board:<label>, so one export can be split per repo.",
+        "watcherLabel": "Ticket pickup",
+        "watcherHelper": "Poll the tracker for this board's tickets and import them into Plan.",
+        "pickupLabel": "Pickup filter",
+        "jqlHelper": "Selects this board's tickets; {project_key} is substituted. Boards sharing a tracker project separate here — by component, label, or module.",
+        "assignedLabel": "Assigned pickup filter",
+        "assignedJqlHelper": "This board's assigned-pickup filter; blank inherits the global one (there is no per-board off — scope the filter instead). Requires ticket pickup on this board. Boards sharing a tracker project add their routing here (component, label) just like the pickup filter above.",
+        "trackerKeyLabel": "Tracker project key",
+        "trackerKeyHelper": "Only when this board's tickets live in a different tracker project. Site and credentials stay global.",
+        "slackLabel": "Slack notifications",
+        "slackHelper": "Set to Off to silence this board without clearing the global webhook.",
+        "blankInheritsHelper": "Blank inherits the global value.",
+        "autoAssignLabel": "Assign reviewers from blame",
+        "autoAssignHelper": "Assign the humans who last touched the changed lines as MR reviewers.",
+        "reviewerMapLabel": "Reviewer map additions",
+        "reviewerMapHelper": "One email=login (GitHub or GitLab username) per line, added to the global map (entries here win).",
+        "excludeLabel": "Exclude authors",
+        "excludeHelper": "One email per line, added to the global exclusions.",
+        "botLoginsLabel": "Ignore MR comments from",
+        "botLoginsHelper": "One GitHub or GitLab login per line, added to the global bot list.",
+        "deployWatchJobLabel": "Staging deploy job",
+        "deployWatchJobHelper": "The CI job (GitLab) or Actions workflow (GitHub) whose success means a merged change is live on staging. Leave blank to turn the staging watch off for this board.",
+        "deployWatchRefLabel": "Staging deploy branch",
+        "deployWatchRefHelper": "The branch that job deploys from. Both fields are needed for the watch to run.",
+        "autonomyHelper": "Run this board's stages unattended; Inherit follows the global setting.",
+        "retentionHelper": "Days in Deployed before the ticket moves to Clean-up.",
+        "cleanupRetentionHelper": "Days in Clean-up before the card is deleted (the MR, Jira ticket, and kb records survive).",
+        "retentionDays": "After N days",
+        "inherit": "Inherit",
+        "on": "On",
+        "off": "Off",
+        "inheritPlaceholder": "Inherit",
+        "playbooksHint": "Playbook text for this board is edited under Settings → Playbooks."
+      },
+      "workspaceRetention": {
+        "label": "Workspace retention (days)",
+        "helper": "Delete finished workspace records — and their sessions, logs and turns — this many days after their worktree was cleaned up. Pinned workspaces are never removed. Blank keeps everything for ever.",
+        "placeholder": "30 (blank = keep for ever)"
+      }
+    },
+    "claude": {
+      "status": {
+        "title": "Claude seat",
+        "description": "The runner signs Claude Code in with a subscription seat (an OAuth login, not an API key). If it expires or the account signs in elsewhere, every agent launch fails until it's re-authenticated here.",
+        "healthy": "Seat healthy",
+        "degraded": "Seat expired",
+        "healthyHelper": "The last probe succeeded. Agents can run. With the seat monitor on (orchestrator.seat_monitor in the config file), the seat is re-checked automatically every few hours.",
+        "degradedHelper": "The last probe failed to authenticate. Agents are paused until someone re-runs the login on the runner (below), then re-checks."
+      },
+      "recheck": {
+        "button": "Re-check now",
+        "error": "Couldn't re-check the seat. Try again in a moment."
+      },
+      "reauth": {
+        "title": "Re-authenticate the seat",
+        "description": "Re-auth is an interactive browser login that has to run on the runner, so it can't be done from this screen. Run the command on the box, then use Re-check now to confirm.",
+        "commandLabel": "Run on the runner",
+        "commandHelper": "Opens Claude Code's login flow inside the container. Sign in as the agent's Claude account and paste the code it prints.",
+        "copy": "Copy",
+        "step1": "SSH (or SSM) onto the runner and run the command above.",
+        "step2": "Complete the browser sign-in as the agent's Claude account, then paste the authorization code back into the prompt.",
+        "step3": "Return here and click Re-check now — the status should flip to healthy."
+      }
+    },
+    "projects": {
+      "title": "Project Configuration",
+      "description": "Configure project-specific scripts and settings.",
+      "loading": "Loading projects...",
+      "loadError": "Failed to load projects.",
+      "selector": {
+        "label": "Select Project",
+        "placeholder": "Choose a project to configure",
+        "helper": "Select a project to view and edit its configuration.",
+        "noProjects": "No projects available"
+      },
+      "general": {
+        "title": "General Settings",
+        "description": "Configure basic project information.",
+        "name": {
+          "label": "Project Name",
+          "placeholder": "Enter project name",
+          "helper": "A display name for this project."
+        },
+        "repoPath": {
+          "label": "Git Repository Path",
+          "placeholder": "/path/to/your/existing/repo",
+          "helper": "The absolute path to your git repository on disk."
+        }
+      },
+      "save": {
+        "button": "Save Project Settings",
+        "saving": "Saving...",
+        "success": "✓ Project settings saved successfully!",
+        "error": "Failed to save project settings",
+        "unsavedChanges": "• You have unsaved changes",
+        "discard": "Discard",
+        "confirmSwitch": "You have unsaved changes. Are you sure you want to switch projects? Your changes will be lost."
+      },
+      "repositories": {
+        "title": "Repositories",
+        "description": "Manage the git repositories in this project",
+        "noRepositories": "No repositories configured",
+        "addRepository": "Add Repository"
+      }
+    },
+    "repos": {
+      "title": "Repository Configuration",
+      "description": "Repository details, and the scripts Prep Cook reads from the repository's .prepcook/scripts.toml.",
+      "loading": "Loading repositories...",
+      "loadError": "Failed to load repositories.",
+      "addRepo": {
+        "button": "Add Repository",
+        "dialogTitle": "Select Git Repository",
+        "dialogDescription": "Choose an existing git repository to register.",
+        "error": "Failed to register repository"
+      },
+      "selector": {
+        "label": "Select Repository",
+        "placeholder": "Choose a repository to configure",
+        "helper": "Select a repository to view and edit its configuration.",
+        "noRepos": "No repositories available"
+      },
+      "general": {
+        "title": "General Settings",
+        "description": "Configure basic repository information.",
+        "displayName": {
+          "label": "Display Name",
+          "placeholder": "Enter display name",
+          "helper": "A friendly name for this repository."
+        },
+        "path": {
+          "label": "Repository Path"
+        },
+        "defaultWorkingDir": {
+          "label": "Default Working Directory",
+          "placeholder": "e.g., packages/frontend",
+          "helper": "Subdirectory relative to the repository root where the coding agent runs for single-repo workspaces. Set when the workspace is created. Leave empty to use the repository root."
+        },
+        "defaultTargetBranch": {
+          "label": "Default Target Branch",
+          "placeholder": "Select a branch",
+          "helper": "The default base branch for new workspaces. Worktrees branch off from this branch and PRs will target it.",
+          "search": "Search branches",
+          "noBranches": "No branches found",
+          "loading": "Loading branches...",
+          "useCurrent": "Use current branch"
+        },
+        "copyFiles": {
+          "label": "Copy Files",
+          "helper": "Comma-separated list of files to copy from the original repository directory to the worktree. Useful for environment files like .env. Make sure these are gitignored!",
+          "placeholder": "File paths or glob patterns (e.g., .env, config/*.json)"
+        }
+      },
+      "scripts": {
+        "title": "Scripts",
+        "description": "Read from .prepcook/scripts.toml at the repository root. Prep Cook never edits that file: change the scripts there and reload.",
+        "reload": "Reload",
+        "standUp": "Test stand-up",
+        "loading": "Reading .prepcook/scripts.toml…",
+        "loadError": "Could not read the scripts manifest.",
+        "missingTitle": "This repository has no .prepcook/scripts.toml",
+        "invalidTitle": "This repository's .prepcook/scripts.toml cannot be read",
+        "hint": "Prep Cook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
+        "steps": {
+          "title": "App steps",
+          "timeout": "timeout {{seconds}}s",
+          "readyUrl": "URL",
+          "readyCommand": "command",
+          "testRun": "Test run"
+        },
+        "workspace": {
+          "title": "Workspace hooks"
+        },
+        "secrets": {
+          "title": "Required secrets",
+          "set": "set",
+          "missing": "missing",
+          "missingHint": "Add the missing values in Settings → Secrets; a stand-up stops with secret-missing until they are set."
+        },
+        "profile": {
+          "title": "Product profile"
+        },
+        "run": {
+          "title": "Test run: {{step}}",
+          "running": "Running…",
+          "close": "Close",
+          "startError": "The run did not start: {{message}}",
+          "reportUnavailable": "The run's report is no longer available.",
+          "outcome": "Outcome:",
+          "noSteps": "No step ran.",
+          "columns": {
+            "step": "Step",
+            "exit": "Exit code",
+            "duration": "Duration",
+            "timedOut": "Timed out"
+          },
+          "noExit": "none",
+          "seconds": "{{seconds}}s",
+          "yes": "yes",
+          "no": "no"
+        }
+      },
+      "linkedProjects": {
+        "title": "Linked Projects",
+        "description": "Projects that use this repository in their default workspace configuration.",
+        "loading": "Checking projects…",
+        "none": "No projects linked"
+      },
+      "remove": {
+        "title": "Remove Repository",
+        "description": "Unlink this repository from Prep Cook. Files on disk will not be deleted.",
+        "button": "Remove",
+        "confirm": "Remove Repository",
+        "dialogTitle": "Remove \"{{name}}\"?",
+        "dialogDescription": "This will unlink the repository from Prep Cook. Your files on disk will not be affected. You can re-add it later.",
+        "success": "Repository removed successfully.",
+        "error": "Failed to remove repository."
+      },
+      "save": {
+        "button": "Save Repository Settings",
+        "success": "Repository settings saved successfully!",
+        "error": "Failed to save repository settings",
+        "unsavedChanges": "You have unsaved changes",
+        "discard": "Discard",
+        "confirmSwitch": "You have unsaved changes. Are you sure you want to switch repositories? Your changes will be lost."
+      }
+    },
+    "secrets": {
+      "title": "Secrets",
+      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prep Cook redacts the values from logs, comments and messages. Values are never shown here.",
+      "loading": "Loading secrets…",
+      "loadError": "Failed to load the secrets store.",
+      "file": {
+        "label": "Secrets file",
+        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prep Cook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
+      },
+      "list": {
+        "label": "Stored secrets",
+        "empty": "No secrets stored.",
+        "remove": "Remove",
+        "error": "Failed to remove the secret."
+      },
+      "add": {
+        "title": "Add a secret",
+        "description": "Saving a name that already exists replaces its value.",
+        "name": {
+          "label": "Name",
+          "placeholder": "TEST_USER_PASSWORD",
+          "helper": "Letters, digits and underscores, not starting with a digit.",
+          "invalid": "Use letters, digits and underscores, and do not start with a digit."
+        },
+        "value": {
+          "label": "Value",
+          "placeholder": "Value",
+          "helper": "Sent once and never displayed again."
+        },
+        "button": "Save secret",
+        "success": "Saved {{name}}.",
+        "error": "Failed to save the secret."
+      },
+      "remove": {
+        "dialogTitle": "Remove {{name}}?",
+        "dialogDescription": "Scripts that require this secret stop with secret-missing until it is set again.",
+        "confirm": "Remove"
+      },
+      "required": {
+        "title": "Required by repositories",
+        "description": "Names listed in a repository's [secrets] requires that have no value yet.",
+        "loading": "Checking repositories…",
+        "allSet": "Every secret the repositories require has a value."
+      }
+    },
+    "relay": {
+      "title": "Remote Access",
+      "description": "Allow access to this instance from the web via relay tunnel.",
+      "overview": {
+        "available": "Available",
+        "unavailable": "Unavailable"
+      },
+      "enabled": {
+        "label": "Enable remote access",
+        "helper": "When enabled, this instance can be accessed remotely through a relay tunnel."
+      },
+      "enrollmentCode": {
+        "label": "Pairing Code",
+        "helper": "Enter this code in the browser to pair with this instance.",
+        "loginRequired": "Log in to generate a pairing code.",
+        "fetchError": "Failed to fetch pairing code.",
+        "show": "Show pairing code"
+      },
+      "host": {
+        "label": "Host"
+      },
+      "client": {
+        "label": "Client"
+      }
+    },
+    "remoteProjects": {
+      "title": "Remote Projects",
+      "description": "Manage cloud-synced projects.",
+      "loading": "Loading remote projects...",
+      "loadError": "Failed to load projects",
+      "noProjects": "No projects yet. Create one to get started.",
+      "createSuccess": "Project created successfully",
+      "deleteSuccess": "Project deleted successfully",
+      "nameRequired": "Project name is required",
+      "saveSuccess": "Project updated successfully",
+      "saveError": "Failed to update project",
+      "columns": {
+        "projects": "Projects"
+      },
+      "actions": {
+        "addProject": "Add Project"
+      },
+      "form": {
+        "name": {
+          "label": "Project Name",
+          "placeholder": "Enter project name"
+        },
+        "color": {
+          "label": "Project Color"
+        },
+        "statuses": {
+          "label": "Project Statuses",
+          "description": "Manage kanban columns for this project."
+        },
+        "defaultRepos": {
+          "label": "Default Repositories",
+          "description": "Repositories that are automatically added when creating workspaces from this project's issues.",
+          "empty": "No default repositories configured",
+          "addButton": "Add",
+          "addNew": "Add new repository...",
+          "branchLabel": "Branch",
+          "noBranches": "No branches found for this repository",
+          "fetchError": "Could not load repositories",
+          "saveError": "Failed to save default repositories"
+        }
+      },
+      "boardRequired": {
+        "title": "No board",
+        "description": "Projects live on the board, and this server cannot reach one. See Board."
+      }
+    },
+    "integrations": {
+      "fromRunnerEnv": "Using the runner environment",
+      "sentry": {
+        "title": "Sentry",
+        "description": "Optional. Exposes the Sentry MCP server to agents so they can inspect issues, errors, and events while investigating. It is installed only while an access token is set here, in the environment (SENTRY_ACCESS_TOKEN), or as a Prep Cook secret of that name.",
+        "tokenLabel": "Access token",
+        "tokenHelper": "Sentry user auth token (scopes: org:read, project:read, event:write). Overrides SENTRY_ACCESS_TOKEN from the environment when set; takes effect on save.",
+        "hostLabel": "Host (self-hosted only)",
+        "hostHelper": "Hostname of a self-hosted Sentry instance. Leave blank for Sentry SaaS (sentry.io)."
+      },
+      "save": {
+        "success": "Integration settings saved.",
+        "error": "Failed to save integration settings."
+      },
+      "reviewers": {
+        "title": "Merge request reviewers",
+        "description": "Blame-based reviewer picks and review-comment watching for orchestrator-created merge requests on GitHub and GitLab.",
+        "autoAssignLabel": "Auto-assign reviewers",
+        "autoAssignHelper": "On new merge requests, blame the changed lines at the target branch and request review from the top human author who is mapped below.",
+        "mapLabel": "Reviewer map",
+        "mapHelper": "One email=login per line, the login being the person's GitHub or GitLab username. Blame candidates not listed here are named in a comment instead of assigned.",
+        "excludeLabel": "Excluded author emails",
+        "excludeHelper": "Never pick these as reviewers (bot and shared identities are excluded automatically).",
+        "botsLabel": "Ignored comment authors",
+        "botsHelper": "Logins whose review comments are never fed back to the agent (GitLab token bots containing “_bot” and GitHub apps ending in “[bot]” are ignored automatically)."
+      }
+    },
+    "connectors": {
+      "title": "Agent connectors",
+      "description": "The MCP servers loaded into every agent session, probed live via `claude mcp list` on this host. Every listed server's tool schemas cost context tokens in every session — keep this list lean.",
+      "refresh": "Re-check",
+      "probing": "Probing connectors…",
+      "unavailable": "Could not run the probe — the claude binary is missing or errored.",
+      "empty": "No MCP servers configured.",
+      "fixHelper": "Fixing auth is manual by design: for remote MCP servers run `claude` interactively on the runner and use /mcp to complete OAuth; claude.ai account connectors are managed at claude.ai signed in as the agent account. First-party tools (Jira attachments, Slack threads) need no extra auth."
+    },
+    "usage": {
+      "title": "Token usage",
+      "description": "Claude token spend recorded per agent turn on this server.",
+      "window7": "7 days",
+      "window30": "30 days",
+      "loading": "Loading usage…",
+      "error": "Could not load usage.",
+      "empty": "No usage recorded in this window yet.",
+      "totals": {
+        "turns": "Turns",
+        "input": "Input",
+        "output": "Output",
+        "cacheRead": "Cache read",
+        "cacheWrite": "Cache write"
+      },
+      "models": {
+        "title": "By model"
+      },
+      "workspaces": {
+        "title": "Top workspaces"
+      }
+    }
+  },
+  "integrations": {
+    "github": {
+      "cliSetup": {
+        "title": "GitHub CLI Setup",
+        "description": "GitHub CLI authentication is required to create pull requests and interact with GitHub repositories.",
+        "setupWillTitle": "This setup will:",
+        "steps": {
+          "checkInstalled": "Check if GitHub CLI (gh) is installed",
+          "installHomebrew": "Install it via Homebrew if needed (macOS)",
+          "authenticate": "Authenticate with GitHub using OAuth"
+        },
+        "setupNote": "The setup will run in the chat window. You'll need to complete the authentication in your browser.",
+        "runSetup": "Run Setup",
+        "running": "Running...",
+        "errors": {
+          "brewMissing": "Homebrew is not installed. Install it to enable automatic setup.",
+          "notSupported": "Automatic setup is not supported on this platform. Install GitHub CLI manually.",
+          "setupFailed": "Failed to run GitHub CLI setup."
+        },
+        "help": {
+          "homebrew": {
+            "description": "Automatic installation requires Homebrew. Install Homebrew from",
+            "brewSh": "brew.sh",
+            "manualInstall": "and then rerun the setup. Alternatively, install GitHub CLI manually with:",
+            "afterInstall": "After installation, authenticate with:"
+          },
+          "manual": {
+            "description": "Install GitHub CLI from the",
+            "officialDocs": "official documentation",
+            "andAuthenticate": "and then authenticate with your GitHub account."
+          }
+        }
+      }
+    }
+  }
+}

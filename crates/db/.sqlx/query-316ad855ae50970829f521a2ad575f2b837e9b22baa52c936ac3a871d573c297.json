@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                    st.execution_process_id as \"execution_process_id!: Uuid\",\n                    s.id                    as \"session_id!: Uuid\",\n                    s.workspace_id          as \"workspace_id!: Uuid\"\n               FROM execution_process_seat_stall st\n               JOIN execution_processes ep ON ep.id = st.execution_process_id\n               JOIN sessions s ON s.id = ep.session_id\n              WHERE st.resumed_at IS NULL\n                AND ep.id = (\n                        SELECT inner_ep.id\n                          FROM execution_processes inner_ep\n                         WHERE inner_ep.session_id = ep.session_id\n                         ORDER BY inner_ep.created_at DESC\n                         LIMIT 1\n                    )\n              ORDER BY st.detected_at ASC\n              LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "execution_process_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "session_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "workspace_id!: Uuid",
+        "ordinal": 2,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "316ad855ae50970829f521a2ad575f2b837e9b22baa52c936ac3a871d573c297"
+}

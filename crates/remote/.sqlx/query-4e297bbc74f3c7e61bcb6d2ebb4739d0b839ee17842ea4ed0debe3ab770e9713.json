@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO kb_documents\n                    (id, project_id, kind, title, body, issue_id, jira_key, work_class, summary, tags)\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n                ON CONFLICT (issue_id) WHERE issue_id IS NOT NULL DO UPDATE SET\n                    title = EXCLUDED.title,\n                    body = EXCLUDED.body,\n                    jira_key = EXCLUDED.jira_key,\n                    work_class = EXCLUDED.work_class,\n                    summary = EXCLUDED.summary,\n                    -- tags deliberately preserved: refiling must not wipe\n                    -- team classification\n                    updated_at = now()\n                RETURNING\n                    id          AS \"id!: Uuid\",\n                    project_id  AS \"project_id!: Uuid\",\n                    kind        AS \"kind!\",\n                    title       AS \"title!\",\n                    body        AS \"body!\",\n                    issue_id    AS \"issue_id: Uuid\",\n                    jira_key,\n                    work_class,\n                    summary,\n                    tags        AS \"tags!\",\n                    created_at  AS \"created_at!\",\n                    updated_at  AS \"updated_at!\"\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "body!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "issue_id: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "jira_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "work_class",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "summary",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "tags!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4e297bbc74f3c7e61bcb6d2ebb4739d0b839ee17842ea4ed0debe3ab770e9713"
+}

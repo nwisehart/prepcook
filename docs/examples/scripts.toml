@@ -1,0 +1,39 @@
+# .prepcook/scripts.toml for "Pantry", a small Node/Express + SQLite grocery list.
+# See docs/scripts.md for the schema and docs/playbooks.md for how [profile]
+# reaches the agents.
+
+[app]
+setup = "npm ci"
+build = "npm run build"
+# Express reads PORT; Prep Cook sets it (and PREPCOOK_PORT) to the port it allocated.
+# Each worktree gets its own database file, so parallel cards never share data.
+start = "DATABASE_PATH=.prepcook/pantry.sqlite node dist/server.js"
+ready = { url = "/healthz", timeout_secs = 60 }
+# Migrates the database, creates the test user and two shared lists, and
+# appends PREPCOOK_TEST_USER_EMAIL / PREPCOOK_TEST_USER_PASSWORD to $PREPCOOK_ENV_OUT.
+seed = "DATABASE_PATH=.prepcook/pantry.sqlite node scripts/seed-test-data.mjs"
+test = "npm test -- --reporter=dot"
+stop = "node scripts/checkpoint-db.mjs .prepcook/pantry.sqlite"
+
+[app.timeouts]
+setup = 600
+build = 300
+start = 30
+seed = 60
+test = 900
+
+[workspace]
+cleanup = "npx eslint --fix ."
+archive = "rm -f .prepcook/pantry.sqlite"
+
+[secrets]
+# The password the seed gives the test user; set it with `prepcook secret set`.
+requires = ["PANTRY_TEST_PASSWORD"]
+
+[profile]
+name = "Pantry"
+summary = "Pantry is a shared grocery list for households. People sign in with an email and password, keep one or more lists, add items with a quantity and an aisle, tick them off while shopping, and share a list with other members of the household, who see changes as they happen. It is an Express server with server-rendered pages and a small amount of client-side JavaScript, storing everything in one SQLite file."
+areas = ["Sign-in", "Lists", "Items", "Sharing"]
+# Raised by the server when a route needs a record the seed should have made.
+error_patterns = ["SeedMissing"]
+evidence_tools = "The app writes one JSON line per request and per error to logs/app.log in the worktree; read it (tail, grep or jq) for the stack trace and the request that caused a failure. There is no production log access."

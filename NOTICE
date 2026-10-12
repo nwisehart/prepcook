@@ -1,0 +1,13 @@
+Prep Cook
+Copyright 2026 Nick Wisehart
+
+This product includes software developed by BloopAI as vibe-kanban
+(https://github.com/BloopAI/vibe-kanban), licensed under the Apache
+License, Version 2.0. The original copyright notices and license headers
+are retained in the files that carry them.
+
+Modifications by Nick Wisehart: the stage orchestrator and its playbooks,
+the issue-tracker and git-host integrations, the knowledge store and
+root-cause graph, the per-repository script settings and reproduction
+harness, and the local toolkit generator. These modifications are also
+licensed under the Apache License, Version 2.0.

@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                    u.model as \"model?: String\",\n                    COUNT(u.execution_process_id) as \"turns!: i64\",\n                    COALESCE(SUM(u.input_tokens), 0) as \"input_tokens!: i64\",\n                    COALESCE(SUM(u.output_tokens), 0) as \"output_tokens!: i64\",\n                    COALESCE(SUM(u.cache_read_tokens), 0) as \"cache_read_tokens!: i64\",\n                    COALESCE(SUM(u.cache_creation_tokens), 0) as \"cache_creation_tokens!: i64\"\n               FROM execution_process_usage u\n               JOIN execution_processes ep ON ep.id = u.execution_process_id\n              WHERE (?1 IS NULL OR ep.started_at >= ?1)\n              GROUP BY u.model\n              ORDER BY (COALESCE(SUM(u.input_tokens), 0) + COALESCE(SUM(u.output_tokens), 0)) DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "model?: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "turns!: i64",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "input_tokens!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "output_tokens!: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cache_read_tokens!: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cache_creation_tokens!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "595b7b700a60fb01aa8f6c21242c14d9ef24d9a6682bad9f6380bb89df564d03"
+}

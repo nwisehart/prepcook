@@ -1,0 +1,34 @@
+[package]
+name = "mcp"
+version = "0.1.44"
+edition = "2024"
+license = "Apache-2.0"
+autobins = false
+
+[[bin]]
+name = "prepcook-mcp"
+path = "src/bin/prepcook_mcp.rs"
+
+[lints.clippy]
+uninlined-format-args = "allow"
+
+[dependencies]
+api-types = { path = "../api-types" }
+chrono = { version = "0.4", features = ["serde"] }
+db = { path = "../db" }
+executors = { path = "../executors" }
+utils = { path = "../utils" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+rmcp = { version = "1.2.0", features = ["server", "transport-io"] }
+schemars = { workspace = true }
+sentry = { version = "0.46.2", default-features = false, features = ["anyhow", "backtrace", "panic", "debug-images", "reqwest", "rustls"] }
+reqwest = { workspace = true }
+rustls = { workspace = true }
+regex = "1"
+thiserror = { workspace = true }

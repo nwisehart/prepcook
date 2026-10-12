@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE kb_nodes\n            SET investigation_jira_key = $2,\n                investigation_edge_count = $3\n            WHERE id = $1\n            RETURNING\n                id          AS \"id!: Uuid\",\n                project_id  AS \"project_id!: Uuid\",\n                kind        AS \"kind!\",\n                name        AS \"name!\",\n                description,\n                seeded      AS \"seeded!\",\n                investigation_jira_key,\n                investigation_edge_count,\n                (SELECT COUNT(*) FROM kb_edges e WHERE e.node_id = kb_nodes.id) AS \"edge_count!\",\n                created_at  AS \"created_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "seeded!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "investigation_jira_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "investigation_edge_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "edge_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      null,
+      false
+    ]
+  },
+  "hash": "3154a3147a7fed3c718977dabbf944276c49362a9ddef6202d0d2d3f55554524"
+}

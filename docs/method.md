@@ -1,0 +1,89 @@
+# The method
+
+A prep cook does the prep so the chef can cook. Prep Cook does the prep on a
+bug — reproduces it, explains it, fixes it, reviews the fix, opens the pull
+request — and the engineer who owns the ticket signs off.
+
+Prep Cook works a bug the way a careful engineer would, in a fixed order: make it
+happen, explain it, fix the mechanism, have someone else check the fix, then
+ship it. Each step is a stage, each stage is a column on the board, and a card
+moves through them left to right:
+
+```
+To Do → Plan → Execute → Review → Push MR → Close → Clean up
+```
+
+The orchestrator watches the columns from Plan onwards. When a card assigned to
+you enters one, it starts that stage's work: an agent session in the card's git
+worktree for Plan, Execute and Review, or its own work for Push MR and Clean up.
+To Do and Close are where cards wait for a person. A forward move goes one
+column at a time; any card can be moved back, or straight to Close.
+
+A card is in the workflow when it has a work class (`bug`, `story`, `epic`,
+`subtask`). A card imported from the tracker gets one from its issue type. A
+card made on the board gets one from its tag: tag it `bug` before moving it to
+Plan. The work class picks the playbook each stage's agent starts from
+([playbooks.md](playbooks.md)).
+
+## The stages
+
+| Stage | Produces | Waits on |
+| --- | --- | --- |
+| **Plan** | A reproduction harness, a `REPRODUCTION:` comment on the card, and a root-cause analysis (RCA) with a verdict: confidence, open questions, a summary. | A person approving the RCA. The card cannot enter Execute until the RCA is approved and its confidence is high. |
+| **Execute** | The smallest fix for the mechanism the RCA isolated, its regression tests, and commits rebased onto the target branch. Nothing is pushed. | The fix passing the reproduction and the tests. With autonomy set to Full, the pre-merge verify ([scripts.md](scripts.md#what-each-stage-does)) also has to pass. |
+| **Review** | An independent review in a fresh worktree: a verdict and typed findings, recorded on the card ([review.md](review.md)). | `REVIEW: APPROVE`. A `REQUEST CHANGES` goes back to the implementation agent as a fix round. |
+| **Push MR** | The pushed branch and the pull request (GitHub) or merge request (GitLab), with the reproduction as its first comment and reviewers picked from blame. | People reviewing and merging it. Their comments are fed back to the implementation agent. Once everything merged, the card moves to Close. |
+| **Clean up** | The repository's clean-up scripts run, the card's worktrees archived. | Nothing; it is the last column. |
+
+Plan comes first because a fix without a reproduction is a guess
+([reproduce-first.md](reproduce-first.md)). Every approved bug RCA is filed in
+the knowledge store and linked into the root-cause graph
+([rca-graph.md](rca-graph.md)).
+
+Stories, epics and sub-tasks take the same columns. In Plan a story gets an
+implementation spec, an epic a plan with a breakdown into sub-tasks, and a
+sub-task a spec for its slice; the card cannot advance while the spec has open
+questions. In Execute an epic creates its sub-tasks instead of code. Nothing but
+a bug stands the app up.
+
+## The two modes
+
+The same stages run in two modes. The mode is **Settings → Orchestrator →
+Autonomy mode**, global or per board.
+
+**Chef mode** (autonomy off, the default). Prep Cook works your tickets and you move
+them. You import tickets from the tracker or make cards on the board, drag them
+between columns, and approve plans in Lavish, the review page each plan opens
+in (the **Review plan** button on the card). Stories and epics get a spec or a
+breakdown the way bugs get an RCA. A review's `REQUEST CHANGES` still starts a
+fix round on its own; advancing an approved card is yours.
+
+**Prep mode** (autonomy on). Prep Cook works on its own, on the machine meant to
+run unattended. Tickets the tracker's pickup filters select are imported as
+they arrive. Cards move themselves: a plan that clears the bar (an RCA at high
+confidence, a spec with no open questions) approves itself and goes to Execute;
+one below the bar is escalated to Slack and waits in Plan for a person, whose
+decision comes from the tracker ticket, the card or the approvals API
+([approvals.md](approvals.md)). A finished, verified fix goes to Review, and an
+approved review goes to Push MR.
+
+Either way a person merges. When an engineer takes a ticket over, Prep Cook steps
+aside ([working-alongside-people.md](working-alongside-people.md)).
+
+## Without a tracker
+
+A tracker is optional. With none configured, every card is made on the board
+and the card is the only record: nothing is imported, nothing is posted to a
+ticket, and no sweep that reads a ticket's status runs. Every stage still runs,
+plan decisions come from Lavish, the card or the API, and the pull request is
+still opened. A card made on the board while a tracker is configured is treated
+the same way. The [quickstart](../README.md#quickstart) uses this path.
+
+## More
+
+- [scripts.md](scripts.md): how Prep Cook installs, starts, seeds and tests the app.
+- [playbooks.md](playbooks.md): the prompt each stage's agent starts from.
+- [approvals.md](approvals.md): every way a plan is decided.
+- [configuration.md](configuration.md): every setting and its default.
+- [toolkit/README.md](../toolkit/README.md): the same method at your terminal,
+  without the board.

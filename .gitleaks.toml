@@ -1,0 +1,2 @@
+[allowlist]
+paths = [ "target/", "node_modules/", "crates/remote/target/" ]

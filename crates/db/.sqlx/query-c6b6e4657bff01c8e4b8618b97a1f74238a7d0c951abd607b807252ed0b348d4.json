@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                    w.id as \"workspace_id!: Uuid\",\n                    w.name as \"workspace_name?: String\",\n                    w.branch as \"branch!: String\",\n                    COUNT(u.execution_process_id) as \"turns!: i64\",\n                    COALESCE(SUM(u.input_tokens), 0) as \"input_tokens!: i64\",\n                    COALESCE(SUM(u.output_tokens), 0) as \"output_tokens!: i64\",\n                    COALESCE(SUM(u.cache_read_tokens), 0) as \"cache_read_tokens!: i64\",\n                    COALESCE(SUM(u.cache_creation_tokens), 0) as \"cache_creation_tokens!: i64\",\n                    MAX(ep.started_at) as \"last_activity!: DateTime<Utc>\"\n               FROM execution_process_usage u\n               JOIN execution_processes ep ON ep.id = u.execution_process_id\n               JOIN sessions s ON s.id = ep.session_id\n               JOIN workspaces w ON w.id = s.workspace_id\n              WHERE (?1 IS NULL OR ep.started_at >= ?1)\n              GROUP BY w.id, w.name, w.branch\n              ORDER BY (COALESCE(SUM(u.input_tokens), 0) + COALESCE(SUM(u.output_tokens), 0)\n                        + COALESCE(SUM(u.cache_creation_tokens), 0)) DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "workspace_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "workspace_name?: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "branch!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "turns!: i64",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "input_tokens!: i64",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "output_tokens!: i64",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cache_read_tokens!: i64",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cache_creation_tokens!: i64",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_activity!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c6b6e4657bff01c8e4b8618b97a1f74238a7d0c951abd607b807252ed0b348d4"
+}

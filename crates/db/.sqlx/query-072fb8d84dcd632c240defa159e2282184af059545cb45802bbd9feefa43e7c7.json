@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE execution_process_seat_stall\n                  SET resumed_at = CURRENT_TIMESTAMP\n                WHERE execution_process_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "072fb8d84dcd632c240defa159e2282184af059545cb45802bbd9feefa43e7c7"
+}

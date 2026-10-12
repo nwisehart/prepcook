@@ -1,0 +1,28 @@
+name: 'Setup Rust'
+description: 'Installs the toolchain pinned in rust-toolchain.toml and caches cargo builds'
+
+inputs:
+  cache-key:
+    description: 'Shared key for the build cache'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    # rustup reads rust-toolchain.toml; its `default` profile includes
+    # rustfmt and clippy.
+    - name: Install the pinned toolchain
+      shell: bash
+      run: |
+        rustup toolchain install
+        rustc --version
+        cargo --version
+
+    - name: Cache cargo builds
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        workspaces: |
+          .
+          crates/remote
+        shared-key: ${{ inputs.cache-key }}
+        cache-on-failure: true

@@ -1,0 +1,190 @@
+---
+name: evergreen-comments
+description: Write and review code comments so they are evergreen — explaining non-obvious code succinctly at the point it occurs, never narrating history, changes, fixes, or regressions, never restating a design doc, and matching the voice of the surrounding codebase rather than sounding machine-written. Use whenever writing, editing, or reviewing comments and docstrings in any language.
+---
+
+<!-- Shipped by Prep Cook from assets/agent-skills/. Edits made
+     here are overwritten on the next start; change the repo copy instead. -->
+
+# Evergreen comments
+
+A comment must make sense to someone reading the file cold — no PR, ticket, diff, or
+git history for context. Describe the code's current intent and constraints, not the
+story of how it got here.
+
+## Rules
+
+1. **Evergreen only.** Document what the code does now and why, never what it used to
+   do or what changed. Temporal narrative belongs in commits and PR descriptions.
+2. **No history, ever.** Never discuss changes, old code, regressions, bugs, or fixes.
+   No "previously…", "now returns…", "changed to…", "new logic for…", "fix for…",
+   "this used to break…", ticket IDs, dates, or author names. A comment justifying why
+   an edit is correct is written for a reviewer, not for the next reader — it becomes
+   noise the moment the PR merges.
+3. **Ticket and MR numbers only in TODOs.** A `TODO` may cite the ticket that tracks
+   the follow-up work (e.g. `// TODO(KEY-1234): remove once the v2 API ships.`).
+   Everywhere else, ticket and MR references are history — leave them out.
+4. **Explain the non-obvious, skip the obvious.** Comment intent, trade-offs, and
+   constraints the code can't express. Never narrate what the code plainly says.
+5. **Don't restate the design doc.** Comments and docstrings are not a place to
+   re-narrate a tech spec, re-argue a decision, or enumerate architecture. Name the
+   constraint a reader needs in order to edit this file safely, then stop. If a reader
+   would have to rediscover it the hard way, keep it; if it only explains why the
+   design is good, cut it.
+6. **Don't annotate what the codebase leaves bare.** Boilerplate the repo never
+   comments — `propTypes` blocks, prop type declarations, import groups, plain
+   getters, standard hook wiring — stays uncommented. Check how neighboring files
+   treat the construct before adding a comment to it.
+7. **Succinct.** One or two sentences. Prefer adding a short comment over a paragraph.
+8. **At the point of complexity.** Put the comment right where the tricky code is, not
+   in a header block far away.
+9. **Complete sentences, end with a period.** (Matches repo style.)
+
+## What to comment vs. skip
+
+**Comment:** a non-obvious "why", a constraint or invariant, a subtle edge case, a
+performance or ordering reason, a workaround for external behavior.
+
+**Skip:** restating the statement, obvious loops/getters/returns, type info already in
+the signature, boilerplate the codebase conventionally leaves bare (e.g. `propTypes`
+blocks), anything that only makes sense with the diff in front of you, and anything
+that re-argues a design decision rather than stating the constraint it left behind.
+
+## Examples
+
+**History → intent.** Strip the narrative; keep the reason.
+
+```javascript
+// Bad — narrates a change and cites a ticket.
+// KEY-9471: switched from max-content to a measured width because max-content broke.
+const width = measureOptionsMenuWidth(options);
+
+// Good — explains the current constraint.
+// Option rows are w-full and truncate, so the menu can't size to content via CSS; measure it.
+const width = measureOptionsMenuWidth(options);
+```
+
+```python
+# Bad — describes the old behavior.
+# Used to return None; now returns [] so callers don't crash.
+return []
+
+# Good — states the current guarantee.
+# Return an empty list (never None) so callers can iterate unconditionally.
+return []
+```
+
+**Obvious → removed.** If the code says it, don't repeat it.
+
+```javascript
+// Bad.
+// Increment the counter.
+counter += 1;
+
+// Good — no comment needed.
+counter += 1;
+```
+
+**Verbose → succinct.** Trim to the load-bearing sentence.
+
+```python
+# Bad — a paragraph re-explaining what the reader can see.
+# We loop over every option, and for each one we measure its label, and then we
+# compare it to the widest seen so far, and if it is larger we keep it, because we
+# want the widest label at the end so the menu can be sized appropriately later on.
+for option in options: ...
+
+# Good.
+# Track the widest label so the menu can be sized to fit its content.
+for option in options: ...
+```
+
+**Spec narration → constraint.** A module docstring states what a reader must know to
+edit the file; it does not re-derive the design.
+
+```python
+# Bad — a docstring that re-narrates the tech spec and re-argues each decision.
+"""Runs queries against the database, in-backend.
+
+The safety properties all live in `execute`:
+
+- ``search_path = pg_temp`` means an unqualified app table name does not resolve,
+  so the only relations the SQL can reach are the prelude's CTEs and the temp
+  tables built from nested content. This is the primary tenancy control,
+  enforced by Postgres rather than by parsing.
+- Everything happens inside a savepoint that is always rolled back. Temp tables
+  disappear, ``SET LOCAL`` is undone, and nothing the query did can outlive it.
+  It also means this composes with an outer transaction, which is what lets
+  tests run it against seeded, uncommitted data.
+"""
+
+# Good — names the properties, leaves the argument to the spec.
+"""Runs queries against the database, in-backend.
+
+`execute` owns the connection and the safety properties that must hold while the
+query runs: ``search_path = pg_temp`` so app tables are unresolvable, and a
+savepoint that is always rolled back so temp tables never outlive the call.
+"""
+```
+
+## Sound like the codebase, not like a design doc
+
+Length is not the only problem. A comment can be short, accurate, and evergreen and
+still read as machine-written, because it argues a case where the codebase states a
+fact. Before writing a module docstring, open two or three real ones of comparable
+complexity nearby and match their voice.
+
+Common tells:
+
+- **Enumerated arguments.** A numbered list of "deliberate departures" or "design
+  goals" where two plain sentences would do.
+- **Em-dash asides.** A second thought bolted onto a sentence that already ended — like
+  this one.
+- **Self-congratulation.** "Deliberately narrow", "Generous by design", "on purpose".
+  State the constraint and let the reader judge the design.
+- **Closing flourishes.** "…small enough to read in a log line", "…a syntax error at
+  best". Stop at the fact.
+- **Tricolons.** Three parallel clauses where one carries the meaning.
+- **Tables of contents.** A bulleted module layout in `__init__.py`, which goes stale
+  as soon as a file is added.
+
+Confirm a habit is actually a tell before "fixing" it — grep the repo. RST
+``double backticks`` and the "run-query Lambda" capitalization look like tells in this
+codebase but are established usage, whereas "Behaviour" appears exactly once.
+
+```python
+# Bad — builds a case, with an enumerated list and a closing flourish.
+"""Behaviour is ported to match, with two deliberate departures:
+
+1. String literals double the quote instead of backslash-escaping it. Under
+   ``standard_conforming_strings = on``, the Lambda's ``\'`` ends the literal
+   early, so an apostrophe produces a syntax error at best.
+2. Nested table content is loaded with bound parameters rather than rendered
+   into a giant INSERT literal. Same table, no quoting to get wrong, and a
+   query text small enough to read in a log line.
+"""
+
+# Good — states the facts.
+"""Two behaviors differ from the Lambda. String literals are escaped by doubling
+the quote, which is what ``standard_conforming_strings = on`` requires. Nested
+table content is loaded with bound parameters rather than rendered into an
+INSERT literal.
+"""
+```
+
+## Reviewing existing comments
+
+When you touch a file, quietly fix comments that violate these rules: delete history
+narration, cut obvious restatements, and shorten anything that rambles. Change only the
+comments relevant to your edit — don't sweep the whole file unprompted.
+
+## Checklist
+
+- [ ] No history, changes, old code, regressions, fixes, dates, or author names.
+- [ ] Ticket and MR numbers appear only inside `TODO` comments.
+- [ ] Explains a non-obvious "why", not the obvious "what".
+- [ ] Doesn't annotate boilerplate the codebase leaves bare (e.g. `propTypes`).
+- [ ] States a constraint the reader needs, rather than restating a design doc.
+- [ ] Reads like the surrounding code: states facts, does not argue a case.
+- [ ] One or two sentences, ending with a period.
+- [ ] Sits where the complex code is.

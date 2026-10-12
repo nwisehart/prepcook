@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id           AS \"id!: Uuid\",\n                email        AS \"email!\",\n                first_name   AS \"first_name?\",\n                last_name    AS \"last_name?\",\n                username     AS \"username?\",\n                created_at   AS \"created_at!\",\n                updated_at   AS \"updated_at!\",\n                agent_password_hash AS \"agent_password_hash?\"\n            FROM users\n            WHERE LOWER(email) = LOWER($1) AND is_agent\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "first_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "username?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "agent_password_hash?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f5b8bd834879420245a215caed19cc49094e401388caaace5807235245706a70"
+}

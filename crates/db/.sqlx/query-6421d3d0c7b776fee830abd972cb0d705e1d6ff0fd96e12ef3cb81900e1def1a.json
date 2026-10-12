@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO execution_process_usage\n                    (execution_process_id, input_tokens, output_tokens,\n                     cache_read_tokens, cache_creation_tokens, model)\n               VALUES (?, ?, ?, ?, ?, ?)\n               ON CONFLICT(execution_process_id) DO UPDATE SET\n                    input_tokens = excluded.input_tokens,\n                    output_tokens = excluded.output_tokens,\n                    cache_read_tokens = excluded.cache_read_tokens,\n                    cache_creation_tokens = excluded.cache_creation_tokens,\n                    model = excluded.model",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "6421d3d0c7b776fee830abd972cb0d705e1d6ff0fd96e12ef3cb81900e1def1a"
+}

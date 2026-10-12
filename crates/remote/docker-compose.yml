@@ -1,0 +1,84 @@
+# The board service built from this checkout: Postgres, ElectricSQL (the
+# read-path sync engine) and the remote server. `pnpm run remote:dev` runs it
+# with .env.remote; `prepcook up --compose crates/remote/docker-compose.yml` runs it
+# with the board .env that `prepcook up` generates. docker-compose.release.yml is
+# the same stack from the published image.
+#
+# Required in the env file: DB_PASSWORD, ELECTRIC_ROLE_PASSWORD and
+# PREPCOOK_JWT_SECRET. The local server authenticates to the board by signing
+# owner tokens with that same secret (its PREPCOOK_BOARD_SECRET); nobody signs
+# in.
+services:
+  remote-db:
+    image: postgres:16-alpine
+    command: [ "postgres", "-c", "wal_level=logical" ]
+    environment:
+      POSTGRES_DB: remote
+      POSTGRES_USER: remote
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env.remote}
+    volumes:
+      - remote-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U remote -d remote" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    ports:
+      - "${REMOTE_DB_PORT:-127.0.0.1:4115}:5432"
+
+  electric:
+    image: electricsql/electric:1.4.13
+    working_dir: /app
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgresql://electric_sync:${ELECTRIC_ROLE_PASSWORD:?set ELECTRIC_ROLE_PASSWORD in .env.remote}@remote-db:5432/remote?sslmode=disable
+      PG_PROXY_PORT: 65432
+      LOGICAL_PUBLISHER_HOST: electric
+      AUTH_MODE: insecure
+      ELECTRIC_INSECURE: true
+      ELECTRIC_MANUAL_TABLE_PUBLISHING: true
+      ELECTRIC_USAGE_REPORTING: false
+      ELECTRIC_FEATURE_FLAGS: allow_subqueries,tagged_subqueries
+    volumes:
+      - electric-data:/app/persistent
+    depends_on:
+      remote-db:
+        condition: service_healthy
+      remote-server:
+        condition: service_healthy
+
+  remote-server:
+    build:
+      context: ../..
+      dockerfile: crates/remote/Dockerfile
+      args:
+        POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+        POSTHOG_API_ENDPOINT: ${POSTHOG_API_ENDPOINT:-}
+        SENTRY_DSN_REMOTE: ${SENTRY_DSN_REMOTE:-}
+    depends_on:
+      remote-db:
+        condition: service_healthy
+    environment:
+      RUST_LOG: info,remote=info
+
+      SERVER_DATABASE_URL: postgres://remote:${DB_PASSWORD:?set DB_PASSWORD in .env.remote}@remote-db:5432/remote
+      SERVER_LISTEN_ADDR: 0.0.0.0:8081
+      ELECTRIC_URL: http://electric:3000
+      ELECTRIC_ROLE_PASSWORD: ${ELECTRIC_ROLE_PASSWORD:?set ELECTRIC_ROLE_PASSWORD in .env.remote}
+      SERVER_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:4110}
+      PREPCOOK_JWT_SECRET: ${PREPCOOK_JWT_SECRET:?set in .env.remote}
+
+    ports:
+      - "${REMOTE_SERVER_PORTS:-127.0.0.1:4110:8081}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8081/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  remote-db-data:
+  electric-data:

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as \"count!: i64\"\n                 FROM execution_process_seat_stall st\n                 JOIN execution_processes ep ON ep.id = st.execution_process_id\n                WHERE st.resumed_at IS NULL\n                  AND ep.id = (\n                        SELECT inner_ep.id\n                          FROM execution_processes inner_ep\n                         WHERE inner_ep.session_id = ep.session_id\n                         ORDER BY inner_ep.created_at DESC\n                         LIMIT 1\n                    )",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b29bd47b03e91f3de14d1b83b527c7f4051592572264094fd2646c8769bdf2f5"
+}

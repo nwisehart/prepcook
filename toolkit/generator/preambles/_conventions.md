@@ -1,0 +1,1 @@
+`<target>` is the branch the work merges into: the target of the branch's pull request when one exists (ask `gh` or `glab`, whichever your host uses), else the remote's default branch — `git symbolic-ref --short refs/remotes/origin/HEAD`, usually `origin/main`. "Pull request" means a merge request too, on GitLab.

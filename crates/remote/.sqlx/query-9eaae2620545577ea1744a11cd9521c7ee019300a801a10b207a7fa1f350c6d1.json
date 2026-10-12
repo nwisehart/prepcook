@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                n.id          AS \"id!: Uuid\",\n                n.project_id  AS \"project_id!: Uuid\",\n                n.kind        AS \"kind!\",\n                n.name        AS \"name!\",\n                n.description,\n                n.seeded      AS \"seeded!\",\n                n.investigation_jira_key,\n                n.investigation_edge_count,\n                COUNT(e.id)   AS \"edge_count!\",\n                n.created_at  AS \"created_at!\"\n            FROM kb_nodes n\n            LEFT JOIN kb_edges e ON e.node_id = n.id\n            WHERE n.project_id = $1\n            GROUP BY n.id\n            ORDER BY COUNT(e.id) DESC, n.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "seeded!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "investigation_jira_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "investigation_edge_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "edge_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      null,
+      false
+    ]
+  },
+  "hash": "9eaae2620545577ea1744a11cd9521c7ee019300a801a10b207a7fa1f350c6d1"
+}

@@ -1,0 +1,80 @@
+# The board service from published images: Postgres, ElectricSQL (the
+# read-path sync engine) and the remote server.
+#
+# The `prepcook` binary embeds this file and `prepcook up` writes it to
+# <app data dir>/board/docker-compose.yml, replacing the `latest` tag of the
+# prepcook-board image with the binary's own version so the board and the server
+# always match. `prepcook up` also generates the .env it is started with:
+# DB_PASSWORD, ELECTRIC_ROLE_PASSWORD, PREPCOOK_JWT_SECRET and PUBLIC_BASE_URL.
+# The server signs its requests to the board with PREPCOOK_JWT_SECRET, which it
+# reads from that .env; nobody signs in.
+#
+# To build the board from source instead, use docker-compose.yml in this
+# directory (see README.md).
+services:
+  remote-db:
+    image: postgres:16-alpine
+    command: [ "postgres", "-c", "wal_level=logical" ]
+    environment:
+      POSTGRES_DB: remote
+      POSTGRES_USER: remote
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in the board .env}
+    volumes:
+      - remote-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U remote -d remote" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  electric:
+    image: electricsql/electric:1.4.13
+    working_dir: /app
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgresql://electric_sync:${ELECTRIC_ROLE_PASSWORD:?set ELECTRIC_ROLE_PASSWORD in the board .env}@remote-db:5432/remote?sslmode=disable
+      PG_PROXY_PORT: 65432
+      LOGICAL_PUBLISHER_HOST: electric
+      AUTH_MODE: insecure
+      ELECTRIC_INSECURE: true
+      ELECTRIC_MANUAL_TABLE_PUBLISHING: true
+      ELECTRIC_USAGE_REPORTING: false
+      ELECTRIC_FEATURE_FLAGS: allow_subqueries,tagged_subqueries
+    volumes:
+      - electric-data:/app/persistent
+    depends_on:
+      remote-db:
+        condition: service_healthy
+      remote-server:
+        condition: service_healthy
+
+  remote-server:
+    image: ghcr.io/nwisehart/prepcook-board:latest
+    depends_on:
+      remote-db:
+        condition: service_healthy
+    environment:
+      RUST_LOG: info,remote=info
+
+      SERVER_DATABASE_URL: postgres://remote:${DB_PASSWORD:?set DB_PASSWORD in the board .env}@remote-db:5432/remote
+      SERVER_LISTEN_ADDR: 0.0.0.0:8081
+      ELECTRIC_URL: http://electric:3000
+      ELECTRIC_ROLE_PASSWORD: ${ELECTRIC_ROLE_PASSWORD:?set ELECTRIC_ROLE_PASSWORD in the board .env}
+      SERVER_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:4110}
+      PREPCOOK_JWT_SECRET: ${PREPCOOK_JWT_SECRET:?set PREPCOOK_JWT_SECRET in the board .env}
+
+    ports:
+      - "${REMOTE_SERVER_PORTS:-127.0.0.1:4110:8081}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8081/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  remote-db-data:
+  electric-data:

@@ -1,0 +1,106 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+/dist
+/build
+bindings/
+
+# Environment variables
+.env
+.env.remote
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+.env.runner
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# ESLint cache
+.eslintcache
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Storybook build outputs
+.out
+.storybook-out
+
+.env
+packages/**/dist
+
+build-npm-package-codesign.sh
+
+npx-cli/bin/
+npx-cli/dist
+npx-cli/prepcook-*
+prepcook-*.tgz
+
+# Development ports file
+.dev-ports.json
+
+dev_assets
+/packages/web/.env.sentry-build-plugin
+.ssh
+
+prepcook-cloud/
+
+.jj
+.sisyphus/
+
+# Vite temp files
+*.timestamp-*.mjs
+
+# Mobile testing (per-developer, do not commit)
+*.ts.net.crt
+*.ts.net.key
+Caddyfile
+Caddyfile.dev
+# ...but the remote stack's HTTP/2 sidecar config is part of the repo.
+!crates/remote/caddy/Caddyfile
+
+# Runtime debug logs from ./mo (see debug-logs/)
+debug-logs/
+
+# Staged Tauri sidecars (see scripts/stage-mcp-sidecar.sh)
+crates/tauri-app/binaries/

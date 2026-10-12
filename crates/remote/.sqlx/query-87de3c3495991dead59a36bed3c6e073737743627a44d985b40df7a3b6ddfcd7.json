@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id          AS \"id!: Uuid\",\n                project_id  AS \"project_id!: Uuid\",\n                kind        AS \"kind!\",\n                title       AS \"title!\",\n                issue_id    AS \"issue_id: Uuid\",\n                jira_key,\n                work_class,\n                summary,\n                tags        AS \"tags!\",\n                created_at  AS \"created_at!\",\n                updated_at  AS \"updated_at!\"\n            FROM kb_documents\n            WHERE project_id = $1\n              AND ($2::text IS NULL OR kind = $2)\n              AND (NOT $3::bool OR NOT EXISTS (\n                    SELECT 1 FROM kb_edges e WHERE e.document_id = kb_documents.id\n              ))\n            ORDER BY created_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "issue_id: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "jira_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "work_class",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "summary",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "tags!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "87de3c3495991dead59a36bed3c6e073737743627a44d985b40df7a3b6ddfcd7"
+}
