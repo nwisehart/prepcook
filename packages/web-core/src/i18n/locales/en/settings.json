@@ -26,7 +26,7 @@
         "reposDesc": "Repository scripts and configuration",
         "secrets": "Secrets",
         "secretsDesc": "Values the repository scripts need",
-        "agents": "Agents",
+        "agents": "Agent profiles",
         "agentsDesc": "Coding agent configurations",
         "mcp": "MCP Servers",
         "mcpDesc": "Model Context Protocol servers",
@@ -59,7 +59,9 @@
         "reproduction": "Reproduction",
         "reproductionDesc": "Where bug cards' apps run: this machine or a remote deploy",
         "evidence": "Evidence",
-        "evidenceDesc": "Where failures leave traces: error trackers, log services, log files"
+        "evidenceDesc": "Where failures leave traces: error trackers, log services, log files",
+        "coding-agents": "Agents",
+        "coding-agentsDesc": "Which coding agent runs each stage, and whether each one is ready on this machine"
       }
     },
     "board": {
@@ -390,6 +392,59 @@
         "description": "This will permanently remove \"{{configName}}\" from the {{executorType}} executor. You can't undo this action."
       }
     },
+    "codingAgents": {
+      "stagesCard": {
+        "title": "Stages",
+        "description": "Which agent profile each orchestrator stage runs. Unset, Planning runs the default profile and every other stage its cheaper variant (Claude Code's Sonnet) when the default profile names no variant. A board can override any of these under Orchestrator → Automated projects → Board overrides. A follow-up continues its session with that session's agent, so a stage moved to another agent takes effect from its next new session."
+      },
+      "defaultLabel": "Default profile",
+      "defaultHelper": "What every stage runs unless it names its own below. The same setting as General → Default Coding Agent.",
+      "stages": {
+        "inherit": "Default",
+        "planning": {
+          "label": "Planning",
+          "helper": "Specs, RCAs and investigations, and the follow-ups that revise them."
+        },
+        "executing": {
+          "label": "Executing",
+          "helper": "The change, and every fix round, CI fix, rebase and merge request description in its worktree."
+        },
+        "reviewing": {
+          "label": "Reviewing",
+          "helper": "The independent review, in a fresh worktree."
+        },
+        "comment_reply": {
+          "label": "Comment replies",
+          "helper": "Answers to comments on shipped tickets."
+        },
+        "pattern": {
+          "label": "Pattern reviews",
+          "helper": "Pattern reviews, and the RCA-graph analysis that finds the patterns."
+        }
+      },
+      "agentsCard": {
+        "title": "Coding agents",
+        "description": "Every agent Prep Cook can run. Whether each is signed in is read from its own files when this page opens; Test runs its command with --version, for 10 seconds at most."
+      },
+      "command": "Command",
+      "signIn": "Signs in",
+      "mcp": "MCP servers",
+      "variants": "Variants",
+      "economy": "{{variant}} (economy)",
+      "builtIn": "Built in",
+      "mcpWiring": {
+        "per_session": "Per session, on its command line, on top of its own",
+        "agent_config": "Only from its own config (Settings → MCP Servers)",
+        "unsupported": "None"
+      },
+      "test": "Test",
+      "testing": "Testing…",
+      "docs": "Documentation",
+      "save": {
+        "success": "Agent settings saved.",
+        "error": "Failed to save agent settings."
+      }
+    },
     "mcp": {
       "title": "MCP Server Configuration",
       "description": "Configure Model Context Protocol servers to extend coding agent capabilities with custom tools and resources.",
@@ -653,7 +708,10 @@
         "on": "On",
         "off": "Off",
         "inheritPlaceholder": "Inherit",
-        "playbooksHint": "Playbook text for this board is edited under Settings → Playbooks."
+        "playbooksHint": "Playbook text for this board is edited under Settings → Playbooks.",
+        "agentDefaultLabel": "Default agent",
+        "agentDefaultHelper": "This board's profile for every stage it does not set below.",
+        "agentInherit": "Inherit"
       },
       "workspaceRetention": {
         "label": "Workspace retention (days)",

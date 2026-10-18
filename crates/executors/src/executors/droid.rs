@@ -85,6 +85,19 @@ pub struct Droid {
 }
 
 impl Droid {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::Droid,
+            "Droid",
+            "Factory's coding agent.",
+            "droid",
+            "Run `droid` once and sign in, or set `FACTORY_API_KEY`.",
+            crate::descriptor::McpWiring::AgentConfig,
+            "https://docs.factory.ai/cli/getting-started/overview",
+        )
+    }
+
     pub fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
         use crate::command::{CommandBuilder, apply_overrides};
         let mut builder =

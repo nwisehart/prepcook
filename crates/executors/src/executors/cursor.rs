@@ -137,6 +137,19 @@ fn cursor_reasoning_options(base_model: &str) -> Vec<ReasoningOption> {
 }
 
 impl CursorAgent {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::CursorAgent,
+            "Cursor Agent",
+            "Cursor's command-line agent.",
+            Self::base_command(),
+            "Run `cursor-agent login` once, or set `CURSOR_API_KEY`.",
+            crate::descriptor::McpWiring::AgentConfig,
+            "https://docs.cursor.com/en/cli/overview",
+        )
+    }
+
     pub fn base_command() -> &'static str {
         "cursor-agent"
     }

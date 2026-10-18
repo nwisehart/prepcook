@@ -36,6 +36,15 @@ import {
   NOTIFICATIONS_AREA,
   NotificationEventsField,
 } from './NotificationsSettingsSection';
+import { useAgentDescriptors } from './CodingAgentsSettingsSection';
+import {
+  AGENT_STAGES,
+  EMPTY_STAGE_PROFILES,
+  ProfileSelect,
+  StageProfileFields,
+  stageDefault,
+  useProfileOptions,
+} from './StageProfileFields';
 
 // `poll_interval_secs` is typed bigint (u64 via ts-rs) but is a plain JSON
 // number at runtime; keep it a number so config serialization stays valid.
@@ -60,6 +69,7 @@ const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
 const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   repo_ids: [],
   executor_profile: null,
+  agents: { stages: EMPTY_STAGE_PROFILES },
   label: null,
   ticketing: {
     watcher_enabled: null,
@@ -105,6 +115,11 @@ const withOverrideShape = (
   },
   reproduction: { ...EMPTY_DEFAULTS.reproduction, ...defaults.reproduction },
   evidence: { ...EMPTY_DEFAULTS.evidence, ...defaults.evidence },
+  agents: {
+    ...EMPTY_DEFAULTS.agents,
+    ...defaults.agents,
+    stages: { ...EMPTY_STAGE_PROFILES, ...defaults.agents?.stages },
+  },
 });
 
 // Overrides are tri-state in the config (null = inherit the global), which a
@@ -154,6 +169,8 @@ const textToList = (text: string): string[] =>
 const countOverrides = (defaults: ProjectAutomationDefaults): number => {
   const board = withOverrideShape(defaults);
   return [
+    board.executor_profile != null,
+    ...AGENT_STAGES.map((stage) => board.agents.stages[stage] != null),
     board.label != null,
     board.ticketing.watcher_enabled != null,
     board.ticketing.jql_filter != null,
@@ -179,10 +196,12 @@ const countOverrides = (defaults: ProjectAutomationDefaults): number => {
 export function OrchestratorSettingsSection() {
   const { t } = useTranslation(['settings', 'common']);
   const { setDirty: setContextDirty } = useSettingsDirty();
-  const { config, loading, updateAndSaveConfig } = useUserSystem();
+  const { config, loading, updateAndSaveConfig, profiles } = useUserSystem();
   const descriptorsQuery = useIntegrationDescriptors();
   const notificationDescriptors =
     descriptorsQuery.data?.[NOTIFICATIONS_AREA] ?? [];
+  const agentDescriptors = useAgentDescriptors();
+  const profileOptions = useProfileOptions(profiles);
 
   const [draft, setDraft] = useState<OrchestratorConfig>(() =>
     config?.orchestrator
@@ -716,6 +735,47 @@ export function OrchestratorSettingsSection() {
                       placeholder="extensions"
                     />
                   </SettingsField>
+
+                  <SettingsField
+                    label={t('settings.orchestrator.board.agentDefaultLabel')}
+                    description={t(
+                      'settings.orchestrator.board.agentDefaultHelper'
+                    )}
+                  >
+                    <ProfileSelect
+                      value={defaults.executor_profile}
+                      inherited={config.executor_profile}
+                      inheritLabel={t(
+                        'settings.orchestrator.board.agentInherit'
+                      )}
+                      options={profileOptions}
+                      onChange={(profile) =>
+                        updateProjectDefaults(projectId, (current) => ({
+                          ...current,
+                          executor_profile: profile,
+                        }))
+                      }
+                    />
+                  </SettingsField>
+                  <StageProfileFields
+                    stages={defaults.agents.stages}
+                    fallback={(stage) =>
+                      config.agents?.stages?.[stage] ??
+                      stageDefault(
+                        stage,
+                        defaults.executor_profile ?? config.executor_profile,
+                        agentDescriptors
+                      )
+                    }
+                    options={profileOptions}
+                    inheritLabel={t('settings.orchestrator.board.agentInherit')}
+                    onChange={(stages) =>
+                      updateProjectDefaults(projectId, (current) => ({
+                        ...current,
+                        agents: { ...current.agents, stages },
+                      }))
+                    }
+                  />
 
                   <SettingsField
                     label={t('settings.orchestrator.board.watcherLabel')}

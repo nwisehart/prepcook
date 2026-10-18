@@ -1082,7 +1082,11 @@ export type DirectoryListResponse = { entries: Array<DirectoryEntry>, current_pa
 
 export type SearchMode = "taskform" | "settings";
 
-export type Config = { config_version: string, theme: ThemeMode, executor_profile: ExecutorProfileId, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, remote_onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, analytics_enabled: boolean, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, 
+export type Config = { config_version: string, theme: ThemeMode, executor_profile: ExecutorProfileId, 
+/**
+ * Per-stage profiles; each board can override them.
+ */
+agents: AgentsConfig, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, remote_onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, analytics_enabled: boolean, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, 
 /**
  * Where cards come from; see [`TrackerConfig`]. Also read from the
  * `tracker` key older configs wrote, and saved as `ticketing`.
@@ -1377,6 +1381,10 @@ repo_ids: Array<string>,
  */
 executor_profile: ExecutorProfileId | null, 
 /**
+ * This board's per-stage profiles, over the global `agents.stages`.
+ */
+agents: AgentsConfig, 
+/**
  * Short board name (e.g. "extensions"), used for the RCA `board:` tag.
  * Unset leaves it unlabelled.
  */
@@ -1495,7 +1503,13 @@ secrets: Array<string>, docs_url: string,
  * False for a provider that is named but not implemented: Settings shows
  * it and does not let it be chosen.
  */
-available: boolean, };
+available: boolean, 
+/**
+ * Set for a coding agent (the `agents` area), which is not configured
+ * through fields: what it needs installed, how it signs in and how its
+ * sessions get MCP servers.
+ */
+agent?: AgentDescriptor, };
 
 export type Field = { 
 /**
@@ -1506,6 +1520,64 @@ key: string, label: string, kind: FieldKind, required: boolean, help: string, };
 export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<string>, } | { "type": "bool" } | { "type": "number" };
 
 export type TestOutcome = { ok: boolean, message: string, };
+
+export type AgentDescriptor = { executor: BaseCodingAgent, display_name: string, 
+/**
+ * One sentence.
+ */
+summary: string, 
+/**
+ * The program a session runs, looked up on PATH. Empty for an agent
+ * that runs inside Prep Cook.
+ */
+binary: string, 
+/**
+ * The command line a session starts from, before its own arguments.
+ * The version probe runs it with `--version`.
+ */
+command: string, 
+/**
+ * How to sign it in, e.g. "Run `claude` once and sign in".
+ */
+sign_in: string, supports_mcp: boolean, mcp: McpWiring, 
+/**
+ * The variants `default_profiles.json` ships for it, `DEFAULT` first.
+ */
+variants: Array<string>, 
+/**
+ * The cheaper variant a stage that carries no design judgment defaults
+ * to when the configured profile names no variant. `None` when the
+ * agent ships no such variant.
+ */
+economy_variant: string | null, docs_url: string, };
+
+export type McpWiring = "per_session" | "agent_config" | "unsupported";
+
+export type AgentsConfig = { stages: StageProfiles, };
+
+export type StageProfiles = { 
+/**
+ * Planning sessions: specs, RCAs, investigations, and the follow-ups
+ * that revise them.
+ */
+planning: ExecutorProfileId | null, 
+/**
+ * Executing sessions, and the fix rounds, CI fixes, rebases and MR
+ * descriptions that run in their worktree.
+ */
+executing: ExecutorProfileId | null, 
+/**
+ * The independent review session.
+ */
+reviewing: ExecutorProfileId | null, 
+/**
+ * The agent that answers comments on shipped tickets.
+ */
+comment_reply: ExecutorProfileId | null, 
+/**
+ * Pattern reviews and the RCA-graph analysis that finds the patterns.
+ */
+pattern: ExecutorProfileId | null, };
 
 export type IntegrationTestRequest = { fields?: Record<string, unknown>, };
 

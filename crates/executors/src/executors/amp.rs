@@ -32,10 +32,25 @@ pub struct Amp {
     pub cmd: CmdOverrides,
 }
 
+/// The command line a session starts from, before its own arguments.
+const BASE_COMMAND: &str = "npx -y @sourcegraph/amp@latest";
+
 impl Amp {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::Amp,
+            "Amp",
+            "Sourcegraph's coding agent, run through npx.",
+            BASE_COMMAND,
+            "Run `amp login` once, or set `AMP_API_KEY`.",
+            crate::descriptor::McpWiring::AgentConfig,
+            "https://ampcode.com/manual",
+        )
+    }
+
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let mut builder = CommandBuilder::new("npx -y @sourcegraph/amp@latest")
-            .params(["--execute", "--stream-json"]);
+        let mut builder = CommandBuilder::new(BASE_COMMAND).params(["--execute", "--stream-json"]);
         if self.dangerously_allow_all.unwrap_or(false) {
             builder = builder.extend_params(["--dangerously-allow-all"]);
         }

@@ -31,6 +31,21 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, TS, JsonSchema)]
 pub struct QaMockExecutor;
 
+impl QaMockExecutor {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            BaseCodingAgent::QaMock,
+            "QA mock",
+            "Scripted sessions for testing Prep Cook itself; only in QA builds.",
+            "",
+            "Nothing to sign in.",
+            crate::descriptor::McpWiring::Unsupported,
+            "https://github.com/nwisehart/prepcook",
+        )
+    }
+}
+
 #[async_trait]
 impl StandardCodingAgentExecutor for QaMockExecutor {
     fn apply_overrides(&mut self, _executor_config: &ExecutorConfig) {}

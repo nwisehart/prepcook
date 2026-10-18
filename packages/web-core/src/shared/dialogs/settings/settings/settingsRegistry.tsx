@@ -18,6 +18,7 @@ import {
   BellIcon,
   BugIcon,
   UserCheckIcon,
+  TerminalWindowIcon,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { GeneralSettingsSection } from './GeneralSettingsSection';
@@ -39,6 +40,7 @@ import { IntegrationsSettingsSection } from './IntegrationsSettingsSection';
 import { NotificationsSettingsSection } from './NotificationsSettingsSection';
 import { ReproductionSettingsSection } from './ReproductionSettingsSection';
 import { EvidenceSettingsSection } from './EvidenceSettingsSection';
+import { CodingAgentsSettingsSection } from './CodingAgentsSettingsSection';
 
 export type SettingsSectionType =
   | 'general'
@@ -59,7 +61,8 @@ export type SettingsSectionType =
   | 'worktree-pool'
   | 'notifications'
   | 'reproduction'
-  | 'evidence';
+  | 'evidence'
+  | 'coding-agents';
 
 /// `integrations` holds one section per integration area, each rendered from
 /// its providers' descriptors.
@@ -87,6 +90,7 @@ export type SettingsSectionInitialState = {
   notifications: undefined;
   reproduction: undefined;
   evidence: undefined;
+  'coding-agents': undefined;
 };
 
 export interface SettingsSectionDefinition {
@@ -108,6 +112,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'usage', icon: ChartBarIcon, group: 'host' },
   { id: 'connectors', icon: PlugsConnectedIcon, group: 'host' },
   { id: 'worktree-pool', icon: TreeIcon, group: 'host' },
+  { id: 'coding-agents', icon: TerminalWindowIcon, group: 'integrations' },
   { id: 'ticketing', icon: TicketIcon, group: 'integrations' },
   { id: 'notifications', icon: BellIcon, group: 'integrations' },
   { id: 'reproduction', icon: BugIcon, group: 'integrations' },
@@ -180,6 +185,8 @@ export function renderSettingsSection(
       return <ReproductionSettingsSection />;
     case 'evidence':
       return <EvidenceSettingsSection />;
+    case 'coding-agents':
+      return <CodingAgentsSettingsSection />;
     default:
       return <GeneralSettingsSection />;
   }

@@ -172,6 +172,22 @@ pub struct ClaudeCode {
 }
 
 impl ClaudeCode {
+    /// What Settings and the configuration reference show for this agent.
+    /// The command is the installed `claude`; without one on PATH, sessions
+    /// fall back to npx (see `base_command`), which the probe does not try.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            BaseCodingAgent::ClaudeCode,
+            "Claude Code",
+            "Anthropic's coding agent: the installed `claude`, or `npx -y @anthropic-ai/claude-code@latest` when none is on PATH.",
+            "claude",
+            "Run `claude` once and sign in, or set `ANTHROPIC_API_KEY` (billed per token instead of the subscription).",
+            crate::descriptor::McpWiring::PerSession,
+            "https://docs.anthropic.com/en/docs/claude-code/overview",
+        )
+        .with_economy_variant("SONNET")
+    }
+
     async fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
         self.build_command_builder_with(
             crate::mcp_config::existing_session_mcp_config_path().as_deref(),

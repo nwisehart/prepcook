@@ -458,6 +458,19 @@ impl StandardCodingAgentExecutor for Codex {
 }
 
 impl Codex {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::Codex,
+            "Codex",
+            "OpenAI's coding agent, run through npx.",
+            Self::base_command(),
+            "Run `codex login` once, or set `CODEX_API_KEY`.",
+            crate::descriptor::McpWiring::PerSession,
+            "https://developers.openai.com/codex/cli",
+        )
+    }
+
     pub fn base_command() -> &'static str {
         "npx -y @openai/codex@0.124.0"
     }

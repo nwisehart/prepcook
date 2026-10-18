@@ -104,6 +104,8 @@ pub type ProjectReproductionOverride = versions::v10::ProjectReproductionOverrid
 pub type DeployWatch = versions::v10::DeployWatch;
 pub type ApprovalsConfig = versions::v10::ApprovalsConfig;
 pub type InAppGate = versions::v10::InAppGate;
+pub type AgentsConfig = versions::v10::AgentsConfig;
+pub type StageProfiles = versions::v10::StageProfiles;
 pub use versions::v10::{
     COMMENT_REPLY_PLAYBOOK_KEY, CURRENT_PLAYBOOK_KEYS, INVESTIGATION_PLAYBOOK_KEY,
     PATTERN_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY,

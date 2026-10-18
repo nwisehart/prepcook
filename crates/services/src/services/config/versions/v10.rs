@@ -22,6 +22,7 @@ pub use crate::services::config::playbooks::{
     RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY, default_playbooks,
 };
 use crate::services::{
+    agents::StageAgents,
     config::versions::{superseded_playbooks, v9},
     evidence::EvidenceKind,
     notifications::NotifierKind,
@@ -903,6 +904,38 @@ pub struct DeployWatch {
     pub git_ref: String,
 }
 
+/// The executor profile each orchestrator stage runs, where it should differ
+/// from the default profile. Unset stages take their default; see
+/// [`crate::services::agents`] for the resolution order and the defaults.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+pub struct StageProfiles {
+    /// Planning sessions: specs, RCAs, investigations, and the follow-ups
+    /// that revise them.
+    #[serde(default)]
+    pub planning: Option<ExecutorProfileId>,
+    /// Executing sessions, and the fix rounds, CI fixes, rebases and MR
+    /// descriptions that run in their worktree.
+    #[serde(default)]
+    pub executing: Option<ExecutorProfileId>,
+    /// The independent review session.
+    #[serde(default)]
+    pub reviewing: Option<ExecutorProfileId>,
+    /// The agent that answers comments on shipped tickets.
+    #[serde(default)]
+    pub comment_reply: Option<ExecutorProfileId>,
+    /// Pattern reviews and the RCA-graph analysis that finds the patterns.
+    #[serde(default)]
+    pub pattern: Option<ExecutorProfileId>,
+}
+
+/// Which coding agent runs which stage: `agents` globally, and per board
+/// under `orchestrator.project_defaults.*.agents`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+pub struct AgentsConfig {
+    #[serde(default)]
+    pub stages: StageProfiles,
+}
+
 /// Per-project defaults the orchestrator uses when auto-launching playbook
 /// workspaces, plus that board's overrides for otherwise-global settings.
 ///
@@ -921,6 +954,9 @@ pub struct ProjectAutomationDefaults {
     /// Overrides the global executor profile for this project's playbooks.
     #[serde(default)]
     pub executor_profile: Option<ExecutorProfileId>,
+    /// This board's per-stage profiles, over the global `agents.stages`.
+    #[serde(default)]
+    pub agents: AgentsConfig,
     /// Short board name (e.g. "extensions"), used for the RCA `board:` tag.
     /// Unset leaves it unlabelled.
     #[serde(default)]
@@ -978,6 +1014,7 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
         Self {
             repo_ids: old.repo_ids,
             executor_profile: old.executor_profile,
+            agents: AgentsConfig::default(),
             label: old.label,
             ticketing: old.jira.into(),
             notifications: ProjectNotificationsOverride::default(),
@@ -1134,7 +1171,11 @@ pub struct EffectiveProjectSettings {
     /// Board label, when one is configured (drives the RCA `board:` tag).
     pub label: Option<String>,
     pub repo_ids: Vec<Uuid>,
+    /// The board's default profile (its `executor_profile`, else the global
+    /// one). Stages launch from [`Self::agents`], which is built from it.
     pub executor_profile: ExecutorProfileId,
+    /// The profile each stage runs on this board.
+    pub agents: StageAgents,
     pub jira_project_key: String,
     /// Whether the Jira watcher polls for this board.
     pub watcher_enabled: bool,
@@ -1161,6 +1202,9 @@ pub struct Config {
     pub config_version: String,
     pub theme: ThemeMode,
     pub executor_profile: ExecutorProfileId,
+    /// Per-stage profiles; each board can override them.
+    #[serde(default)]
+    pub agents: AgentsConfig,
     pub disclaimer_acknowledged: bool,
     pub onboarding_acknowledged: bool,
     #[serde(default)]
@@ -1245,6 +1289,7 @@ impl Config {
             config_version: "v10".to_string(),
             theme: old_config.theme,
             executor_profile: old_config.executor_profile,
+            agents: AgentsConfig::default(),
             disclaimer_acknowledged: old_config.disclaimer_acknowledged,
             onboarding_acknowledged: old_config.onboarding_acknowledged,
             remote_onboarding_acknowledged: old_config.remote_onboarding_acknowledged,
@@ -1347,6 +1392,7 @@ impl Default for Config {
             config_version: "v10".to_string(),
             theme: ThemeMode::System,
             executor_profile: ExecutorProfileId::new(BaseCodingAgent::ClaudeCode),
+            agents: AgentsConfig::default(),
             disclaimer_acknowledged: false,
             onboarding_acknowledged: false,
             remote_onboarding_acknowledged: false,
@@ -1470,14 +1516,19 @@ impl Config {
         let mut bot_logins = self.integrations.bot_logins.clone();
         bot_logins.extend(board.merge_requests.bot_logins.iter().cloned());
 
+        let executor_profile = board
+            .executor_profile
+            .clone()
+            .unwrap_or_else(|| self.executor_profile.clone());
+        let agents =
+            StageAgents::resolve(&board.agents.stages, &self.agents.stages, &executor_profile);
+
         EffectiveProjectSettings {
             project_id,
             label: non_empty(&board.label),
             repo_ids: board.repo_ids.clone(),
-            executor_profile: board
-                .executor_profile
-                .clone()
-                .unwrap_or_else(|| self.executor_profile.clone()),
+            executor_profile,
+            agents,
             jira_project_key,
             watcher_enabled,
             watcher_jql,

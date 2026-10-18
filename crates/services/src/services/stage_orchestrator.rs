@@ -75,7 +75,6 @@ use executors::{
         ExecutorAction, ExecutorActionType, coding_agent_follow_up::CodingAgentFollowUpRequest,
         coding_agent_initial::CodingAgentInitialRequest,
     },
-    executors::BaseCodingAgent,
     profile::{ExecutorConfig, ExecutorProfileId},
 };
 use git::GitServiceError;
@@ -91,6 +90,7 @@ use uuid::Uuid;
 use workspace_manager::{WorkspaceError as ManagedWorkspaceError, WorkspaceManager};
 
 use crate::services::{
+    agents::AgentStage,
     approvals::decisions::{
         self, CardStage, Decision, DecisionCard, DecisionError, DecisionHost, DecisionRequest,
         DecisionSource,
@@ -288,17 +288,6 @@ const VERIFY_ORPHAN_AFTER: Duration = Duration::from_secs(90 * 60);
 /// rather than converging.
 const PIPELINE_FIX_MAX_ROUNDS: u32 = 3;
 
-/// Claude Code profile variant used for the cost-pinned stages (must exist in
-/// default_profiles.json). Executing, reviewing, and RCA analysis run this
-/// cheaper model: reviewers alone can be four fresh full-diff sessions per
-/// ticket, and none of these stages carry the design judgment that planning
-/// does. Subscription-seat session limits are the constraint being managed.
-const ECONOMY_VARIANT: &str = "SONNET";
-
-/// Pins the economy variant onto a Claude Code profile that has no explicit
-/// variant. An explicit variant (user chose a model in project defaults, or a
-/// prior turn already pinned one) and non-Claude executors pass through
-/// untouched, so configuration always wins over this default.
 /// Tickets whose takeover pause has been logged, so the reason is stated once
 /// per ticket rather than on every poll tick.
 static TAKEOVER_LOGGED: LazyLock<Mutex<HashSet<Uuid>>> = LazyLock::new(Default::default);
@@ -683,22 +672,20 @@ fn dispatch_rank(stage: Option<Stage>, priority: Option<IssuePriority>) -> (u8, 
     (stage_rank, priority_rank)
 }
 
-fn economy_profile(profile: ExecutorProfileId) -> ExecutorProfileId {
-    if profile.executor == BaseCodingAgent::ClaudeCode && profile.variant.is_none() {
-        ExecutorProfileId::with_variant(BaseCodingAgent::ClaudeCode, ECONOMY_VARIANT.to_string())
-    } else {
-        profile
-    }
+/// The executor a launch's first session runs: the board's profile for that
+/// stage (see [`crate::services::agents`]).
+fn stage_executor_config(settings: &EffectiveProjectSettings, stage: AgentStage) -> ExecutorConfig {
+    settings.agents.get(stage).clone().into()
 }
 
-/// The executor a launch's first session runs, economy-pinned for the stages
-/// that do not carry design judgment (see [`economy_profile`]).
-fn launch_executor_config(settings: &EffectiveProjectSettings, economy: bool) -> ExecutorConfig {
-    let profile = settings.executor_profile.clone();
-    if economy {
-        economy_profile(profile).into()
-    } else {
-        profile.into()
+/// The agent a board-column launch runs as. A pattern review plans in the
+/// Plan column but is the pattern agent's work, as its playbook is.
+fn launch_agent_stage(stage: Stage, metadata: &IssueExtMetadata) -> AgentStage {
+    match stage {
+        Stage::Executing => AgentStage::Executing,
+        Stage::Reviewing => AgentStage::Reviewing,
+        Stage::Planning if metadata.pattern_node.is_some() => AgentStage::Pattern,
+        _ => AgentStage::Planning,
     }
 }
 
@@ -745,12 +732,28 @@ enum TurnStart {
     /// Continue this phase's conversation. A follow-up inside a phase — a
     /// verify failure, a card comment, a reviewer's findings — resumes, or the
     /// agent would lose the work it did ten minutes ago and read its way back
-    /// to where it already was.
-    Resume,
+    /// to where it already was. Carries the stage profile the turn should
+    /// run, if any; see [`resumed_profile`].
+    Resume(Option<ExecutorProfileId>),
     /// Open a new session in the same worktree, because the card changed
     /// phase. The profile comes from project settings rather than the last
     /// session's, the same way a brand-new workspace's does.
     NewPhase(ExecutorProfileId),
+}
+
+/// The profile a resumed turn runs: the stage's when it is the session's own
+/// agent (a variant change, such as the executing default's cheaper model),
+/// else the session's. A conversation cannot move to another agent — the
+/// session id means nothing to it — so a stage set to a different agent
+/// takes effect from the next new session, not mid-conversation.
+fn resumed_profile(
+    session: ExecutorProfileId,
+    stage: Option<&ExecutorProfileId>,
+) -> ExecutorProfileId {
+    match stage {
+        Some(stage) if stage.executor == session.executor => stage.clone(),
+        _ => session,
+    }
 }
 
 /// An implementation workspace's checkout, resolved once for whichever step
@@ -4785,9 +4788,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
 
         let workspace = managed_workspace.workspace.clone();
-        // Cold, repetitive stage: run the economy model (see ECONOMY_VARIANT).
-        let executor_config: ExecutorConfig =
-            economy_profile(settings.executor_profile.clone()).into();
+        // The RCA graph is where patterns are found, so its analysis is the
+        // pattern agent's.
+        let executor_config = stage_executor_config(settings, AgentStage::Pattern);
 
         self.container
             .start_workspace(&workspace, executor_config, prompt.to_string())
@@ -5228,8 +5231,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                                 self.start_turn(
                                     workspace,
                                     &prompt,
-                                    true,
-                                    TurnStart::NewPhase(settings.executor_profile.clone()),
+                                    TurnStart::NewPhase(settings.agents.executing.clone()),
                                 )
                                 .await,
                             )
@@ -5247,7 +5249,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                             settings,
                             issue,
                             &prompt,
-                            stage == Stage::Executing,
+                            launch_agent_stage(stage, &metadata),
                         )
                         .await
                     }
@@ -5815,7 +5817,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         let prompt = format!(
             "A teammate reviewed your plan/RCA on the ticket and left feedback. Address it: update the artifact, and if your conclusions change, re-record the planning verdict via the MCP `update_issue` tool. Then reply with a short status comment on the issue via `add_issue_comment` (do NOT prefix your reply with PLAN:). End your turn without changing the ticket status.\n\nFeedback:\n{feedback}"
         );
-        self.start_follow_up(workspace, &prompt, false).await?;
+        self.start_follow_up(workspace, &prompt, None).await?;
         self.post_autonomy_comment(
             client,
             issue,
@@ -6422,7 +6424,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     VERIFY_MAX_ATTEMPTS,
                 );
                 let capped = record.attempts >= VERIFY_MAX_ATTEMPTS;
-                match self.start_follow_up(workspace.clone(), &prompt, true).await {
+                match self
+                    .start_follow_up(
+                        workspace.clone(),
+                        &prompt,
+                        Some(self.executing_profile(issue.project_id).await),
+                    )
+                    .await
+                {
                     Ok(_) => {
                         self.post_autonomy_comment(
                             client,
@@ -6843,7 +6852,10 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             "An independent reviewer requested changes on this branch. Address every finding below, run the relevant checks, and COMMIT the fixes. Do not push and do not change the ticket status.\n\nA finding can be wrong: the helper it names may not fit this call site, or the pattern claim may not hold. Where that is the case, change nothing for it, and post one `add_issue_comment` on this issue whose first line is exactly `REVIEW-REJECTED: <file>:<line>` followed by why the finding does not hold — the next reviewer starts with no memory of this round, so a rejection that lives only in your summary is a finding you will be asked about again. Name it in your summary too, and fix the rest.\n\n{findings}"
         );
         let workspace_id = workspace.id;
-        if let Err(error) = self.start_follow_up(workspace, &prompt, true).await {
+        if let Err(error) = self
+            .start_follow_up(workspace, &prompt, Some(settings.agents.executing.clone()))
+            .await
+        {
             // The checkout can go between the check above and this call, and a
             // failed injection leaves nothing running to finish the round.
             return self
@@ -6969,7 +6981,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 return;
             }
         };
-        if let Err(error) = self.start_follow_up(workspace, &prompt, false).await {
+        if let Err(error) = self.start_follow_up(workspace, &prompt, None).await {
             tracing::warn!(
                 ?error,
                 "escalation replies: failed to inject teammate reply"
@@ -7348,9 +7360,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
              answer it on the card with `add_issue_comment`. Then end your turn.",
             issue.simple_id
         );
-        // Not economy: a person asked for this directly, and the reply is
-        // read by that person.
-        if let Err(e) = self.start_follow_up(workspace, &prompt, false).await {
+        // The session's own profile, not the executing one: a person asked
+        // for this directly, and the reply is read by that person.
+        if let Err(e) = self.start_follow_up(workspace, &prompt, None).await {
             // Busy or unstartable: the mark stays, the next window retries.
             debug!(
                 "Stage orchestrator: card comment for {} not delivered yet: {e}",
@@ -7461,7 +7473,10 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
              task expected it — the card or the RCA — and end your turn only when nothing you \
              depend on is still running."
         );
-        if let Err(e) = self.start_follow_up(workspace, &prompt, true).await {
+        if let Err(e) = self
+            .start_follow_up(workspace, &prompt, Some(settings.agents.executing.clone()))
+            .await
+        {
             warn!(
                 "Stage orchestrator: follow-up for orphaned process on {} failed to start: {e}",
                 issue.simple_id
@@ -7996,7 +8011,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             "New comment(s) were added to Jira {jira_key} while you were planning:\n\n{combined}\n\nIncorporate anything relevant into your spec/RCA and update your recorded verdict (open_questions / confidence and summary) via the Prep Cook MCP `update_issue` planning fields. Then end your turn."
         );
 
-        if let Err(error) = self.start_follow_up(workspace, &prompt, false).await {
+        if let Err(error) = self.start_follow_up(workspace, &prompt, None).await {
             warn!(?error, "jira comment poll: inject failed for {jira_key}");
             return;
         }
@@ -8104,7 +8119,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             }
         };
 
-        match self.start_follow_up(workspace, RESUME_PROMPT, false).await {
+        match self.start_follow_up(workspace, RESUME_PROMPT, None).await {
             Ok(_) => {
                 info!(
                     "seat resume: sent session {} back in after the seat window reopened",
@@ -8121,27 +8136,34 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
     }
 
-    /// `economy`: pin the resumed turn to the economy model variant (used for
-    /// executing kickoffs/fix rounds and MR descriptions; planning follow-ups
-    /// keep whatever the session already runs).
     /// Runs a turn in an existing workspace, continuing this phase's
     /// conversation. Follow-ups inside a phase use this; a phase transition
     /// uses [`Self::start_turn`] with [`TurnStart::NewPhase`].
+    ///
+    /// `stage_profile`: the profile of the stage whose work this turn is (the
+    /// executing profile for fix rounds, CI fixes, rebases and MR
+    /// descriptions). `None` keeps whatever the session already runs: a reply
+    /// to a person, or planning feedback.
     async fn start_follow_up(
         &self,
         workspace: Workspace,
         prompt: &str,
-        economy: bool,
+        stage_profile: Option<ExecutorProfileId>,
     ) -> Result<Workspace, StageOrchestratorError> {
-        self.start_turn(workspace, prompt, economy, TurnStart::Resume)
+        self.start_turn(workspace, prompt, TurnStart::Resume(stage_profile))
             .await
+    }
+
+    /// The executing profile of the board an issue belongs to, for the
+    /// follow-ups that carry executing work.
+    async fn executing_profile(&self, project_id: Uuid) -> ExecutorProfileId {
+        self.settings_for(project_id).await.agents.executing
     }
 
     async fn start_turn(
         &self,
         workspace: Workspace,
         prompt: &str,
-        economy: bool,
         start: TurnStart,
     ) -> Result<Workspace, StageOrchestratorError> {
         let pool = &self.db.pool;
@@ -8168,7 +8190,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         // phases as the separate conversations they now are.
         let previous = Session::find_latest_by_workspace_id(pool, workspace.id).await?;
         let session = match (&start, previous) {
-            (TurnStart::Resume, Some(session)) => session,
+            (TurnStart::Resume(_), Some(session)) => session,
             _ => {
                 Session::create(
                     pool,
@@ -8185,7 +8207,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         let executor_profile_id = match &start {
             TurnStart::NewPhase(profile) => profile.clone(),
-            TurnStart::Resume => {
+            TurnStart::Resume(stage_profile) => {
                 let Some(profile) =
                     ExecutionProcess::latest_executor_profile_for_session(pool, session.id).await?
                 else {
@@ -8193,20 +8215,15 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         "existing workspace has no executor profile".to_string(),
                     ));
                 };
-                profile
+                resumed_profile(profile, stage_profile.as_ref())
             }
-        };
-        let executor_profile_id = if economy {
-            economy_profile(executor_profile_id)
-        } else {
-            executor_profile_id
         };
 
         // Only a resumed turn looks for a conversation to continue. A new
         // phase starts one even though the worktree has history, which is the
         // whole point of the change.
         let latest_session_info = match start {
-            TurnStart::Resume => CodingAgentTurn::find_latest_session_info(pool, session.id)
+            TurnStart::Resume(_) => CodingAgentTurn::find_latest_session_info(pool, session.id)
                 .await
                 .ok()
                 .flatten(),
@@ -8426,9 +8443,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
 
         let workspace = managed_workspace.workspace.clone();
-        // Cold, repetitive stage: run the economy model (see ECONOMY_VARIANT).
-        let executor_config: ExecutorConfig =
-            economy_profile(settings.executor_profile.clone()).into();
+        let executor_config = stage_executor_config(settings, AgentStage::Reviewing);
 
         self.container
             .start_workspace(&workspace, executor_config, prompt)
@@ -9557,7 +9572,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             addressed = ADDRESSED_VERDICT_PREFIX,
             replan = REPLAN_VERDICT_PREFIX
         );
-        match self.start_follow_up(workspace, &prompt, true).await {
+        match self
+            .start_follow_up(
+                workspace,
+                &prompt,
+                Some(self.executing_profile(issue.project_id).await),
+            )
+            .await
+        {
             Ok(_) => {
                 info!(
                     "Stage orchestrator: injected {} MR comment(s) into {}",
@@ -9724,7 +9746,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             );
             return;
         }
-        match self.start_follow_up(workspace.clone(), &prompt, true).await {
+        match self
+            .start_follow_up(
+                workspace.clone(),
+                &prompt,
+                Some(self.executing_profile(issue.project_id).await),
+            )
+            .await
+        {
             Ok(_) => {
                 info!(
                     "Stage orchestrator: {} — MR !{mr_number} needs a rebase ({}); handed back to the agent",
@@ -9976,7 +10005,10 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
              will review that one.",
             url = pr.pr_url
         );
-        match self.start_follow_up(workspace, &prompt, true).await {
+        match self
+            .start_follow_up(workspace, &prompt, Some(settings.agents.executing.clone()))
+            .await
+        {
             Ok(_) => {
                 info!(
                     "Stage orchestrator: injected CI fix round {} for {} (pipeline {status})",
@@ -10893,7 +10925,13 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             })
         };
         if let Some(prompt) = description_prompt
-            && let Err(e) = self.start_follow_up(impl_workspace, &prompt, true).await
+            && let Err(e) = self
+                .start_follow_up(
+                    impl_workspace,
+                    &prompt,
+                    Some(self.executing_profile(issue.project_id).await),
+                )
+                .await
         {
             warn!(
                 "Stage orchestrator: MR description follow-up for issue {} failed: {e}",
@@ -10971,17 +11009,6 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         Ok(format!("{archived} workspace(s) archived"))
     }
 
-    /// Same internal path as the `create_and_start_workspace` route:
-    /// workspace record, repo worktrees, container start, remote issue link.
-    /// `economy`: pin the session to the economy model variant (executing
-    /// launches; planning stays on the configured default).
-    /// Answers fresh human comments on done tickets. A ticket in a terminal
-    /// column whose Jira thread gained a human comment past the triage
-    /// watermark gets one analyze-only session (the `triage` playbook): read
-    /// the thread and attachments, compare against what actually shipped,
-    /// and reply on the Jira ticket. The watermark is seeded to the newest
-    /// existing comment the first time a ticket is seen, so enabling the
-    /// feature never triages history.
     /// Mentions on tickets that are mid-pipeline. A Jira comment that
     /// @-mentions the agent is a direct question, and the agent working the
     /// ticket is the one who can answer it — it holds the context and its own
@@ -11154,7 +11181,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                          invent a date.",
                         key = jira_ref.key
                     );
-                    match self.start_follow_up(workspace, &prompt, true).await {
+                    match self
+                        .start_follow_up(
+                            workspace,
+                            &prompt,
+                            Some(settings.agents.executing.clone()),
+                        )
+                        .await
+                    {
                         Ok(_) => true,
                         Err(e) => {
                             debug!(
@@ -11278,6 +11312,13 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
     }
 
+    /// Answers fresh human comments on done tickets. A ticket in a terminal
+    /// column whose Jira thread gained a human comment past the triage
+    /// watermark gets one analyze-only session (the `comment_reply` playbook,
+    /// on the comment-reply agent): read the thread and attachments, compare
+    /// against what actually shipped, and reply on the Jira ticket. The
+    /// watermark is seeded to the newest existing comment the first time a
+    /// ticket is seen, so enabling the feature never triages history.
     async fn scan_comment_triage(
         &self,
         client: &RemoteClient,
@@ -11460,7 +11501,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             let prompt = interpolate_playbook(&template, issue, &metadata, &context)
                 .replace("{{comments}}", tracker::format_comments(&fresh).trim());
             match self
-                .launch_workspace(client, settings, issue, &prompt, true)
+                .launch_workspace(client, settings, issue, &prompt, AgentStage::CommentReply)
                 .await
             {
                 Ok(_) => {
@@ -11485,19 +11526,22 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         Ok(())
     }
 
+    /// Same internal path as the `create_and_start_workspace` route:
+    /// workspace record, repo worktrees, container start, remote issue link.
+    /// The session runs `stage`'s profile.
     async fn launch_workspace(
         &self,
         client: &RemoteClient,
         settings: &EffectiveProjectSettings,
         issue: &Issue,
         prompt: &str,
-        economy: bool,
+        stage: AgentStage,
     ) -> Result<Workspace, StageOrchestratorError> {
         let workspace = self.create_launch_workspace(settings, issue).await?;
         self.container
             .start_workspace(
                 &workspace,
-                launch_executor_config(settings, economy),
+                stage_executor_config(settings, stage),
                 prompt.to_string(),
             )
             .await?;
@@ -11663,7 +11707,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         let (workspace, start, prompt) = match reused {
             Some(workspace) => (
                 workspace,
-                PendingStart::NewPhase(settings.executor_profile.clone()),
+                PendingStart::NewPhase(settings.agents.executing.clone()),
                 format!("{}{prompt}", executing_handoff(issue, metadata)),
             ),
             None => {
@@ -11679,9 +11723,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     })?;
                 (
                     workspace,
-                    PendingStart::NewWorkspace(launch_executor_config(
+                    PendingStart::NewWorkspace(stage_executor_config(
                         settings,
-                        stage == Stage::Executing,
+                        launch_agent_stage(stage, metadata),
                     )),
                     prompt,
                 )
@@ -11755,7 +11799,6 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 self.start_turn(
                     workspace.clone(),
                     prompt,
-                    true,
                     TurnStart::NewPhase(profile.clone()),
                 )
                 .await?;
@@ -12393,7 +12436,7 @@ impl<C: ContainerService + Send + Sync + 'static> DecisionHost for StageOrchestr
             Ok(workspace) if !workspace.archived => workspace,
             _ => return Ok(false),
         };
-        self.start_follow_up(workspace, prompt, false)
+        self.start_follow_up(workspace, prompt, None)
             .await
             .map(|_| true)
             .map_err(|e| {
@@ -14163,6 +14206,77 @@ mod tests {
             launch_plan(Stage::Planning, &metadata, &playbooks),
             LaunchPlan::Launch(playbooks.get(PATTERN_PLAYBOOK_KEY).cloned())
         );
+        assert_eq!(
+            launch_agent_stage(Stage::Planning, &metadata),
+            AgentStage::Pattern
+        );
+    }
+
+    #[test]
+    fn each_column_launches_its_own_stage_agent() {
+        let plain = IssueExtMetadata::default();
+        assert_eq!(
+            launch_agent_stage(Stage::Planning, &plain),
+            AgentStage::Planning
+        );
+        assert_eq!(
+            launch_agent_stage(Stage::Executing, &plain),
+            AgentStage::Executing
+        );
+        assert_eq!(
+            launch_agent_stage(Stage::Reviewing, &plain),
+            AgentStage::Reviewing
+        );
+        // A pattern card that reaches Executing is executing work.
+        let pattern = IssueExtMetadata {
+            pattern_node: Some("retry storms".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            launch_agent_stage(Stage::Executing, &pattern),
+            AgentStage::Executing
+        );
+
+        let mut config = Config::default();
+        config.agents.stages.reviewing = Some(ExecutorProfileId::new(
+            executors::executors::BaseCodingAgent::Codex,
+        ));
+        let settings = config.project_settings(Uuid::new_v4());
+        assert_eq!(
+            stage_executor_config(&settings, AgentStage::Reviewing).executor,
+            executors::executors::BaseCodingAgent::Codex
+        );
+        // Every stage but planning takes the cheaper variant on a fresh
+        // config.
+        for stage in [
+            AgentStage::Executing,
+            AgentStage::CommentReply,
+            AgentStage::Pattern,
+        ] {
+            assert_eq!(
+                stage_executor_config(&settings, stage).variant.as_deref(),
+                Some("SONNET"),
+                "{stage:?}"
+            );
+        }
+        assert_eq!(
+            stage_executor_config(&settings, AgentStage::Planning).variant,
+            None
+        );
+    }
+
+    #[test]
+    fn a_resumed_turn_changes_variant_but_never_agent() {
+        use executors::executors::BaseCodingAgent;
+        let session = ExecutorProfileId::new(BaseCodingAgent::ClaudeCode);
+        let sonnet =
+            ExecutorProfileId::with_variant(BaseCodingAgent::ClaudeCode, "SONNET".to_string());
+        assert_eq!(resumed_profile(session.clone(), Some(&sonnet)), sonnet);
+        assert_eq!(resumed_profile(session.clone(), None), session);
+        // The session's conversation belongs to Claude Code; Codex cannot
+        // continue it, so the stage's agent waits for the next new session.
+        let codex = ExecutorProfileId::new(BaseCodingAgent::Codex);
+        assert_eq!(resumed_profile(session.clone(), Some(&codex)), session);
     }
 
     #[test]

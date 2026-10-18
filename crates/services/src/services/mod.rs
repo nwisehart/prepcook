@@ -1,4 +1,5 @@
 pub mod agent_mcp;
+pub mod agents;
 pub mod analytics;
 pub mod approvals;
 pub mod board_secret;

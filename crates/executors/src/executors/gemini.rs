@@ -44,9 +44,25 @@ pub struct Gemini {
     pub approvals: Option<Arc<dyn ExecutorApprovalService>>,
 }
 
+/// The command line a session starts from, before its own arguments.
+const BASE_COMMAND: &str = "npx -y @google/gemini-cli@0.29.3";
+
 impl Gemini {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::Gemini,
+            "Gemini CLI",
+            "Google's coding agent, run through npx.",
+            BASE_COMMAND,
+            "Run `gemini` once and sign in with Google, or set `GEMINI_API_KEY`.",
+            crate::descriptor::McpWiring::AgentConfig,
+            "https://github.com/google-gemini/gemini-cli",
+        )
+    }
+
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let mut builder = CommandBuilder::new("npx -y @google/gemini-cli@0.29.3");
+        let mut builder = CommandBuilder::new(BASE_COMMAND);
 
         if let Some(model) = &self.model {
             builder = builder.extend_params(["--model", model.as_str()]);

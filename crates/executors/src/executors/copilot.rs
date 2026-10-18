@@ -47,9 +47,25 @@ pub struct Copilot {
     pub approvals: Option<Arc<dyn ExecutorApprovalService>>,
 }
 
+/// The command line a session starts from, before its own arguments.
+const BASE_COMMAND: &str = "npx -y @github/copilot@0.0.403";
+
 impl Copilot {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::Copilot,
+            "GitHub Copilot CLI",
+            "GitHub's coding agent, run through npx.",
+            BASE_COMMAND,
+            "Run `copilot` once and use `/login`, or set `GH_TOKEN` to a token with Copilot access.",
+            crate::descriptor::McpWiring::AgentConfig,
+            "https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli",
+        )
+    }
+
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let mut builder = CommandBuilder::new("npx -y @github/copilot@0.0.403");
+        let mut builder = CommandBuilder::new(BASE_COMMAND);
 
         if self.allow_all_tools.unwrap_or(false) {
             builder = builder.extend_params(["--allow-all-tools"]);

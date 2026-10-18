@@ -28,6 +28,28 @@ request, so keep changes focused and say what they are for.
    came from.
 6. Describe in the pull request what changed, why, and how you verified it.
 
+## Adding a coding agent
+
+An agent is an executor, and adding one is an enum edit in three places:
+
+1. **The executor module**, `crates/executors/src/executors/<agent>.rs`: a
+   struct implementing `StandardCodingAgentExecutor` (spawn, follow-up, log
+   normalisation, `default_mcp_config_path`, availability) and its
+   `descriptor()` — display name, summary, the command a session starts
+   from, how it signs in, how its sessions get MCP servers, and its economy
+   variant if it has a cheaper model.
+2. **The `CodingAgent` enum**, `crates/executors/src/executors/mod.rs`: a
+   variant for it. The compiler then points at the matches that must name it
+   (`capabilities`, and `BaseCodingAgent::descriptor` in
+   `crates/executors/src/descriptor.rs`); `get_mcp_config` needs an arm only
+   when its MCP servers live under a key other than `mcpServers`.
+3. **`crates/executors/default_profiles.json`**: its `DEFAULT` variant, plus
+   any variant the descriptor names as its economy variant.
+
+Then run `pnpm run generate-types` and `scripts/gen-config-docs.py`: Settings →
+Agents and the coding-agents table in `docs/configuration.md` come from the
+descriptor, so nothing else needs editing.
+
 ## Playbooks and skills
 
 The stage playbooks (`crates/services/src/services/config/versions/`) and the

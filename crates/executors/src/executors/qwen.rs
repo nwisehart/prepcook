@@ -40,9 +40,25 @@ pub struct QwenCode {
     pub approvals: Option<Arc<dyn ExecutorApprovalService>>,
 }
 
+/// The command line a session starts from, before its own arguments.
+const BASE_COMMAND: &str = "npx -y @qwen-code/qwen-code@0.9.1";
+
 impl QwenCode {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::QwenCode,
+            "Qwen Code",
+            "Alibaba's coding agent, run through npx.",
+            BASE_COMMAND,
+            "Run `qwen` once and sign in, or set `OPENAI_API_KEY` for an OpenAI-compatible endpoint.",
+            crate::descriptor::McpWiring::AgentConfig,
+            "https://github.com/QwenLM/qwen-code",
+        )
+    }
+
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let mut builder = CommandBuilder::new("npx -y @qwen-code/qwen-code@0.9.1");
+        let mut builder = CommandBuilder::new(BASE_COMMAND);
 
         if let Some(model) = &self.model {
             builder = builder.extend_params(["--model", model.as_str()]);

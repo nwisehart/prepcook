@@ -46,6 +46,20 @@ Plan comes first because a fix without a reproduction is a guess
 the knowledge store and linked into the root-cause graph
 ([rca-graph.md](rca-graph.md)).
 
+### Which agent runs which stage
+
+**Settings → Agents** names the profile each stage runs, globally or per board
+([configuration.md](configuration.md#agents)). Left unset, Plan runs the
+default coding agent profile and every other stage runs that agent's cheaper
+variant (Claude Code's Sonnet) when the default profile names no variant. Plan
+is where the design judgment is, so it gets the full model. The rest is where
+the sessions pile up: Execute carries out a plan a person already approved, in
+the change and then every fix round, CI fix, rebase and merge-request
+description; Review is a fresh full-diff session every round; comment replies
+and the RCA graph's analysis run often and only read. Together they spend most
+of a subscription seat's session budget. A follow-up continues its own
+session, so it can change variant but never agent.
+
 ## Investigations
 
 An investigation is a reported problem Prep Cook reproduces and explains but

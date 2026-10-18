@@ -1,19 +1,22 @@
 //! What every integration area shares: the descriptor a provider publishes
 //! about itself, and how its secret-shaped fields are resolved.
 //!
-//! An area (notifications, ticketing, reproduction, evidence) is a module under `services/<area>/`
-//! with one file per provider. Each provider describes itself with a [`Descriptor`];
-//! Settings renders one generic section per area from those descriptors, and
-//! `docs/configuration.md` carries a table generated from the same data, so a
-//! new provider shows up in both without touching either.
+//! An area (notifications, ticketing, reproduction, evidence) is a module
+//! under `services/<area>/` with one file per provider. Each provider describes
+//! itself with a [`Descriptor`]; Settings renders one generic section per area
+//! from those descriptors, and `docs/configuration.md` carries a table
+//! generated from the same data, so a new provider shows up in both without
+//! touching either. The coding agents are listed alongside them as the
+//! `agents` area, described by the executors themselves.
 
 use std::collections::BTreeMap;
 
+use executors::descriptor::AgentDescriptor;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::services::{
-    config::Config, evidence, notifications, reproduction, secrets::Secrets, tracker,
+    agents, config::Config, evidence, notifications, reproduction, secrets::Secrets, tracker,
 };
 
 /// How Settings renders one field and what the config holds for it.
@@ -71,6 +74,12 @@ pub struct Descriptor {
     /// False for a provider that is named but not implemented: Settings shows
     /// it and does not let it be chosen.
     pub available: bool,
+    /// Set for a coding agent (the `agents` area), which is not configured
+    /// through fields: what it needs installed, how it signs in and how its
+    /// sessions get MCP servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub agent: Option<AgentDescriptor>,
 }
 
 impl Descriptor {
@@ -95,6 +104,7 @@ impl Descriptor {
             secrets,
             docs_url: docs_url.to_string(),
             available: true,
+            agent: None,
         }
     }
 
@@ -122,6 +132,7 @@ pub fn descriptors() -> BTreeMap<String, Vec<Descriptor>> {
         (tracker::AREA.to_string(), tracker::descriptors()),
         (reproduction::AREA.to_string(), reproduction::descriptors()),
         (evidence::AREA.to_string(), evidence::descriptors()),
+        (agents::AREA.to_string(), agents::descriptors()),
     ])
 }
 
@@ -139,6 +150,7 @@ pub async fn test(
         tracker::AREA => tracker::test_provider(config, kind, fields).await,
         reproduction::AREA => reproduction::test_target(config, kind, fields).await,
         evidence::AREA => evidence::test_source(config, kind, fields).await,
+        agents::AREA => agents::test_agent(kind).await,
         other => Err(format!("unknown integration area: {other}")),
     };
     match result {
@@ -300,5 +312,10 @@ mod tests {
             evidence,
             ["sentry", "dataset", "datadog", "cloudwatch", "log_files"]
         );
+        for descriptor in &all["agents"] {
+            let agent = descriptor.agent.as_ref().expect("agent details");
+            assert_eq!(descriptor.kind, agent.executor.to_string());
+            assert!(descriptor.fields.is_empty());
+        }
     }
 }

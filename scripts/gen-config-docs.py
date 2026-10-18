@@ -26,6 +26,7 @@ END = "<!-- END GENERATED: integrations -->"
 
 # Section titles for areas whose name does not read well capitalised.
 AREA_TITLES = {
+    "agents": "Coding agents",
     "evidence": "Evidence sources",
     "notifications": "Notification providers",
     "reproduction": "Reproduction targets",
@@ -86,9 +87,50 @@ def cell(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
+# How each agent's sessions get MCP servers, by the descriptor's `mcp`.
+MCP_WIRING = {
+    "per_session": "Per session, on its command line, on top of its own",
+    "agent_config": "Only from its own config (**Settings → MCP Servers**)",
+    "unsupported": "None",
+}
+
+
+def render_agents(agents: list) -> list:
+    """The coding agents: what each needs and how it signs in, not fields."""
+    lines = [
+        "",
+        f"### {AREA_TITLES['agents']}",
+        "",
+        "Generated from the agents' descriptors. `executor_profile` and every "
+        "`agents.stages` entry name one of these as `executor`, with an optional "
+        "`variant`; **Settings → Agents** probes each with its command and "
+        "`--version`.",
+        "",
+        "| `executor` | Command | Signs in | MCP servers | Variants |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for descriptor in agents:
+        agent = descriptor["agent"]
+        name = f"`{descriptor['kind']}` ({cell(descriptor['display_name'])})"
+        command = f"`{agent['command']}`" if agent["command"] else "built in"
+        economy = agent.get("economy_variant")
+        variants = ", ".join(
+            f"`{variant}`" + (" (economy)" if variant == economy else "")
+            for variant in agent["variants"]
+        )
+        lines.append(
+            f"| {name} | {command} | {cell(agent['sign_in'])} | "
+            f"{MCP_WIRING[agent['mcp']]} | {variants} |"
+        )
+    return lines
+
+
 def render(descriptors: dict) -> str:
     lines = [BEGIN]
     for area in sorted(descriptors):
+        if area == "agents":
+            lines += render_agents(descriptors[area])
+            continue
         title = AREA_TITLES.get(area, area.replace("_", " ").capitalize())
         lines += [
             "",

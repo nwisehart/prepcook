@@ -33,7 +33,33 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.daily_timezone` | unset (`America/Los_Angeles`) | *File only.* IANA zone the two times above are read in. |
 | `orchestrator.project_defaults` | empty | **Automated projects**: the boards the orchestrator scans, keyed by board id, each with its repositories and overrides. A board needs at least one repository. |
 | `orchestrator.seat_monitor` | `false` | *File only.* Probe the Claude subscription seat with a headless `claude -p` every six hours and notify the global [notification targets](#notifications) when its login has expired, for a shared runner. Off, Prep Cook never runs `claude` on its own; **Settings → Claude → Re-check now** still probes on demand. |
-| `executor_profile` | Claude Code, default variant | **Settings → General → Default Coding Agent**: the agent every stage runs. |
+| `executor_profile` | Claude Code, default variant | **Settings → Agents → Default profile** (also **Settings → General → Default Coding Agent**): the profile every stage starts from ([Agents](#agents)). |
+
+## Agents
+
+**Settings → Agents.** Which coding agent profile runs each orchestrator stage.
+A profile is an agent and an optional variant, written
+`{ "executor": "CLAUDE_CODE", "variant": "SONNET" }`; the agents and their
+shipped variants are listed under [Coding agents](#coding-agents), and
+**Settings → Agent profiles** adds variants of your own.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `agents.stages.planning` | unset (`executor_profile`) | **Planning**: specs, RCAs and investigations, and the follow-ups that revise them. |
+| `agents.stages.executing` | unset (`executor_profile` with the agent's economy variant: Claude Code `SONNET`) | **Executing**: the change, and every fix round, CI fix, rebase and merge-request description in its worktree. The economy variant applies, here and below, only when `executor_profile` names no variant ([method.md](method.md#which-agent-runs-which-stage)). |
+| `agents.stages.reviewing` | unset (`executor_profile` with the economy variant) | **Reviewing**: the independent review session. A fresh review started from a workspace defaults to it when it is set. |
+| `agents.stages.comment_reply` | unset (`executor_profile` with the economy variant) | **Comment replies**: answers to comments on shipped tickets (the `comment_reply` playbook). |
+| `agents.stages.pattern` | unset (`executor_profile` with the economy variant) | **Pattern reviews**: the `pattern:planning` session and the `rca_analysis` runs that link RCAs into the graph. |
+
+A stage resolves, most specific first: the board's `agents.stages.<stage>`, the
+global `agents.stages.<stage>`, then the stage's default built from the
+board's `executor_profile`, else the global one. A follow-up continues its
+session's conversation, so it can change variant but not agent: a stage moved
+to another agent takes effect from that stage's next new session.
+
+Each agent's card shows whether a sign-in was found, read from the agent's own
+files when the page opens (nothing is probed at startup), and **Test** runs
+its command with `--version` for at most 10 seconds.
 
 ## Ticketing
 
@@ -127,6 +153,22 @@ A repository adds its own log files under `[[profile.evidence]]` in its
 into a Sentry source the first time it is read.
 
 <!-- BEGIN GENERATED: integrations (scripts/gen-config-docs.py) -->
+
+### Coding agents
+
+Generated from the agents' descriptors. `executor_profile` and every `agents.stages` entry name one of these as `executor`, with an optional `variant`; **Settings → Agents** probes each with its command and `--version`.
+
+| `executor` | Command | Signs in | MCP servers | Variants |
+| --- | --- | --- | --- | --- |
+| `CLAUDE_CODE` (Claude Code) | `claude` | Run `claude` once and sign in, or set `ANTHROPIC_API_KEY` (billed per token instead of the subscription). | Per session, on its command line, on top of its own | `DEFAULT`, `SONNET` (economy) |
+| `AMP` (Amp) | `npx -y @sourcegraph/amp@latest` | Run `amp login` once, or set `AMP_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+| `GEMINI` (Gemini CLI) | `npx -y @google/gemini-cli@0.29.3` | Run `gemini` once and sign in with Google, or set `GEMINI_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+| `CODEX` (Codex) | `npx -y @openai/codex@0.124.0` | Run `codex login` once, or set `CODEX_API_KEY`. | Per session, on its command line, on top of its own | `DEFAULT` |
+| `OPENCODE` (OpenCode) | `npx -y opencode-ai@1.4.7` | Run `opencode auth login` once for each model provider it should use. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+| `CURSOR_AGENT` (Cursor Agent) | `cursor-agent` | Run `cursor-agent login` once, or set `CURSOR_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+| `QWEN_CODE` (Qwen Code) | `npx -y @qwen-code/qwen-code@0.9.1` | Run `qwen` once and sign in, or set `OPENAI_API_KEY` for an OpenAI-compatible endpoint. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+| `COPILOT` (GitHub Copilot CLI) | `npx -y @github/copilot@0.0.403` | Run `copilot` once and use `/login`, or set `GH_TOKEN` to a token with Copilot access. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+| `DROID` (Droid) | `droid` | Run `droid` once and sign in, or set `FACTORY_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 
 ### Evidence sources
 
@@ -309,7 +351,8 @@ empty inherits the global value.
 | --- | --- | --- |
 | `repo_ids` | empty | **Repositories** checked out for this board's workspaces. Required. |
 | `label` | unset | **Board label**: tagged on its RCAs as `board:<label>`. |
-| `executor_profile` | unset (inherit) | *File only.* The coding agent for this board. |
+| `executor_profile` | unset (inherit) | **Default agent**: the profile this board's stages start from. |
+| `agents.stages.<stage>` | unset (inherit) | **Planning**, **Executing**, **Reviewing**, **Comment replies**, **Pattern reviews**: this board's profile for that stage, over the global one ([Agents](#agents)). |
 | `autonomy` | unset (inherit) | Autonomy for this board. |
 | `autonomy_review_iterations` | unset (inherit) | Review-fix rounds for this board. |
 | `pattern_threshold` | unset (inherit) | Pattern-review threshold for this board (`investigation_threshold` in older configs). |

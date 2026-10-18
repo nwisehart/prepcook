@@ -52,8 +52,17 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
     }, [sessions, resolvedSessionId, selectedSession]);
     const sessionExecutor = resolvedSession?.executor as BaseCodingAgent | null;
 
+    // The reviewing stage's profile, when one is set, is the reviewer a fresh
+    // session gets; continuing a session keeps that session's agent.
+    const reviewingProfile = config?.agents?.stages?.reviewing ?? null;
     const resolvedDefaultProfile = useMemo(() => {
       if (defaultProfile) return defaultProfile;
+      if (
+        reviewingProfile &&
+        (!sessionExecutor || reviewingProfile.executor === sessionExecutor)
+      ) {
+        return reviewingProfile;
+      }
       if (sessionExecutor) {
         const variant =
           config?.executor_profile?.executor === sessionExecutor
@@ -62,7 +71,12 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
         return { executor: sessionExecutor, variant };
       }
       return config?.executor_profile ?? null;
-    }, [defaultProfile, sessionExecutor, config?.executor_profile]);
+    }, [
+      defaultProfile,
+      reviewingProfile,
+      sessionExecutor,
+      config?.executor_profile,
+    ]);
 
     const [userSelectedProfile, setUserSelectedProfile] =
       useState<ExecutorProfileId | null>(null);

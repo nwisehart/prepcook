@@ -87,9 +87,25 @@ impl Drop for OpencodeServer {
 
 type ServerPassword = String;
 
+/// The command line a session starts from, before its own arguments.
+const BASE_COMMAND: &str = "npx -y opencode-ai@1.4.7";
+
 impl Opencode {
+    /// What Settings and the configuration reference show for this agent.
+    pub fn descriptor() -> crate::descriptor::AgentDescriptor {
+        crate::descriptor::AgentDescriptor::new(
+            crate::executors::BaseCodingAgent::Opencode,
+            "OpenCode",
+            "The open-source coding agent from SST, run through npx as a local server.",
+            BASE_COMMAND,
+            "Run `opencode auth login` once for each model provider it should use.",
+            crate::descriptor::McpWiring::AgentConfig,
+            "https://opencode.ai/docs",
+        )
+    }
+
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let builder = CommandBuilder::new("npx -y opencode-ai@1.4.7")
+        let builder = CommandBuilder::new(BASE_COMMAND)
             // Pass hostname/port as separate args so OpenCode treats them as explicitly set
             // (it checks `process.argv.includes(\"--port\")` / `\"--hostname\"`).
             .extend_params(["serve", "--hostname", "127.0.0.1", "--port", "0"]);
