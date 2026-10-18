@@ -392,15 +392,6 @@ fn watcher_idle_reason(
     }
 }
 
-fn work_class_label(work_class: WorkClass) -> &'static str {
-    match work_class {
-        WorkClass::Bug => "bug",
-        WorkClass::Story => "story",
-        WorkClass::Epic => "epic",
-        WorkClass::Subtask => "subtask",
-    }
-}
-
 /// Jira keys already recorded in `extension_metadata` across the project's
 /// issues (same dedup the importer route uses). `None` when the search
 /// failed part-way: a partial answer here is what turns one hiccup into a
@@ -823,7 +814,7 @@ impl JiraWatcherService {
         }
 
         // Best-effort work-class tag, find-or-skip like the importer.
-        let tag_name = work_class_label(work_class);
+        let tag_name = work_class.as_str();
         if let Some(tag) = project_tags
             .iter()
             .find(|tag| tag.name.eq_ignore_ascii_case(tag_name))

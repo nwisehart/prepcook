@@ -18,8 +18,8 @@ use v9::{
 };
 
 pub use crate::services::config::playbooks::{
-    INVESTIGATION_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY,
-    TRIAGE_PLAYBOOK_KEY, default_playbooks,
+    COMMENT_REPLY_PLAYBOOK_KEY, INVESTIGATION_PLAYBOOK_KEY, PATTERN_PLAYBOOK_KEY,
+    RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY, default_playbooks,
 };
 use crate::services::{
     config::versions::{superseded_playbooks, v9},
@@ -35,7 +35,32 @@ use crate::services::{
 pub(super) const SUPERSEDED_PLAYBOOKS: &[(&str, &str)] = &[
     ("bug:planning", superseded_playbooks::BUG_PLANNING_1),
     ("epic:executing", superseded_playbooks::EPIC_EXECUTING_1),
+    ("pattern:planning", superseded_playbooks::PATTERN_PLANNING_1),
+    ("rca_analysis", superseded_playbooks::RCA_ANALYSIS_1),
 ];
+
+/// The playbook key names a config was saved with, in `playbook_keys`. A
+/// config without the field predates the renames below.
+pub const CURRENT_PLAYBOOK_KEYS: u32 = 1;
+
+/// `(old key, new key)`, applied once to a config saved before
+/// [`CURRENT_PLAYBOOK_KEYS`]. `investigation:planning` used to be the pattern
+/// review's text; the key now belongs to investigation cards, so a saved one is
+/// moved rather than reinterpreted. `triage` was the comment-reply agent.
+const RENAMED_PLAYBOOK_KEYS: &[(&str, &str)] = &[
+    ("investigation:planning", PATTERN_PLAYBOOK_KEY),
+    ("triage", COMMENT_REPLY_PLAYBOOK_KEY),
+];
+
+/// Renames the playbook keys of one map. A map that already holds the new key
+/// keeps it and drops the old one.
+fn rename_playbook_keys(playbooks: &mut BTreeMap<String, String>) {
+    for (old, new) in RENAMED_PLAYBOOK_KEYS {
+        if let Some(text) = playbooks.remove(*old) {
+            playbooks.entry((*new).to_string()).or_insert(text);
+        }
+    }
+}
 
 /// Replaces playbook values that exactly match a superseded shipped default
 /// with the current default, and fills in any missing keys. Runs on every
@@ -251,6 +276,9 @@ pub struct StatusMapping {
     pub reviewing: Option<String>,
     #[serde(default)]
     pub pushed_mr: Option<String>,
+    /// Where an investigation's ticket goes when its card reaches Triaged.
+    #[serde(default)]
+    pub triaged: Option<String>,
     /// Where the ticket goes when the card reaches Clean-up.
     #[serde(default)]
     pub done: Option<String>,
@@ -278,6 +306,7 @@ impl Default for StatusMapping {
             executing: None,
             reviewing: None,
             pushed_mr: None,
+            triaged: None,
             done: None,
             shipped: default_shipped_statuses(),
         }
@@ -649,10 +678,11 @@ pub struct ProjectAutomationDefaults {
     /// `orchestrator.cleanup_retention_days`).
     #[serde(default)]
     pub cleanup_retention: RetentionOverride,
-    /// RCA-graph investigation threshold for this board; smaller boards need
-    /// a lower bar than the global default to ever fire one.
-    #[serde(default)]
-    pub investigation_threshold: Option<u32>,
+    /// RCA-graph pattern-review threshold for this board; smaller boards need
+    /// a lower bar than the global default to ever fire one. Also read from
+    /// `investigation_threshold`, the name older configs saved it under.
+    #[serde(default, alias = "investigation_threshold")]
+    pub pattern_threshold: Option<u32>,
     /// The staging-deploy watch: records when each merged change reaches the
     /// environment this job deploys. `None` turns the watch off.
     #[serde(default)]
@@ -674,7 +704,7 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
             autonomy_review_iterations: old.autonomy_review_iterations,
             deployed_retention: old.deployed_retention,
             cleanup_retention: old.cleanup_retention,
-            investigation_threshold: old.investigation_threshold,
+            pattern_threshold: old.investigation_threshold,
             deploy_watch: None,
         }
     }
@@ -699,12 +729,20 @@ pub struct OrchestratorConfig {
     /// ever. Uses `updated_at` as the clock, like the Deployed sweep.
     #[serde(default)]
     pub cleanup_retention_days: Option<u32>,
-    /// RCA-graph investigation threshold: a node with this many linked RCA
-    /// documents (and no investigation story yet) fires a P2
-    /// `[Investigation]` Jira story imported into To Do. Re-arms after this
-    /// many NEW edges accumulate past the fire point.
-    #[serde(default = "default_investigation_threshold")]
-    pub investigation_threshold: u32,
+    /// RCA-graph pattern-review threshold: a node with this many linked RCA
+    /// documents (and no pattern review filed yet) files a P2 `[Pattern]`
+    /// story, imported into To Do. Re-arms after this many NEW edges
+    /// accumulate past the fire point. Also read from
+    /// `investigation_threshold`, the name older configs saved it under.
+    #[serde(
+        default = "default_investigation_threshold",
+        alias = "investigation_threshold"
+    )]
+    pub pattern_threshold: u32,
+    /// The board `POST /api/cards` files into when the request names none.
+    /// Unset: the first board under `project_defaults`.
+    #[serde(default)]
+    pub default_board: Option<Uuid>,
     /// Delete workspace records whose worktree is already gone and which have
     /// been idle this many days. Nothing else prunes them: cleanup removes the
     /// worktree and marks the row, but the row (with its sessions, execution
@@ -760,7 +798,8 @@ impl Default for OrchestratorConfig {
             poll_interval_secs: default_poll_interval_secs(),
             deployed_retention_days: None,
             cleanup_retention_days: None,
-            investigation_threshold: default_investigation_threshold(),
+            pattern_threshold: default_investigation_threshold(),
+            default_board: None,
             max_launches_per_tick: default_max_launches_per_tick(),
             workspace_retention_days: default_workspace_retention_days(),
             autonomy: AutonomyMode::Off,
@@ -781,7 +820,8 @@ impl From<v9::OrchestratorConfig> for OrchestratorConfig {
             poll_interval_secs: old.poll_interval_secs,
             deployed_retention_days: old.deployed_retention_days,
             cleanup_retention_days: old.cleanup_retention_days,
-            investigation_threshold: old.investigation_threshold,
+            pattern_threshold: old.investigation_threshold,
+            default_board: None,
             workspace_retention_days: old.workspace_retention_days,
             max_launches_per_tick: old.max_launches_per_tick,
             autonomy: old.autonomy,
@@ -821,7 +861,7 @@ pub struct EffectiveProjectSettings {
     pub autonomy_review_iterations: u32,
     pub deployed_retention_days: Option<u32>,
     pub cleanup_retention_days: Option<u32>,
-    pub investigation_threshold: u32,
+    pub pattern_threshold: u32,
     pub merge_requests: EffectiveMrSettings,
     /// The staging-deploy watch, with a blank job name or ref read as off.
     pub deploy_watch: Option<DeployWatch>,
@@ -877,6 +917,11 @@ pub struct Config {
     /// Stage playbooks keyed by "{work_class}:{stage}"; see default_playbooks.
     #[serde(default = "default_playbooks")]
     pub playbooks: BTreeMap<String, String>,
+    /// Which playbook key names `playbooks` (and every board's overrides) are
+    /// in; see [`CURRENT_PLAYBOOK_KEYS`]. Absent in configs saved before the
+    /// keys were renamed, which is how those are recognised.
+    #[serde(default)]
+    pub playbook_keys: u32,
     #[serde(default)]
     pub worktree_pool: WorktreePoolConfig,
     #[serde(default)]
@@ -897,7 +942,12 @@ impl Config {
         // A v9 config holds whatever playbooks it saved, and nothing for a
         // stage it never had; every missing key takes the current default.
         let mut playbooks = old_config.playbooks;
+        rename_playbook_keys(&mut playbooks);
         upgrade_stale_playbooks(&mut playbooks);
+        let mut orchestrator: OrchestratorConfig = old_config.orchestrator.into();
+        for board in orchestrator.project_defaults.values_mut() {
+            rename_playbook_keys(&mut board.playbooks);
+        }
         Self {
             config_version: "v10".to_string(),
             theme: old_config.theme,
@@ -928,8 +978,9 @@ impl Config {
             slack_bot_token: old_config.slack_bot_token,
             slack_channel: old_config.slack_channel,
             playbooks,
+            playbook_keys: CURRENT_PLAYBOOK_KEYS,
             worktree_pool: old_config.worktree_pool,
-            orchestrator: old_config.orchestrator.into(),
+            orchestrator,
             integrations: old_config.integrations.into(),
             app_runs: AppRunsConfig::default(),
             approvals: ApprovalsConfig::default(),
@@ -947,6 +998,7 @@ impl From<String> for Config {
         if let Ok(mut config) = serde_json::from_str::<Config>(&raw_config)
             && config.config_version == "v10"
         {
+            config.migrate_playbook_keys();
             upgrade_stale_playbooks(&mut config.playbooks);
             adopt_legacy_tracker_fields(&mut config, &raw_config);
             config.adopt_legacy_slack();
@@ -1021,6 +1073,7 @@ impl Default for Config {
             slack_bot_token: None,
             slack_channel: None,
             playbooks: default_playbooks(),
+            playbook_keys: CURRENT_PLAYBOOK_KEYS,
             worktree_pool: WorktreePoolConfig::default(),
             orchestrator: OrchestratorConfig::default(),
             integrations: IntegrationsConfig::default(),
@@ -1031,6 +1084,31 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Renames the playbook keys of a config saved before
+    /// [`CURRENT_PLAYBOOK_KEYS`], in the global map and every board's
+    /// overrides, once.
+    pub fn migrate_playbook_keys(&mut self) {
+        if self.playbook_keys >= CURRENT_PLAYBOOK_KEYS {
+            return;
+        }
+        rename_playbook_keys(&mut self.playbooks);
+        for board in self.orchestrator.project_defaults.values_mut() {
+            rename_playbook_keys(&mut board.playbooks);
+        }
+        self.playbook_keys = CURRENT_PLAYBOOK_KEYS;
+    }
+
+    /// The board `POST /api/cards` files into when the request names none:
+    /// `orchestrator.default_board`, else the first configured board.
+    pub fn default_board(&self) -> Option<Uuid> {
+        self.orchestrator.default_board.or_else(|| {
+            self.orchestrator
+                .project_defaults
+                .keys()
+                .find_map(|key| Uuid::parse_str(key).ok())
+        })
+    }
+
     /// Resolves one board's settings: board overrides win, anything unset
     /// falls back to the global value. Unknown project ids resolve to the
     /// pure globals, so callers never need to special-case them.
@@ -1122,9 +1200,9 @@ impl Config {
                 RetentionOverride::Off => None,
                 RetentionOverride::Days(days) => Some(days),
             },
-            investigation_threshold: board
-                .investigation_threshold
-                .unwrap_or(self.orchestrator.investigation_threshold),
+            pattern_threshold: board
+                .pattern_threshold
+                .unwrap_or(self.orchestrator.pattern_threshold),
             merge_requests: EffectiveMrSettings {
                 reviewer_map,
                 reviewer_exclude_emails,
@@ -1341,7 +1419,7 @@ mod project_settings_tests {
             .push(slack(&[("webhook_url", "https://hooks.slack/global")]));
         config.orchestrator.autonomy = AutonomyMode::Full;
         config.orchestrator.deployed_retention_days = Some(7);
-        config.orchestrator.investigation_threshold = 5;
+        config.orchestrator.pattern_threshold = 5;
         config
             .integrations
             .reviewer_map
@@ -1375,6 +1453,103 @@ mod project_settings_tests {
         }
     }
 
+    /// A v10 config saved before the renames carries `investigation:planning`
+    /// (the pattern review's text) and `triage`, globally and on a board. On
+    /// load both move to their new keys; the old shipped pattern text upgrades,
+    /// a board's customised one survives, and investigation cards get the new
+    /// default under the key the pattern review left.
+    #[test]
+    fn saved_playbook_keys_are_renamed_once_on_load() {
+        let board_id = Uuid::new_v4();
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        let map = raw.as_object_mut().unwrap();
+        map.remove("playbook_keys");
+        map.insert(
+            "playbooks".to_string(),
+            serde_json::json!({
+                "investigation:planning": superseded_playbooks::PATTERN_PLANNING_1,
+                "triage": "our own comment replies",
+                "bug:planning": "our own RCA text",
+            }),
+        );
+        map["orchestrator"]["project_defaults"] = serde_json::json!({
+            board_id.to_string(): {
+                "repo_ids": [],
+                "investigation_threshold": 3,
+                "playbooks": {
+                    "investigation:planning": "board pattern text",
+                    "triage": "board replies",
+                }
+            }
+        });
+        let orchestrator = map["orchestrator"].as_object_mut().unwrap();
+        orchestrator.remove("pattern_threshold");
+        orchestrator.insert("investigation_threshold".to_string(), serde_json::json!(7));
+
+        let config = Config::from(raw.to_string());
+        let defaults = default_playbooks();
+        assert_eq!(config.playbook_keys, CURRENT_PLAYBOOK_KEYS);
+        assert_eq!(
+            config.playbooks[PATTERN_PLAYBOOK_KEY],
+            defaults[PATTERN_PLAYBOOK_KEY]
+        );
+        assert_eq!(
+            config.playbooks[INVESTIGATION_PLAYBOOK_KEY],
+            defaults[INVESTIGATION_PLAYBOOK_KEY]
+        );
+        assert_eq!(
+            config.playbooks[COMMENT_REPLY_PLAYBOOK_KEY],
+            "our own comment replies"
+        );
+        assert!(!config.playbooks.contains_key("triage"));
+        assert_eq!(config.playbooks["bug:planning"], "our own RCA text");
+
+        let board = &config.orchestrator.project_defaults[&board_id.to_string()];
+        assert_eq!(board.playbooks[PATTERN_PLAYBOOK_KEY], "board pattern text");
+        assert_eq!(board.playbooks[COMMENT_REPLY_PLAYBOOK_KEY], "board replies");
+        assert!(!board.playbooks.contains_key(INVESTIGATION_PLAYBOOK_KEY));
+        assert_eq!(board.pattern_threshold, Some(3));
+        assert_eq!(config.orchestrator.pattern_threshold, 7);
+
+        // Saved again, the config is in current keys: a board override of
+        // the investigation card's playbook is never mistaken for an old one.
+        let mut saved = config.clone();
+        saved
+            .orchestrator
+            .project_defaults
+            .get_mut(&board_id.to_string())
+            .unwrap()
+            .playbooks
+            .insert(
+                INVESTIGATION_PLAYBOOK_KEY.to_string(),
+                "board triage text".to_string(),
+            );
+        let reloaded = Config::from(serde_json::to_string(&saved).unwrap());
+        let board = &reloaded.orchestrator.project_defaults[&board_id.to_string()];
+        assert_eq!(
+            board.playbooks[INVESTIGATION_PLAYBOOK_KEY],
+            "board triage text"
+        );
+        assert_eq!(board.playbooks[PATTERN_PLAYBOOK_KEY], "board pattern text");
+    }
+
+    #[test]
+    fn the_default_board_is_configured_or_the_first_one() {
+        let first = Uuid::from_u128(1);
+        let second = Uuid::from_u128(2);
+        let mut config = Config::default();
+        assert_eq!(config.default_board(), None);
+        for id in [second, first] {
+            config
+                .orchestrator
+                .project_defaults
+                .insert(id.to_string(), ProjectAutomationDefaults::default());
+        }
+        assert_eq!(config.default_board(), Some(first));
+        config.orchestrator.default_board = Some(second);
+        assert_eq!(config.default_board(), Some(second));
+    }
+
     #[test]
     fn a_customized_playbook_is_left_alone() {
         let mut saved = BTreeMap::from([(
@@ -1404,7 +1579,7 @@ mod project_settings_tests {
         );
         assert_eq!(settings.autonomy, AutonomyMode::Full);
         assert_eq!(settings.deployed_retention_days, Some(7));
-        assert_eq!(settings.investigation_threshold, 5);
+        assert_eq!(settings.pattern_threshold, 5);
         assert_eq!(
             settings.merge_requests.reviewer_map.get("dev@example.com"),
             Some(&"dev".to_string())
@@ -1418,7 +1593,7 @@ mod project_settings_tests {
         let project_id = Uuid::new_v4();
         let mut board = ProjectAutomationDefaults {
             label: Some("extensions".to_string()),
-            investigation_threshold: Some(2),
+            pattern_threshold: Some(2),
             autonomy: Some(AutonomyMode::Off),
             deployed_retention: RetentionOverride::Off,
             ..Default::default()
@@ -1496,7 +1671,7 @@ mod project_settings_tests {
             config2.project_settings(project2).cleanup_retention_days,
             Some(14)
         );
-        assert_eq!(settings.investigation_threshold, 2);
+        assert_eq!(settings.pattern_threshold, 2);
         assert_eq!(settings.playbooks["bug:planning"], "extension-specific RCA");
         // Board reviewers add to the global map rather than replacing it.
         assert_eq!(settings.merge_requests.reviewer_map.len(), 2);

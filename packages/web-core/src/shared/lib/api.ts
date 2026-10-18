@@ -18,6 +18,7 @@ import {
   RepoWithTargetBranch,
   UpdateRepo,
   PlaybookContextResponse,
+  ConvertedCard,
   RepoScriptsResponse,
   RunScriptRequest,
   RunScriptResponse,
@@ -1597,6 +1598,24 @@ export const playbooksApi = {
       if (value !== undefined) context[name] = value;
     }
     return context;
+  },
+};
+
+// Cards made and changed from outside the board (docs/api.md)
+export const cardsApi = {
+  /** Converts an investigation card to a bug or a story. */
+  convert: async (
+    issueId: string,
+    workClass: 'bug' | 'story'
+  ): Promise<ConvertedCard> => {
+    const response = await makeRequest(
+      `/api/cards/${encodeURIComponent(issueId)}/convert`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ work_class: workClass }),
+      }
+    );
+    return handleApiResponse<ConvertedCard>(response);
   },
 };
 

@@ -44,7 +44,8 @@ const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
   poll_interval_secs: 15 as unknown as bigint,
   deployed_retention_days: null,
   cleanup_retention_days: null,
-  investigation_threshold: 5,
+  pattern_threshold: 5,
+  default_board: null,
   max_launches_per_tick: 3,
   workspace_retention_days: 30,
   autonomy: 'off',
@@ -82,7 +83,7 @@ const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   autonomy_review_iterations: null,
   deployed_retention: 'inherit',
   cleanup_retention: 'inherit',
-  investigation_threshold: null,
+  pattern_threshold: null,
   deploy_watch: null,
 };
 
@@ -166,7 +167,7 @@ const countOverrides = (defaults: ProjectAutomationDefaults): number => {
     board.autonomy_review_iterations != null,
     board.deployed_retention !== 'inherit',
     board.cleanup_retention !== 'inherit',
-    board.investigation_threshold != null,
+    board.pattern_threshold != null,
     board.deploy_watch != null,
   ].filter(Boolean).length;
 };
@@ -521,21 +522,21 @@ export function OrchestratorSettingsSection() {
         )}
 
         <SettingsField
-          label={t('settings.orchestrator.investigationThreshold.label')}
-          description={t('settings.orchestrator.investigationThreshold.helper')}
+          label={t('settings.orchestrator.patternThreshold.label')}
+          description={t('settings.orchestrator.patternThreshold.helper')}
         >
           <SettingsInput
-            value={String(draft.investigation_threshold)}
+            value={String(draft.pattern_threshold)}
             onChange={(value) => {
               markDirty();
               const parsed = parseInt(value, 10);
               setDraft((prev) => ({
                 ...prev,
-                investigation_threshold: Number.isNaN(parsed) ? 0 : parsed,
+                pattern_threshold: Number.isNaN(parsed) ? 0 : parsed,
               }));
             }}
             placeholder="5"
-            error={draft.investigation_threshold < 1}
+            error={draft.pattern_threshold < 1}
           />
         </SettingsField>
 
@@ -1187,24 +1188,22 @@ export function OrchestratorSettingsSection() {
                   </SettingsField>
 
                   <SettingsField
-                    label={t(
-                      'settings.orchestrator.investigationThreshold.label'
-                    )}
+                    label={t('settings.orchestrator.patternThreshold.label')}
                     description={t(
                       'settings.orchestrator.board.blankInheritsHelper'
                     )}
                   >
                     <SettingsInput
                       value={
-                        defaults.investigation_threshold == null
+                        defaults.pattern_threshold == null
                           ? ''
-                          : String(defaults.investigation_threshold)
+                          : String(defaults.pattern_threshold)
                       }
                       onChange={(value) => {
                         const parsed = parseInt(value, 10);
                         updateProjectDefaults(projectId, (current) => ({
                           ...current,
-                          investigation_threshold:
+                          pattern_threshold:
                             value.trim() === '' ||
                             Number.isNaN(parsed) ||
                             parsed < 1

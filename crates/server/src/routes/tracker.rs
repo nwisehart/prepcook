@@ -155,15 +155,6 @@ async fn importable(
         .collect())
 }
 
-fn work_class_label(work_class: WorkClass) -> &'static str {
-    match work_class {
-        WorkClass::Bug => "bug",
-        WorkClass::Story => "story",
-        WorkClass::Epic => "epic",
-        WorkClass::Subtask => "subtask",
-    }
-}
-
 /// True for well-formed keys like "BUG-1234". Keeps caller-supplied keys safe
 /// to interpolate into a `key in (...)` query.
 fn is_valid_key(key: &str) -> bool {
@@ -431,7 +422,7 @@ pub async fn import_tracker_issues(
 
         // Best-effort: mirror the work class as a visible tag when the
         // project already has one with that name.
-        let tag_name = work_class_label(work_class);
+        let tag_name = work_class.as_str();
         if let Some(tag) = project_tags
             .iter()
             .find(|tag| tag.name.eq_ignore_ascii_case(tag_name))

@@ -13,8 +13,13 @@ use git_host::{GitHostProvider, GitHostService, ProviderKind};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use api_types::WorkClass;
+
 use crate::services::{
-    config::{InAppGate, playbooks::gate_instructions},
+    config::{
+        InAppGate,
+        playbooks::{INVESTIGATION_GATE_VAR, gate_instructions, gate_instructions_for},
+    },
     scripts::{load_manifest, manifest::ProductProfile},
 };
 
@@ -105,7 +110,9 @@ impl PlaybookContext {
     }
 
     /// Placeholder name (without braces) to value. `gate_instructions` is the
-    /// raw gate text, which may itself use `{{spec_path}}`.
+    /// raw gate text, which may itself use `{{spec_path}}`;
+    /// `investigation_gate_instructions` is what replaces it for an
+    /// investigation card, for pages that fill playbooks themselves.
     pub fn vars(&self) -> BTreeMap<String, String> {
         let product_name = if self.product_name.is_empty() {
             UNNAMED_PRODUCT.to_string()
@@ -132,6 +139,10 @@ impl PlaybookContext {
                 "gate_instructions".to_string(),
                 gate_instructions(self.in_app_gate).to_string(),
             ),
+            (
+                INVESTIGATION_GATE_VAR.to_string(),
+                gate_instructions_for(self.in_app_gate, Some(WorkClass::Investigation)).to_string(),
+            ),
         ])
     }
 
@@ -141,6 +152,21 @@ impl PlaybookContext {
         let mut vars = self.vars();
         vars.extend(card);
         render_playbook(template, &vars)
+    }
+
+    /// [`Self::fill`] for a card of `work_class`, whose class may change what
+    /// `{{gate_instructions}}` says (see `gate_instructions_for`).
+    pub fn fill_for_class(
+        &self,
+        template: &str,
+        mut card: BTreeMap<String, String>,
+        work_class: Option<WorkClass>,
+    ) -> String {
+        card.insert(
+            "gate_instructions".to_string(),
+            gate_instructions_for(self.in_app_gate, work_class).to_string(),
+        );
+        self.fill(template, card)
     }
 }
 
@@ -297,8 +323,8 @@ fn is_placeholder_name(name: &str) -> bool {
 mod tests {
     use super::*;
     use crate::services::config::{
-        TRIAGE_PLAYBOOK_KEY,
-        playbooks::{INVESTIGATION_PLAYBOOK_KEY, default_playbooks},
+        COMMENT_REPLY_PLAYBOOK_KEY,
+        playbooks::{INVESTIGATION_PLAYBOOK_KEY, PATTERN_PLAYBOOK_KEY, default_playbooks},
     };
 
     fn profile() -> ProductProfile {
@@ -408,6 +434,35 @@ mod tests {
         assert!(filled.contains("spec_approved = true"));
     }
 
+    /// An investigation card has no review gate in either gate setting: its
+    /// report moves it to Triaged.
+    #[test]
+    fn an_investigation_is_told_it_moves_to_triaged() {
+        for gate in [InAppGate::Lavish, InAppGate::None] {
+            let filled = full(gate).fill_for_class(
+                &default_playbooks()[INVESTIGATION_PLAYBOOK_KEY],
+                card("docs/specs/KEY-7.html"),
+                Some(WorkClass::Investigation),
+            );
+            assert!(filled.contains("moves the card to Triaged"), "{filled}");
+            assert!(filled.contains("TRIAGE REPORT"));
+            assert!(!filled.to_lowercase().contains("lavish"), "{filled}");
+            assert!(!filled.contains("Proposed fix"), "{filled}");
+            assert!(!filled.contains("{{"), "{filled}");
+        }
+        // Every other class keeps the board's gate.
+        let bug = full(InAppGate::Lavish).fill_for_class(
+            "{{gate_instructions}}",
+            card("docs/specs/KEY-7.html"),
+            Some(WorkClass::Bug),
+        );
+        assert!(bug.contains("lavish-axi"), "{bug}");
+        assert_eq!(
+            full(InAppGate::Lavish).vars()[INVESTIGATION_GATE_VAR],
+            gate_instructions_for(InAppGate::None, Some(WorkClass::Investigation))
+        );
+    }
+
     #[test]
     fn unknown_placeholders_stay_and_values_are_not_rescanned() {
         let mut vars = BTreeMap::new();
@@ -433,8 +488,8 @@ mod tests {
         ] {
             for (key, template) in default_playbooks() {
                 let filled = context.fill(&template, card("docs/specs/KEY-7.html"));
-                // The triage agent's comments are filled by its launcher.
-                let filled = if key == TRIAGE_PLAYBOOK_KEY {
+                // The comment-reply agent's comments are filled by its launcher.
+                let filled = if key == COMMENT_REPLY_PLAYBOOK_KEY {
                     filled.replace("{{comments}}", "")
                 } else {
                     filled
@@ -456,6 +511,7 @@ mod tests {
             "epic:planning",
             "subtask:planning",
             INVESTIGATION_PLAYBOOK_KEY,
+            PATTERN_PLAYBOOK_KEY,
         ] {
             let template = &default_playbooks()[key];
             assert!(template.contains("{{gate_instructions}}"), "{key}");

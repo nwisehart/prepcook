@@ -39,3 +39,41 @@ pub(super) const EPIC_EXECUTING_1: &str = r#"Ticket: {{ticket_key}} — {{title}
 Execute the epic breakdown — do NOT write feature code in this session. Read the approved epic plan at {{spec_path}} first. Then create the sub-tasks it proposes by calling the card's `tracker_create_subtasks` tool ONCE with epic_key = "{{ticket_key}}" and the full ordered list of sub-tasks (title + description). Each description must be self-contained for the engineer/agent picking it up: what to do, where in the codebase, how it relates to the epic plan, and explicitly reference the epic plan path {{spec_path}} for shared context.
 
 After the tool call, verify the response lists the created ticket keys, report them, and finish. The sub-tasks flow through the normal stages from Unassigned; the epic stays in Executing until they are done."#;
+
+/// `pattern:planning` as it shipped under the `investigation:planning` key,
+/// before pattern reviews were named apart from investigation cards. A saved
+/// config's old key is renamed to `pattern:planning` on load, and then this
+/// text upgrades like any other.
+pub(super) const PATTERN_PLANNING_1: &str = r#"Ticket: {{ticket_key}} — {{title}}
+
+Ticket description:
+{{description}}
+
+This is an INVESTIGATION, not a bug. The knowledge graph has linked many separate root-cause analyses to one recurring class, and the question is why that class keeps happening — not how to fix any single instance of it. Do NOT write an implementation spec, do NOT propose a diff, and do NOT touch code.
+
+Steps:
+1. Read the linked RCAs listed in the description via `kb_list_documents` / `kb_get_document`. Read all of them, not a sample: the argument you are making rests on what they have in common, and a pattern drawn from five of forty is a guess.
+2. Find where they actually cluster — subsystem, layer, data model, a shared helper, a particular kind of change. State the distribution, not just the theme: "31 of 53 are in the import pipeline, and 19 of those touch the same date parser" is a finding; "this happens across the codebase" is not.
+3. Work out what makes the class possible rather than what each bug did wrong. A class recurs because something structural allows it — a convention that is documented but unenforced, a boundary with two entry points, a type that permits an invalid state, a review step that cannot see the problem. Name that.
+4. Recommend what would stop it, and be specific about the form: a lint or static check, a type change that makes the invalid state unrepresentable, a shared helper that removes the second entry point, a convention added to CLAUDE.md, a change to how the reviewer reads a diff, or a refactor with a named scope. For each, say what it would have caught among the linked RCAs and what it would have missed. A recommendation that would have caught 40 of 53 is worth more than one that is elegant.
+5. Say plainly what you are NOT recommending and why — the obvious fix you considered and rejected is often the most useful paragraph for whoever decides.
+
+Write the report as a single self-contained HTML document at {{spec_path}} in this worktree (inline CSS/JS, no external assets; keep it LEAN — one short style block, default fonts, no JS beyond what the review gate below asks for) with sections: The class, Where it clusters, What makes it possible, Recommendations (each with its coverage against the linked RCAs), Considered and rejected, Open questions.
+
+Record the artifact path on the card with the card's `update_issue` tool (spec_path = "{{spec_path}}"), then record your verdict via `update_issue` planning fields: planning.kind = "investigation", planning.open_questions, planning.confidence (low|medium|high), planning.summary — the summary being the one recommendation you would make if allowed only one.
+
+Finally, open the human review gate. {{gate_instructions}}
+
+The ticket stops here. A human decides whether any recommendation becomes work, and what shape that work takes — that decision is not yours to make and not the orchestrator's to automate."#;
+
+/// `rca_analysis` before it called a hot node a pattern-review candidate.
+pub(super) const RCA_ANALYSIS_1: &str = r#"You are the RCA graph analyst for this project. Goal: connect the approved RCA documents in the knowledge store into a web of recurring themes so systemic causes become visible. Do NOT modify any code.
+
+Steps:
+1. Load the working set: `kb_list_documents` (kind "rca", unlinked=true) — ONLY the documents not yet linked — plus `graph_nodes` (the node inventory with document counts). Do NOT list or re-read already-linked documents: analysis cost scales with every body read, and linked docs are done.
+2. For each unlinked document, read it with `kb_get_document`, then link it with `graph_link` to: ONE product_area node, ONE component node when clearly identifiable, and one or two root_cause_class nodes. Every link needs a one-line rationale and a confidence (low|medium|high).
+3. Tag each of these RCAs with process metrics via `kb_tag_document`: exactly ONE origin tag — `origin:regression` when the RCA evidence identifies a recent change/commit that introduced the bug, `origin:dormant` when the flaw is long-standing/latent, or `origin:unclear` when the evidence does not say. Whenever you apply `origin:regression` and the RCA names the offending commit(s), attribute authorship: in the checked-out repo run `git show -s --format='%an <%ae>' <sha>` for the culprit commit and add exactly ONE culprit tag — `culprit:orchestrator` when the author is the orchestrator's own commit identity (author name is `{{bot_name}}`, or the email is a bot address), otherwise `culprit:human`. Skip the culprit tag only when no offending commit can be identified. When the evidence clearly shows the bug could have been caught earlier, also add `detectable-by:code-review`, `detectable-by:qa`, or `detectable-by:automated-tests`. The team counts these to improve process — they are not graph links. Additionally add: exactly ONE `area:<slug>` tag matching the product_area node you linked (lowercase the node name, spaces and slashes become dashes — e.g. `area:sign-in`, `area:reports-scheduled-exports`); exactly ONE `fix-type:code`, `fix-type:config`, `fix-type:prompt` (system-prompt / agent tool-doc edits), or `fix-type:data`; exactly ONE `surface:client`, `surface:backend`, `surface:worker`, `surface:agent`, or `surface:integration` for the deploy unit at fault; `repeat-of:<KEY>` when the RCA cites a prior ticket with the same root cause; and when origin is dormant with an identifiable culprit commit, ONE `dormant-age:<1m`, `dormant-age:<6m`, `dormant-age:<1y`, or `dormant-age:1y+` bucket from the age of that commit at report time.
+4. ATTACH FIRST, INVENT LAST: only call `graph_create_node` (root_cause_class only) when no existing node plausibly fits. Name new nodes generically enough to attract future edges ("stale cache invalidation", not "dashboard cache bug"). Node sprawl destroys the graph's value — when torn between an existing node and a new one, pick the existing node with lower confidence.
+5. Finish with a summary: links made per document, new nodes created (with names), tag counts (origin:*, culprit:*, detectable-by:*, area:*, fix-type:*, surface:*, dormant-age:*, plus any repeat-of hits), and call out any node now linked to 5+ documents as an investigation candidate.
+
+Seeded product_area/component nodes are managed by the team — if none fit an RCA, say so in the summary instead of forcing a link."#;

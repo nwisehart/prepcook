@@ -3,7 +3,7 @@
 One RCA explains one bug. Fifty RCAs say where bugs come from. Prep Cook keeps every
 bug RCA in a knowledge store and links each one into a graph of product areas,
 components and root-cause classes, so a cause that keeps coming back becomes
-visible and can be investigated as a cause rather than fixed once more as a
+visible and can be reviewed as a pattern rather than fixed once more as a
 symptom.
 
 The store lives on the board, so every teammate's Prep Cook reads and writes the
@@ -14,8 +14,11 @@ classes, the graph as a web, and an export.
 
 The RCA the planning agent wrote, as filed: a document of kind `rca` holding
 the HTML itself (so it outlives the worktree), the card's title, the card and
-its tracker key when it has one, and the verdict's summary. Only bug cards are
-filed.
+its tracker key when it has one, and the verdict's summary. Bug cards and
+investigation cards ([method.md](method.md#investigations)) are filed; an
+investigation's document carries `work_class: investigation`, and it is filed
+only once, when its verdict is recorded, since an investigation is never
+approved.
 
 It is filed twice, into the same document: once when the planning verdict is
 recorded, so teammates can read the draft while it waits at the gate, and again
@@ -76,14 +79,14 @@ generically enough to attract future links ("stale cache invalidation", not
 picks the existing node with lower confidence. A graph of a hundred one-RCA
 classes says nothing; node sprawl is the failure this rule exists to prevent.
 
-## Investigations
+## Pattern reviews
 
-When a node collects as many linked RCAs as the **investigation threshold**
-(default 5; **Settings → Orchestrator**, overridable per board), the
-orchestrator files an investigation:
+When a node collects as many linked RCAs as the **pattern-review threshold**
+(`orchestrator.pattern_threshold`, default 5; **Settings → Orchestrator**,
+overridable per board), the orchestrator files a pattern review:
 
 - With a tracker, a P2 story in the board's tracker project, titled
-  `[Investigation] <node>: recurring <kind> across <n> bugs`, plus a card in
+  `[Pattern] <node>: recurring <kind> across <n> bugs`, plus a card in
   To Do. Without one, the card alone.
 - The card is a story with the node recorded on it, assigned to you, High on
   the board. Its description lists the linked RCAs, one line each (up to
@@ -91,13 +94,19 @@ orchestrator files an investigation:
 - The node is stamped, so it fires once. It fires again after the same number
   of new RCAs land on it.
 
-Moved to Plan, an investigation card takes the `investigation:planning`
-playbook instead of the story one. The agent reads every linked RCA, finds
-where they cluster, works out what structural thing makes the class possible,
-and recommends what would stop it, each recommendation with how many of the
-linked RCAs it would have caught. It writes no code and no spec. The report
-goes through the same review gate as any plan, and a person decides what, if
-anything, becomes work.
+The card is marked with the node as `pattern_node` in its metadata (cards
+filed before the rename carry it as `investigation_node`, which is still
+read). Moved to Plan, it takes the `pattern:planning` playbook instead of the
+story one. The agent reads every linked RCA, finds where they cluster, works
+out what structural thing makes the class possible, and recommends what would
+stop it, each recommendation with how many of the linked RCAs it would have
+caught (`planning.kind = "pattern"`). It writes no code and no spec. The report
+goes through the same review gate as any plan, a person decides what, if
+anything, becomes work, and the card can never pass the Executing gate.
+
+A pattern review is not an investigation card: that is a work class of its
+own, for one reported problem to reproduce and explain
+([method.md](method.md#investigations)).
 
 ## `/api/stats`
 
@@ -118,5 +127,7 @@ without a board, every board under **Settings → Orchestrator** is counted.
   minutes.
 - **RCAs**: the total; counts by `origin:`, by `culprit:` among regressions, by
   `severity:` and by `detectable-by:`; the root-cause classes with how many RCAs
-  each has in range, most first, and the investigation each one opened; and the
-  number of investigations filed.
+  each has in range, most first, and the pattern review each one opened; and
+  the number of pattern reviews filed. (The JSON keeps the field names
+  `investigation_jira_key` and `investigations_filed`, which are columns on the
+  board's graph.)

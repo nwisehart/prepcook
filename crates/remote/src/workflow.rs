@@ -8,13 +8,15 @@
 //! `packages/web-core/src/shared/lib/workflowTransitions.ts`; keep the two
 //! implementations in sync.
 
-use api_types::issue_ext::{ConfidenceLevel, IssueExtMetadata};
+use api_types::issue_ext::{ConfidenceLevel, IssueExtMetadata, WorkClass};
 use serde_json::Value;
 
 /// Ordered Prep Cook workflow stages (first alias matches `DEFAULT_STATUSES` in
 /// `db/project_statuses.rs`; later aliases are earlier column names kept so
 /// existing projects keep validating until they're renamed). Columns with
-/// other names are not subject to transition validation.
+/// other names are not subject to transition validation — Triaged among them:
+/// it sits between Plan and Execute but is a side track, entered from Plan by
+/// an investigation and left for Execute or Plan when one is converted.
 pub const WORKFLOW_STAGES: [&[&str]; 7] = [
     &["To Do", "Unassigned"],
     &["Plan", "Planning"],
@@ -101,6 +103,9 @@ pub fn planning_gate_error(
     // Generic tickets never went through the Prep Cook planning flow.
     if metadata.work_class.is_none() && metadata.planning.is_none() {
         return None;
+    }
+    if metadata.work_class == Some(WorkClass::Investigation) {
+        return Some("investigation cards do not execute; convert to a bug first".to_string());
     }
 
     let Some(verdict) = metadata.planning else {
@@ -323,6 +328,21 @@ mod tests {
     fn planning_gate_stage_names_are_case_insensitive() {
         let metadata = serde_json::json!({ "work_class": "bug" });
         assert!(planning_gate_error(" planning ", "EXECUTING", &metadata).is_some());
+    }
+
+    #[test]
+    fn an_investigation_never_moves_to_executing() {
+        let metadata = serde_json::json!({
+            "work_class": "investigation",
+            "planning": { "kind": "rca", "confidence": "high" },
+            "spec": { "path": "docs/specs/PC-1.html", "approved_at": "2026-07-10T00:00:00Z" }
+        });
+        let message = planning_gate_error("Planning", "Executing", &metadata).unwrap();
+        assert!(message.contains("convert to a bug first"), "{message}");
+        // Triaged is a side track the transition rules leave alone.
+        assert!(validate_transition("Plan", "Triaged"));
+        assert!(validate_transition("Triaged", "Execute"));
+        assert!(validate_transition("Triaged", "Plan"));
     }
 
     #[test]

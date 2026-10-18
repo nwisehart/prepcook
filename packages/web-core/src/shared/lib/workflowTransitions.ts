@@ -88,6 +88,10 @@ export function planningGateError(
   // Generic tickets never went through the Prep Cook planning flow.
   if (metadata.work_class == null && planning == null) return null;
 
+  if (metadata.work_class === 'investigation') {
+    return 'investigation cards do not execute; convert to a bug first';
+  }
+
   if (planning == null) {
     return 'no planning verdict recorded yet';
   }

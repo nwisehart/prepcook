@@ -55,6 +55,13 @@ describe('resolveWorkClass', () => {
     expect(resolveWorkClass(null, ['Backend', 'Bug'])).toBe('bug');
   });
 
+  it('reads an investigation tag ahead of story and behind bug', () => {
+    expect(resolveWorkClass(null, ['story', 'Investigation'])).toBe(
+      'investigation'
+    );
+    expect(resolveWorkClass(null, ['investigation', 'bug'])).toBe('bug');
+  });
+
   it('defaults to story', () => {
     expect(resolveWorkClass(null, ['backend'])).toBe('story');
     expect(resolveWorkClass({}, [])).toBe('story');
@@ -126,16 +133,17 @@ describe('DEFAULT_PLAYBOOKS', () => {
     expect(Object.keys(DEFAULT_PLAYBOOKS).sort()).toEqual([
       'bug:executing',
       'bug:planning',
+      'comment_reply',
       'epic:executing',
       'epic:planning',
       'investigation:planning',
+      'pattern:planning',
       'rca_analysis',
       'reviewing',
       'story:executing',
       'story:planning',
       'subtask:executing',
       'subtask:planning',
-      'triage',
     ]);
     for (const [key, text] of Object.entries(DEFAULT_PLAYBOOKS)) {
       if (key.endsWith(':planning')) {
@@ -194,6 +202,51 @@ describe('resolveStagePlaybook', () => {
     });
 
     expect(result?.prompt).toBe('Execute docs/specs/VK-7.html');
+  });
+
+  it('plans an investigation without a review gate and never executes it', () => {
+    const issue = createIssueFixture({
+      extension_metadata: { work_class: 'investigation' },
+    });
+    const context = {
+      gate_instructions: 'open the review gate',
+      investigation_gate_instructions: 'the card moves to Triaged',
+    };
+    const planning = resolveStagePlaybook({
+      issue,
+      tagNames: [],
+      statusName: 'Plan',
+      playbooks: {
+        'investigation:planning':
+          'Triage {{ticket_key}}. {{gate_instructions}}',
+      },
+      context,
+    });
+    expect(planning?.prompt).toBe('Triage VK-7. the card moves to Triaged');
+    expect(
+      resolveStagePlaybook({
+        issue,
+        tagNames: [],
+        statusName: 'Execute',
+        playbooks: { 'investigation:executing': 'never' },
+        context,
+      })
+    ).toBeNull();
+  });
+
+  it('plans a pattern review from its own playbook', () => {
+    const result = resolveStagePlaybook({
+      issue: createIssueFixture({
+        extension_metadata: {
+          work_class: 'story',
+          pattern_node: 'stale cache invalidation',
+        },
+      }),
+      tagNames: [],
+      statusName: 'Planning',
+      playbooks: { ...playbooks, 'pattern:planning': 'Why {{title}} recurs' },
+    });
+    expect(result?.prompt).toBe('Why Fix login crash recurs');
   });
 
   it('returns null outside playbook stages or without a template', () => {

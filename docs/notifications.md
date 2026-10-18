@@ -86,6 +86,8 @@ Shared shapes:
 | `replan_requested` | `warn` | Merge request review rejects the approach; the agent stopped and re-planning is a person's call. | `{ "issue": IssueRef, "reason": string, "mr_url": string \| null }` |
 | `blocker_mr_opened` | `warn` | A merge request was opened for a blocker-priority ticket. | `{ "issue": IssueRef, "mr_url": string, "summary": string }` — `summary` is the title without the key. |
 | `mention_needs_human` | `warn` | The agent was @-mentioned on the tracker and no session is running to answer. | `{ "issue": IssueRef, "mentions": [{ "author": string, "text": string }] }` — each mention's text clipped to 700 characters. |
+| `investigation_completed` | `info` | An investigation card posted its triage report and reached Triaged (once per card). | A completed investigation, below. |
+| `card_converted` | `info` | A card's work class was changed: an investigation converted to a bug or a story. | `{ "issue": IssueRef, "from": "investigation", "to": "bug" \| "story", "by": string, "column": string }` — who converted it, as the caller named them, and the column it moved to (Execute when the RCA and harness carried over as the plan, else Plan). |
 
 ### `daily_digest`
 
@@ -137,6 +139,41 @@ first and then longest waiting; a section with nothing in it has an empty
   "summary": string                  // the whole planning summary
 }
 ```
+
+### `investigation_completed`
+
+```text
+{
+  "issue": IssueRef,
+  "report": {
+    "what_happens": string,      // each section's text as the agent wrote it;
+    "where": string,             // "" when the agent left a section out
+    "why": string,
+    "scope": string,
+    "workaround": string,        // "none found" when there is none
+    "confidence": string,        // the section: the level, then one line why
+    "markdown": string           // the whole TRIAGE REPORT comment
+  },
+  "rca_url": string | null,      // the RCA in the knowledge store, when filed
+  "rca_id": string | null,       // its document id (a UUID)
+  "harness": {
+    "path": string | null,       // ".repro/<key>/repro.mjs" while it is on disk
+    "outcome": "reproduced" | "not_reproduced" | "unknown" | "missing"
+  },
+  "confidence": "low" | "medium" | "high" | null,   // the level the Confidence section opens with
+  "source": {                    // who filed the card through POST /api/cards; null otherwise
+    "kind": "tammy" | "incident" | "api",
+    "ref": string,               // the filer's own reference: a thread URL, an incident id
+    "reporter": string | null
+  } | null
+}
+```
+
+`harness.outcome` is read from the card's `REPRODUCTION:` comment: `reproduced`
+when any of the harness's cases failed (the reported behaviour happened),
+`not_reproduced` when every case passed, `unknown` when the comment reports no
+cases that could be read, `missing` when there is no such comment. Every field
+is present; the ones that do not apply are `null`.
 
 ## Slack
 

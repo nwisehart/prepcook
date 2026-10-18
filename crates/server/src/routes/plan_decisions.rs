@@ -129,7 +129,7 @@ fn tokens_match(presented: &str, configured: &str) -> bool {
         == 0
 }
 
-async fn check_caller(
+pub(crate) async fn check_caller(
     deployment: &DeploymentImpl,
     headers: &HeaderMap,
 ) -> Result<Caller, Response> {
@@ -145,14 +145,14 @@ async fn check_caller(
     .map_err(|refusal| failure(StatusCode::UNAUTHORIZED, refusal.message()))
 }
 
-fn failure(status: StatusCode, message: &str) -> Response {
+pub(crate) fn failure(status: StatusCode, message: &str) -> Response {
     (status, Json(ApiResponse::<()>::error(message))).into_response()
 }
 
 fn decision_failure(error: DecisionError) -> Response {
     let status = match &error {
         DecisionError::UnknownCard(_) => StatusCode::NOT_FOUND,
-        DecisionError::WrongStage { .. } => StatusCode::CONFLICT,
+        DecisionError::WrongStage { .. } | DecisionError::NotForClass(_) => StatusCode::CONFLICT,
         DecisionError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         DecisionError::Failed(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };

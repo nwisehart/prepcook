@@ -263,10 +263,12 @@ async fn file_epic_spec_document(
     Ok(())
 }
 
-/// Files an approved bug RCA into the remote `kb_documents` store (kind =
-/// "rca", idempotent per issue). Non-bug specs are not filed — the knowledge
-/// graph is about recurring defect classes.
-/// Files the RCA into the kb and pins it to its Jira ticket.
+/// Files a bug's or an investigation's RCA into the remote `kb_documents`
+/// store (kind = "rca", idempotent per issue) and pins it to its tracker
+/// ticket. Specs are not filed — the knowledge graph is about recurring
+/// defect classes. An investigation's RCA is never approved, so it is filed
+/// by the verdict path alone; that is also what puts it in the
+/// `investigation_completed` event.
 ///
 /// Called twice per ticket by design — once when the planning verdict lands
 /// (so teammates can read the draft at the gate) and once at approval. The kb
@@ -281,9 +283,14 @@ pub(crate) async fn file_rca_document(
     post_client_summary: bool,
 ) -> Result<(), anyhow::Error> {
     let metadata = api_types::IssueExtMetadata::from_value(&issue.extension_metadata);
-    if metadata.work_class != Some(api_types::WorkClass::Bug) {
+    let Some(work_class) = metadata.work_class.filter(|class| {
+        matches!(
+            class,
+            api_types::WorkClass::Bug | api_types::WorkClass::Investigation
+        )
+    }) else {
         return Ok(());
-    }
+    };
     let body = tokio::fs::read_to_string(artifact).await?;
     let client = deployment.remote_client()?;
     let board = deployment
@@ -300,7 +307,7 @@ pub(crate) async fn file_rca_document(
             body,
             issue_id: Some(issue.id),
             jira_key: metadata.jira.as_ref().map(|jira| jira.key.clone()),
-            work_class: Some("bug".to_string()),
+            work_class: Some(work_class.as_str().to_string()),
             summary: metadata.planning.as_ref().and_then(|p| p.summary.clone()),
             // Filing-time tags only land on first insert (the upsert's
             // refresh path deliberately preserves tags), so a re-plan can't

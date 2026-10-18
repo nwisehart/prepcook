@@ -68,7 +68,13 @@ import {
   resolveStage,
   resolveStagePlaybook,
 } from '@/shared/lib/stagePlaybooks';
-import { playbooksApi } from '@/shared/lib/api';
+import { cardsApi, playbooksApi } from '@/shared/lib/api';
+import {
+  WORK_CLASS_STYLES,
+  cardOrigin,
+  cardWorkClass,
+} from '@/shared/lib/workClass';
+import { parseIssueExtMetadata } from '@/shared/lib/stagePlaybooks';
 import {
   isTransitionAllowed,
   planningGateError,
@@ -876,6 +882,28 @@ export function KanbanContainer() {
     ]
   );
 
+  // Convert an investigation card (its class label's menu). The server swaps
+  // the class, keeps everything the card has, and moves it on: to Executing
+  // when the investigation's RCA and harness count as the plan, else to Plan.
+  const handleConvertCard = useCallback(
+    async (issueId: string, workClass: 'bug' | 'story') => {
+      try {
+        await cardsApi.convert(issueId, workClass);
+      } catch (err) {
+        await ConfirmDialog.show({
+          title: t('common:error'),
+          message:
+            err instanceof Error && err.message
+              ? err.message
+              : t('kanban.workClassActions.convertFailed'),
+          confirmText: t('common:ok'),
+          showCancelButton: false,
+        });
+      }
+    },
+    [t]
+  );
+
   // Analyze RCAs (project menu): opens the workspace-create flow prefilled
   // with the rca_analysis playbook — the agent connects the stored RCA
   // corpus into the knowledge graph via the kb/graph MCP tools.
@@ -1484,6 +1512,62 @@ export function KanbanContainer() {
                             (member) => member.user_id === userId
                           );
 
+                        const cardTags = getTagObjectsForIssue(issue.id);
+                        const cardExt = parseIssueExtMetadata(
+                          issue.extension_metadata
+                        );
+                        const cardClass = cardWorkClass(
+                          cardExt,
+                          cardTags.map((tag) => tag.name)
+                        );
+                        const cardClassLabel = cardClass
+                          ? {
+                              name: t(
+                                `kanban.trackerImport.workClass.${cardClass}`
+                              ),
+                              className: WORK_CLASS_STYLES[cardClass],
+                              actions:
+                                cardClass === 'investigation'
+                                  ? [
+                                      {
+                                        label: t(
+                                          'kanban.workClassActions.convertToBug'
+                                        ),
+                                        onSelect: () =>
+                                          void handleConvertCard(
+                                            issue.id,
+                                            'bug'
+                                          ),
+                                      },
+                                      {
+                                        label: t(
+                                          'kanban.workClassActions.convertToStory'
+                                        ),
+                                        onSelect: () =>
+                                          void handleConvertCard(
+                                            issue.id,
+                                            'story'
+                                          ),
+                                      },
+                                    ]
+                                  : undefined,
+                            }
+                          : null;
+                        const filedFrom = cardOrigin(cardExt);
+                        const cardOriginLine = filedFrom
+                          ? {
+                              text: t('kanban.origin.filedBy', {
+                                filer: t(
+                                  `kanban.origin.kinds.${filedFrom.kind}`
+                                ),
+                              }),
+                              linkText: filedFrom.url
+                                ? t('kanban.origin.thread')
+                                : filedFrom.ref,
+                              url: filedFrom.url,
+                            }
+                          : null;
+
                         return (
                           <KanbanCard
                             key={issue.id}
@@ -1514,8 +1598,15 @@ export function KanbanContainer() {
                               pushState={cardPushState}
                               mrUrl={cardMrUrl}
                               agentQueued={cardAgentQueued}
+                              classLabel={cardClassLabel}
+                              origin={cardOriginLine}
                               priority={issue.priority}
-                              tags={getTagObjectsForIssue(issue.id)}
+                              // The class label shows the class; its tag
+                              // would say it twice.
+                              tags={cardTags.filter(
+                                (tag) =>
+                                  tag.name.trim().toLowerCase() !== cardClass
+                              )}
                               assignees={issueAssigneesMap[issue.id] ?? []}
                               pullRequests={issueCardPullRequests}
                               relationships={resolveRelationshipsForIssue(

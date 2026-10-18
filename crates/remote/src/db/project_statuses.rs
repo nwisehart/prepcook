@@ -15,11 +15,13 @@ use super::get_txid;
 pub const DEFAULT_STATUSES: &[(&str, &str, i32, bool)] = &[
     ("To Do", "217 91% 60%", 0, false),
     ("Plan", "258 90% 66%", 1, false),
-    ("Execute", "38 92% 50%", 2, false),
-    ("Review", "271 81% 56%", 3, false),
-    ("Push MR", "199 89% 48%", 4, false),
-    ("Close", "142 71% 45%", 5, false),
-    ("Clean up", "220 9% 46%", 6, false),
+    // Where an investigation card stops with its triage report.
+    ("Triaged", "188 78% 41%", 2, false),
+    ("Execute", "38 92% 50%", 3, false),
+    ("Review", "271 81% 56%", 4, false),
+    ("Push MR", "199 89% 48%", 5, false),
+    ("Close", "142 71% 45%", 6, false),
+    ("Clean up", "220 9% 46%", 7, false),
 ];
 
 #[derive(Debug, Error)]

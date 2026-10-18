@@ -54,7 +54,8 @@ The agent answers on a ticket only when it is its turn to.
   answer it. With no session running, a card comment (and a Slack post, when
   Slack is set up) asks a person instead.
 - **After a ticket has shipped** (Prep mode only), a fresh human comment starts
-  one analyze-only triage session that answers on the ticket. If a person holds
+  one analyze-only session from the `comment_reply` playbook that answers on
+  the ticket. If a person holds
   the ticket, it answers only a comment that @-mentions it; the rest of that
   thread is theirs.
 

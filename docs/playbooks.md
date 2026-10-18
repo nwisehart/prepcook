@@ -2,13 +2,22 @@
 
 A playbook is the prompt an agent starts from when the orchestrator launches it
 for a card. There is one per stage and work class, keyed `"<work_class>:<stage>"`
-(`bug:planning`, `story:executing`, …), plus four that are not tied to a work
-class: `investigation:planning`, `reviewing`, `triage` and `rca_analysis`.
+(`bug:planning`, `investigation:planning`, `story:executing`, …), plus four
+that are not tied to a work class: `pattern:planning`, `reviewing`,
+`comment_reply` and `rca_analysis`.
 
 A card's work class comes from its metadata: an imported ticket gets it from
-its issue type. A card made on the board gets it from its `bug`, `story`, `epic`
-or `subtask` tag, read when the card first enters an automated column and
-recorded on the card; a card with neither is not launched.
+its issue type, and a card filed through `POST /api/cards` from its request. A
+card made on the board gets it from its `bug`, `investigation`, `story`, `epic`
+or `subtask` tag (the first in that order, when it has several), read when the
+card first enters an automated column and recorded on the card; a card with
+neither is not launched.
+
+Two keys were renamed. `pattern:planning` was `investigation:planning`, the
+recurring-root-cause review the knowledge graph files; that key now belongs to
+investigation cards. `comment_reply` was `triage`. A config saved with the old
+keys has them renamed the first time it is read, in the global map and in every
+board's overrides ([configuration.md](configuration.md#playbooks)).
 
 The shipped texts are in `crates/services/src/services/config/playbooks.rs`.
 They name no product, machine or hosted service: everything that differs between
@@ -23,7 +32,7 @@ card, the board's repository and the repository's `.prepcook/scripts.toml`.
 | `{{title}}`, `{{description}}` | The card's title and description. |
 | `{{spec_path}}` | Where the plan document lives in the worktree: the path recorded on the card, else `docs/specs/<ticket_key>.html`. |
 | `{{epic_key}}` | The epic a sub-task belongs to; empty otherwise. |
-| `{{comments}}` | `triage` only: the new tracker comments that started it. |
+| `{{comments}}` | `comment_reply` only: the new tracker comments that started it. |
 | `{{target_branch}}` | The branch work is based on and merged into: the repository's default target branch (else its current branch), as its remote-tracking ref when it has one, e.g. `origin/main`. For `reviewing`, the implementation workspace's target, freshly fetched. |
 | `{{bot_name}}` | The author name the agent's commits carry: the repository's `user.name` (repository config, then the user's), else `Prep Cook`. |
 | `{{host_cli}}` | `glab` for a GitLab remote, `az repos` for Azure DevOps, otherwise `gh`. |
@@ -89,6 +98,13 @@ Either way, a follow-up containing `APPROVED` makes the agent record
 `spec_approved = true`; anything else is feedback it applies before ending its
 turn again.
 
+An investigation card has no gate whatever the setting: for it,
+`{{gate_instructions}}` says that posting the `TRIAGE REPORT` comment finishes
+the card, that Prep Cook moves it to Triaged by itself, and that the agent must
+not open a review session, set `spec_approved` or plan a fix. Pages that fill
+playbooks themselves get that text as `investigation_gate_instructions` from
+`GET /api/playbooks/context`.
+
 ## The playbooks
 
 Card tools named below (`update_issue`, `add_issue_comment`,
@@ -145,12 +161,27 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 
 ### `investigation:planning`
 
+- **Launched** when an investigation card enters Plan, after Prep Cook has
+  stood the app up, exactly as for a bug.
+- **Produces** what `bug:planning` produces — the harness, the `REPRODUCTION:`
+  comments, the RCA at `{{spec_path}}` and its verdict (`planning.kind =
+  "rca"`) — without a proposed fix, then a `TRIAGE REPORT` comment on the card:
+  `TRIAGE REPORT` alone on the first line, then `## What happens`, `## Where`,
+  `## Why`, `## Scope`, `## Workaround` and `## Confidence` (high, medium or low
+  first, then one line why). That comment moves the card to Triaged; there is
+  no review gate ([method.md](method.md#investigations)).
+- **Tools**: those of `bug:planning`.
+- **Placeholders**: those of `bug:planning`; `gate_instructions` is the
+  no-gate text above.
+
+### `pattern:planning`
+
 - **Launched** instead of the work-class playbook when a card in Plan carries
-  an `investigation_node`: the knowledge graph linked enough RCAs to one
-  recurring class to open an investigation.
+  a `pattern_node`: the knowledge graph linked enough RCAs to one recurring
+  class to open a pattern review ([rca-graph.md](rca-graph.md#pattern-reviews)).
 - **Produces** an HTML report at `{{spec_path}}` on why the class recurs and
-  what would stop it (`planning.kind = "investigation"`). No code, no spec; a
-  person decides what becomes work.
+  what would stop it (`planning.kind = "pattern"`). No code, no spec; a person
+  decides what becomes work, and the card never passes the Executing gate.
 - **Tools**: `kb_list_documents`, `kb_get_document`, `update_issue`.
 - **Placeholders**: `ticket_key`, `title`, `description`, `spec_path`,
   `gate_instructions`.
@@ -186,7 +217,8 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 
 - **Launched** when a card enters Review, in a fresh workspace branched from
   the implementation branch, with no planning context. A
-  `"<work_class>:reviewing"` entry, when present, is used instead.
+  `"<work_class>:reviewing"` entry, when present, is used instead. Never for an
+  investigation card, which has nothing to review.
 - **Produces** a `record_review` call with the verdict and every finding, and
   one `REVIEW: APPROVE` or `REVIEW: REQUEST CHANGES` comment on the card. It
   reads only the `REPRODUCTION:` and `REVIEW-REJECTED:` comments.
@@ -194,10 +226,10 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 - **Placeholders**: `ticket_key`, `title`, `description`, `target_branch`,
   `pr_noun`, `product.areas`.
 
-### `triage`
+### `comment_reply`
 
 - **Launched** when a person comments on the ticket of a card that has already
-  shipped.
+  shipped (only under autonomy Full). A board overrides it under the same key.
 - **Produces** one plain-language answer on the ticket and a
   `TRIAGE: <a|b|c|d>` comment on the card. It changes no code and no status.
 - **Tools**: `tracker_get_attachments`, `kb_list_documents`,
@@ -211,7 +243,8 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 - **Launched** from the board menu, and by the orchestrator when approved RCAs
   are waiting to be linked into the knowledge graph.
 - **Produces** graph links and process tags for each unlinked RCA, and a
-  summary that names any node linked to five or more documents.
+  summary that names any node linked to five or more documents as a
+  pattern-review candidate.
 - **Tools**: `kb_list_documents`, `kb_get_document`, `kb_tag_document`,
   `graph_nodes`, `graph_link`, `graph_create_node`.
 - **Placeholders**: `bot_name` (to tell the orchestrator's own commits from a

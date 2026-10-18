@@ -99,8 +99,8 @@ pub type DeployWatch = versions::v10::DeployWatch;
 pub type ApprovalsConfig = versions::v10::ApprovalsConfig;
 pub type InAppGate = versions::v10::InAppGate;
 pub use versions::v10::{
-    INVESTIGATION_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY,
-    TRIAGE_PLAYBOOK_KEY,
+    COMMENT_REPLY_PLAYBOOK_KEY, CURRENT_PLAYBOOK_KEYS, INVESTIGATION_PLAYBOOK_KEY,
+    PATTERN_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY,
 };
 
 /// Will always return config, trying old schemas or eventually returning default

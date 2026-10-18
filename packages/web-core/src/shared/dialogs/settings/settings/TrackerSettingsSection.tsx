@@ -40,6 +40,7 @@ const EMPTY_TRACKER_CONFIG: TrackerConfig = {
     executing: null,
     reviewing: null,
     pushed_mr: null,
+    triaged: null,
     done: null,
     shipped: ['Merged', 'Deployed to Production', 'Done'],
   },
@@ -60,6 +61,7 @@ const STAGE_STATUS_KEYS: StageStatusKey[] = [
   'executing',
   'reviewing',
   'pushed_mr',
+  'triaged',
   'done',
 ];
 

@@ -343,6 +343,20 @@
     "noCommands": "No commands available for this agent."
   },
   "kanban": {
+    "workClassActions": {
+      "convertToBug": "Convert to bug",
+      "convertToStory": "Convert to story",
+      "convertFailed": "The card could not be converted."
+    },
+    "origin": {
+      "filedBy": "Filed by {{filer}} from",
+      "thread": "thread",
+      "kinds": {
+        "tammy": "Tammy",
+        "incident": "an incident",
+        "api": "the API"
+      }
+    },
     "trackerImport": {
       "menuAction": "Import from tracker",
       "title": "Import from tracker",
@@ -354,6 +368,7 @@
       "importedBadge": "imported",
       "workClass": {
         "bug": "bug",
+        "investigation": "investigation",
         "story": "story",
         "epic": "epic",
         "subtask": "subtask"

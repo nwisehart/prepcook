@@ -21,21 +21,28 @@
 
 use std::collections::BTreeMap;
 
+use api_types::WorkClass;
+
 use super::InAppGate;
 
-/// Playbook key for an investigation ticket's planning stage. Chosen over the
-/// work-class key when a card carries `investigation_node`: the deliverable is
-/// an explanation of why a class of bug recurs, not a spec for fixing one.
+/// Playbook key for an investigation card's planning stage: reproduce and
+/// explain a reported problem, then stop with a triage report instead of a
+/// fix.
 pub const INVESTIGATION_PLAYBOOK_KEY: &str = "investigation:planning";
+
+/// Playbook key for a pattern review's planning stage. Chosen over the
+/// work-class key when a card carries `pattern_node`: the deliverable is an
+/// explanation of why a class of bug recurs, not a spec for fixing one.
+pub const PATTERN_PLAYBOOK_KEY: &str = "pattern:planning";
 
 /// Playbook key for the independent review stage. Work-class agnostic: the
 /// reviewer deliberately gets no planning context, so one template serves
 /// bugs and stories alike (a "{work_class}:reviewing" entry overrides it).
 pub const REVIEWING_PLAYBOOK_KEY: &str = "reviewing";
 
-/// Playbook key for the follow-up triage agent: launched when a human
-/// comments on a ticket that is already done (terminal columns), analyze-only.
-pub const TRIAGE_PLAYBOOK_KEY: &str = "triage";
+/// Playbook key for the comment-reply agent: launched when a human comments
+/// on a ticket that is already done (terminal columns), analyze-only.
+pub const COMMENT_REPLY_PLAYBOOK_KEY: &str = "comment_reply";
 
 /// Playbook key for the RCA-graph analysis agent (not stage-bound: launched
 /// manually from the board menu, and per new RCA).
@@ -53,6 +60,10 @@ pub fn default_playbooks() -> BTreeMap<String, String> {
             INVESTIGATION_PLAYBOOK_KEY.to_string(),
             INVESTIGATION_PLANNING.to_string(),
         ),
+        (
+            PATTERN_PLAYBOOK_KEY.to_string(),
+            PATTERN_PLANNING.to_string(),
+        ),
         ("bug:executing".to_string(), BUG_EXECUTING.to_string()),
         ("story:executing".to_string(), STORY_EXECUTING.to_string()),
         ("epic:executing".to_string(), EPIC_EXECUTING.to_string()),
@@ -61,7 +72,10 @@ pub fn default_playbooks() -> BTreeMap<String, String> {
             SUBTASK_EXECUTING.to_string(),
         ),
         (REVIEWING_PLAYBOOK_KEY.to_string(), REVIEWING.to_string()),
-        (TRIAGE_PLAYBOOK_KEY.to_string(), TRIAGE.to_string()),
+        (
+            COMMENT_REPLY_PLAYBOOK_KEY.to_string(),
+            COMMENT_REPLY.to_string(),
+        ),
         (
             RCA_ANALYSIS_PLAYBOOK_KEY.to_string(),
             RCA_ANALYSIS.to_string(),
@@ -79,9 +93,25 @@ pub fn gate_instructions(gate: InAppGate) -> &'static str {
     }
 }
 
+/// What `{{gate_instructions}}` says for a card of this class: an
+/// investigation has no review gate whatever `approvals.in_app_gate` is, since
+/// its report moves the card to Triaged by itself.
+pub fn gate_instructions_for(gate: InAppGate, work_class: Option<WorkClass>) -> &'static str {
+    match work_class {
+        Some(WorkClass::Investigation) => TRIAGED_GATE,
+        _ => gate_instructions(gate),
+    }
+}
+
+/// The context variable carrying [`TRIAGED_GATE`] to pages that fill
+/// playbooks themselves (`GET /api/playbooks/context`).
+pub const INVESTIGATION_GATE_VAR: &str = "investigation_gate_instructions";
+
 const LAVISH_GATE: &str = r#"At the top of the document embed two native buttons: "Approve", which runs `window.lavish.queuePrompt("APPROVED"); window.lavish.sendQueuedPrompts()`, and "Request changes", which reads an adjacent textarea and runs `window.lavish.queuePrompt(feedbackText); window.lavish.sendQueuedPrompts()`. Always call both — queuePrompt alone leaves the text queued in the page and the agent never sees it. Do not tell the reviewer to type feedback in the chat instead: Enter there queues without sending. Once the document and your verdict are recorded, run `npx lavish-axi {{spec_path}} --no-open` ONCE, then END YOUR TURN — do not poll or wait for feedback. Review feedback is delivered to you automatically as follow-up messages. When a follow-up arrives: if it contains "APPROVED", record the approval via `update_issue` (spec_approved = true) and finish; otherwise apply the feedback and end your turn again. Never set spec_approved without an explicit APPROVED message."#;
 
 const NO_IN_APP_GATE: &str = r#"Write the document without approval buttons: the reviewer decides outside it. Once the document and your verdict are recorded, END YOUR TURN — do not poll or wait for a decision. The decision arrives as a follow-up message from whichever surface the reviewer uses: a comment on the card, a comment on the ticket, or the approvals API. When a follow-up arrives: if it contains "APPROVED", record the approval via `update_issue` (spec_approved = true) and finish; otherwise apply the feedback and end your turn again. Never set spec_approved without an explicit APPROVED message."#;
+
+const TRIAGED_GATE: &str = r#"There is no review gate for this card: it is an investigation, and posting the TRIAGE REPORT comment is what finishes it. Prep Cook reads the report, moves the card to Triaged and sends the report on to whoever filed the card. Do not open a review session, do not set spec_approved, and do not plan or start a fix — an engineer who wants one converts the card to a bug, and the fix starts from your RCA and your harness. Once the report is posted, END YOUR TURN. A follow-up may still arrive, such as a teammate's question on the card: answer it there, and if your conclusions change, re-record the verdict and say so in a comment."#;
 
 const BUG_PLANNING: &str = r#"Ticket: {{ticket_key}} — {{title}}
 
@@ -156,7 +186,36 @@ const INVESTIGATION_PLANNING: &str = r#"Ticket: {{ticket_key}} — {{title}}
 Ticket description:
 {{description}}
 
-This is an INVESTIGATION, not a bug. The knowledge graph has linked many separate root-cause analyses to one recurring class, and the question is why that class keeps happening — not how to fix any single instance of it. Do NOT write an implementation spec, do NOT propose a diff, and do NOT touch code.
+Investigate this reported problem: reproduce it and explain it with a root-cause analysis. Do NOT fix it, plan a fix or write a spec in this session.
+
+The product is {{product.name}}.{{#if product.summary}} {{product.summary}}{{/if}}{{#if product.areas}} The areas that matter: {{product.areas}}.{{/if}}
+
+Reproduce first. Before reading code for the cause, make the failure happen against the running app and keep the script that makes it happen. Prep Cook has already built this worktree's version of the app and started it; it listens at `$PREPCOOK_APP_URL`, seeded with the project's test data. Use the seeded data rather than creating your own unless the bug needs something the seed lacks. The test login is in `$PREPCOOK_TEST_USER_EMAIL` and `$PREPCOOK_TEST_USER_PASSWORD`, plus whatever else the seed exported: read them from the environment, and never print, log, upload or commit them. `app_status` says what is running; `app_restart` rebuilds and restarts the app from the worktree's current files, which is how to test a candidate change.{{#if product.error_patterns}} If the app reports one of {{product.error_patterns}}, that is a seed problem, not the bug: post it on the card via `add_issue_comment`, stop, and end your turn.{{/if}}
+
+The harness lives at .repro/{{ticket_key}}/ in this worktree. First add `.repro/` to .git/info/exclude, so nothing under it can be staged; it is never committed and never appears in a {{pr_noun}} diff. Build it with the repro-harness skill: log in once and reuse storageState across cases; wait for networkidle and a settle beat before reading the DOM or clicking; choose selectors from the rendered DOM you captured, never from guesswork; print one JSON line per case on stdout (case, expected, observed, pass); exit non-zero when any case fails; screenshot each case to .repro/{{ticket_key}}/case-<name>.png; write no log files. The harness must ASSERT the reported behaviour — it fails against `{{target_branch}}`, or the ticket is not reproduced. When the report describes the failure as intermittent — "sometimes", "every few days", a time window rather than an action — build it to measure a rate across trials instead of returning a verdict; the repro-harness skill gives the shape. Run it in the foreground under `timeout` (raise the Bash tool's timeout to match) or with a single bounded blocking wait — never a loop of separate polls, and never in the background: a process still running when your turn ends dies with the turn, and its result is lost. Record the UTC time of the reproduction in the RCA, and the commit the app was built from (`git rev-parse HEAD`).
+
+When the harness does not fail, one of four things is true, and the RCA says which. Separately from all of that: whenever the failure path runs through an external system — a third-party service, a customer's SSO, any external API — name that system in `planning_integration`, whatever you conclude the cause is, including when you conclude it is our own code. The seeded app cannot hold the customer's credentials or data, so that fact changes what your reproduction is worth, and it is recorded so the person approving is told. The failure is not on `{{target_branch}}`'s path: record what you checked and against what, confidence low, and say what data shape or state the seed lacks that production has. `{{target_branch}}` already carries a fix: find the commit, cite it, and route the ticket as already fixed on `{{target_branch}}` and not yet released. The bug needs a customer object or credential the seed cannot have: name it precisely, and put the question to the reporter in the same comment that reports the attempt — do not wait for the answer. The failure is intermittent: a harness that passed three times has measured nothing, so run it as a rate — N trials against the suspected path and N against a healthy control in the same session, with N and the separation that counts as reproduced both fixed before the first run — and report both rates. If they separate, that is the reproduction and the RCA carries it. If they do not, that is a result of its own and the RCA says so: how many trials, against what, over what period, what you could not hold still, confidence low, and what would raise it. Never round that to "not on `{{target_branch}}`'s path" — the two are different claims and only one of them is true.
+
+With the failure in hand, find the mechanism: the code path the harness exercises, confirmed where possible by making the harness pass against a candidate change (`app_restart` after the edit), not by reading alone. {{#if product.evidence_tools}}{{product.evidence_tools}} The harness is the local evidence.{{else}}The harness is your evidence; there are no production logs to consult unless the project profile names a tool.{{/if}} Assess the blast radius. Name the mechanism rather than the file — "the hook that validates a seeded value", not a filename — because the file you would name may not be the one the customer's path goes through. Do not propose a fix: whoever converts this card to a bug plans it from your RCA.
+
+Write the RCA as a single self-contained HTML document at {{spec_path}} in this worktree (inline CSS/JS, no external assets; keep it LEAN — one short style block, default fonts, no JS beyond what the review gate below asks for) with sections: Symptom, Reproduction (the harness's source itself, HTML-escaped in a <pre> block and read through first for anything that looks like a credential, then its cases with expected and observed values, the UTC time and the commit the app was built from, the screenshots), Root cause (with evidence), Blast radius, Open questions, and Reproduce locally: what the harness relied on from the seed (which seeded records, which user), and the kickoff prompt for a local session with the `prepcook-repro` skill, in the shape the repro-harness skill gives under Handing the reproduction on, with the prompt in a <pre> block the reader copies whole and no credential anywhere in either. Record the artifact path on the card with the card's `update_issue` tool (spec_path = "{{spec_path}}").
+
+Post the reproduction in both places as soon as you have it: the reviewer and the reporter read different surfaces, and evidence on only one of them is invisible to the other. On the card via `add_issue_comment`, with `REPRODUCTION:` alone as the first line, then the harness's JSON lines, the mechanism in one paragraph, and "the app at `{{target_branch}}`" with the commit and the UTC time — that comment is the acceptance test the independent reviewer reads before it judges the branch, and a reproduction it cannot find is reported as a missing one. On the ticket via `tracker_add_comment` (when a tracker is configured), the same evidence in plain language for the reporter, who never opens the board. Screenshots are uploaded as attachments, never committed. Any question the harness cannot answer goes to the reporter in the ticket comment, or on the card when there is no ticket.
+
+When the RCA is done, record your verdict via `update_issue` planning fields: planning.kind = "rca", planning.open_questions, planning.confidence (low|medium|high), planning.summary. If your confidence is below high, list concrete next steps that would raise confidence. Whenever open_questions is above 0, record the ask as well: planning_ask_audience — reporter or engineer — and planning_ask_request, the request itself, written in the words of whoever has to act on it. Choose the audience by who could actually do something about it. The root cause of a failure is an engineering question however badly a customer wants it answered, and putting one to the reporter parks the ticket on somebody who cannot move it while they work out it was never theirs. Record both or neither: with neither, the daily update says only that the ticket is waiting on an engineer, which is the honest thing to say when nobody wrote the ask down. Also record planning.client_summary: the same outcome in 3-4 short sentences an account manager can send to a customer — what went wrong, who or what was affected, what the fix changes, and whether anyone needs to do anything. No jargon, no file or class names, no ticket numbers; if you cannot say it without them, say it more simply. It is posted on the ticket (when a tracker is configured) when the RCA is filed, so write it for someone who will never open the RCA.
+
+Then write the triage report: ONE more comment on the card via `add_issue_comment`, in exactly this shape. `TRIAGE REPORT` alone as the first line, then these six sections, each under its own `## ` heading, in this order: `## What happens` — the symptom as the reporter sees it, in two or three sentences; `## Where` — the screen, flow, account or integration it happens in, and where it does not; `## Why` — the root cause from the RCA, in one paragraph, naming the mechanism rather than the file; `## Scope` — who and what is affected, and whether this is configuration or a defect, with the evidence that decides it (the harness's cases, the setting, the data); `## Workaround` — what an affected user can do today, or "none found"; `## Confidence` — high, medium or low as the first word, then one line saying why. Write it for someone who will relay it to a customer: plain language, no file or class names, nothing the harness did not show. When a tracker is configured, Prep Cook copies the report onto the ticket; do not post it there yourself.
+
+Finally: {{gate_instructions}}
+
+Tooling — prefer executing a repro over reasoning it out: use the project's own toolchain from the worktree (run failing paths and unit tests directly), Playwright with its bundled Chromium for UI checks (`npx playwright install chromium` once; `$PREPCOOK_CHROMIUM_PATH` when set), and `ffmpeg`, if present, to pull keyframes from downloaded ticket recordings. Treat any helper script you did not write as a black box: run it with `--help` rather than reading it into context. When you record confidence below high, also pass planning_confidence_reason to `update_issue` — one sentence naming the missing confirmation — and make the single most valuable unanswered question the FIRST line of the next steps in planning.summary, phrased as a direct question to the team."#;
+
+const PATTERN_PLANNING: &str = r#"Ticket: {{ticket_key}} — {{title}}
+
+Ticket description:
+{{description}}
+
+This is a PATTERN REVIEW, not a bug. The knowledge graph has linked many separate root-cause analyses to one recurring class, and the question is why that class keeps happening — not how to fix any single instance of it. Do NOT write an implementation spec, do NOT propose a diff, and do NOT touch code.
 
 Steps:
 1. Read the linked RCAs listed in the description via `kb_list_documents` / `kb_get_document`. Read all of them, not a sample: the argument you are making rests on what they have in common, and a pattern drawn from five of forty is a guess.
@@ -167,7 +226,7 @@ Steps:
 
 Write the report as a single self-contained HTML document at {{spec_path}} in this worktree (inline CSS/JS, no external assets; keep it LEAN — one short style block, default fonts, no JS beyond what the review gate below asks for) with sections: The class, Where it clusters, What makes it possible, Recommendations (each with its coverage against the linked RCAs), Considered and rejected, Open questions.
 
-Record the artifact path on the card with the card's `update_issue` tool (spec_path = "{{spec_path}}"), then record your verdict via `update_issue` planning fields: planning.kind = "investigation", planning.open_questions, planning.confidence (low|medium|high), planning.summary — the summary being the one recommendation you would make if allowed only one.
+Record the artifact path on the card with the card's `update_issue` tool (spec_path = "{{spec_path}}"), then record your verdict via `update_issue` planning fields: planning.kind = "pattern", planning.open_questions, planning.confidence (low|medium|high), planning.summary — the summary being the one recommendation you would make if allowed only one.
 
 Finally, open the human review gate. {{gate_instructions}}
 
@@ -232,7 +291,7 @@ Product findings, and any finding about comments or naming, are written for a hu
 
 Do not modify code, do not commit, do not push, and do not change the ticket's status — a human decides whether it advances."#;
 
-const TRIAGE: &str = r#"You are the follow-up triage analyst for ticket {{ticket_key}} — {{title}}. The work on it has shipped — merged, deployed, or closed out — and a human has since commented on the ticket; your job is to work out what they are seeing and answer them there. Do NOT modify any code, do NOT commit, and do NOT change any ticket status.
+const COMMENT_REPLY: &str = r#"You are the follow-up triage analyst for ticket {{ticket_key}} — {{title}}. The work on it has shipped — merged, deployed, or closed out — and a human has since commented on the ticket; your job is to work out what they are seeing and answer them there. Do NOT modify any code, do NOT commit, and do NOT change any ticket status.
 
 Steps:
 1. Read the ticket description and the FULL comment thread below, and fetch any attached screenshots with the `tracker_get_attachments` tool — the evidence is usually in the images.
@@ -254,7 +313,7 @@ Steps:
 2. For each unlinked document, read it with `kb_get_document`, then link it with `graph_link` to: ONE product_area node, ONE component node when clearly identifiable, and one or two root_cause_class nodes. Every link needs a one-line rationale and a confidence (low|medium|high).
 3. Tag each of these RCAs with process metrics via `kb_tag_document`: exactly ONE origin tag — `origin:regression` when the RCA evidence identifies a recent change/commit that introduced the bug, `origin:dormant` when the flaw is long-standing/latent, or `origin:unclear` when the evidence does not say. Whenever you apply `origin:regression` and the RCA names the offending commit(s), attribute authorship: in the checked-out repo run `git show -s --format='%an <%ae>' <sha>` for the culprit commit and add exactly ONE culprit tag — `culprit:orchestrator` when the author is the orchestrator's own commit identity (author name is `{{bot_name}}`, or the email is a bot address), otherwise `culprit:human`. Skip the culprit tag only when no offending commit can be identified. When the evidence clearly shows the bug could have been caught earlier, also add `detectable-by:code-review`, `detectable-by:qa`, or `detectable-by:automated-tests`. The team counts these to improve process — they are not graph links. Additionally add: exactly ONE `area:<slug>` tag matching the product_area node you linked (lowercase the node name, spaces and slashes become dashes — e.g. `area:sign-in`, `area:reports-scheduled-exports`); exactly ONE `fix-type:code`, `fix-type:config`, `fix-type:prompt` (system-prompt / agent tool-doc edits), or `fix-type:data`; exactly ONE `surface:client`, `surface:backend`, `surface:worker`, `surface:agent`, or `surface:integration` for the deploy unit at fault; `repeat-of:<KEY>` when the RCA cites a prior ticket with the same root cause; and when origin is dormant with an identifiable culprit commit, ONE `dormant-age:<1m`, `dormant-age:<6m`, `dormant-age:<1y`, or `dormant-age:1y+` bucket from the age of that commit at report time.
 4. ATTACH FIRST, INVENT LAST: only call `graph_create_node` (root_cause_class only) when no existing node plausibly fits. Name new nodes generically enough to attract future edges ("stale cache invalidation", not "dashboard cache bug"). Node sprawl destroys the graph's value — when torn between an existing node and a new one, pick the existing node with lower confidence.
-5. Finish with a summary: links made per document, new nodes created (with names), tag counts (origin:*, culprit:*, detectable-by:*, area:*, fix-type:*, surface:*, dormant-age:*, plus any repeat-of hits), and call out any node now linked to 5+ documents as an investigation candidate.
+5. Finish with a summary: links made per document, new nodes created (with names), tag counts (origin:*, culprit:*, detectable-by:*, area:*, fix-type:*, surface:*, dormant-age:*, plus any repeat-of hits), and call out any node now linked to 5+ documents as a pattern-review candidate.
 
 Seeded product_area/component nodes are managed by the team — if none fit an RCA, say so in the summary instead of forcing a link."#;
 
@@ -359,16 +418,17 @@ mod tests {
             [
                 "bug:executing",
                 "bug:planning",
+                COMMENT_REPLY_PLAYBOOK_KEY,
                 "epic:executing",
                 "epic:planning",
                 INVESTIGATION_PLAYBOOK_KEY,
+                PATTERN_PLAYBOOK_KEY,
                 RCA_ANALYSIS_PLAYBOOK_KEY,
                 REVIEWING_PLAYBOOK_KEY,
                 "story:executing",
                 "story:planning",
                 "subtask:executing",
                 "subtask:planning",
-                TRIAGE_PLAYBOOK_KEY,
             ]
         );
     }

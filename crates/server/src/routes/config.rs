@@ -169,6 +169,10 @@ async fn update_config(
     // A client that still sends the old Slack keys gets them converted here,
     // not only on the next load: nothing reads them once saved.
     new_config.adopt_legacy_slack();
+    // Settings edits the playbooks under the keys it was served, which are
+    // always the current ones; a body without the marker must not be
+    // migrated again on the next load.
+    new_config.playbook_keys = services::services::config::CURRENT_PLAYBOOK_KEYS;
 
     // Validate git branch prefix
     if !git::is_valid_branch_prefix(&new_config.git_branch_prefix) {

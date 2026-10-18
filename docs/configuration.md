@@ -23,7 +23,8 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.max_launches_per_tick` | `3` | **Max launches per tick**: new agent sessions started per scan, highest priority first. |
 | `orchestrator.autonomy` | `off` | **Autonomy mode**. `full` is Prep mode: passing plans self-approve, verified fixes go to Review, approved reviews go to Push MR. `off` is Chef mode. |
 | `orchestrator.autonomy_review_iterations` | `3` | **Review-fix rounds before escalating**: fix rounds before a card that keeps getting REQUEST CHANGES waits for a person. Applies in both modes. |
-| `orchestrator.investigation_threshold` | `5` | **Investigation threshold**: linked RCAs on one graph node that file an investigation ([rca-graph.md](rca-graph.md#investigations)). |
+| `orchestrator.pattern_threshold` | `5` | **Pattern-review threshold**: linked RCAs on one graph node that file a pattern review ([rca-graph.md](rca-graph.md#pattern-reviews)). Older configs call it `investigation_threshold`, which is still read. |
+| `orchestrator.default_board` | unset (the first board in `project_defaults`) | *File only.* The board `POST /api/cards` files into when the request names none ([api.md](api.md#file-a-card)). |
 | `orchestrator.deployed_retention_days` | unset (off) | **Auto clean-up after**: days a card may sit in Close before it moves to Clean up. |
 | `orchestrator.cleanup_retention_days` | unset (keep) | **Delete after**: days a card may sit in Clean up before it is deleted. Cards with a pinned workspace or a takeover are kept. |
 | `orchestrator.workspace_retention_days` | `30` | **Workspace retention**: days after clean-up before a workspace's records, sessions and logs are deleted. Unset keeps them. |
@@ -56,10 +57,11 @@ written to a ticket ([method.md](method.md#without-a-tracker)).
 | `tracker.poll_secs` | `45` | **Poll interval** of the ticket pickup. |
 | `tracker.status_mapping.planning` | unset (`In Progress`) | **Stage statuses**: where a ticket moves when Plan starts. Plan also assigns the ticket to the agent. |
 | `tracker.status_mapping.executing`, `.reviewing`, `.pushed_mr`, `.done` | unset (no move) | Where a ticket moves when that stage starts; `done` is Clean up. |
+| `tracker.status_mapping.triaged` | unset (no move) | **Triaged**: where an investigation's ticket moves when its card reaches Triaged ([method.md](method.md#investigations)). |
 | `tracker.status_mapping.shipped` | `Merged`, `Deployed to Production`, `Done` | **Shipped statuses**: names that mean the work shipped, for reopen detection and the clean-up sweeps. |
 | `tracker.blocker_priorities` | `P0`, `P1` | **Blocker priorities**: their merge requests are labelled `Blocker` and announced to the notification targets. |
 | `tracker.approvers` | empty (nobody) | **Plan approvers**: who may decide a plan from a ticket comment. |
-| `tracker.type_mapping` | `Bug`→bug, `Story`→story, `Task`→story, `Small Enhancement Request`→story, `Epic`→epic, `Sub-task`→subtask | *File only.* Issue type to work class; unmapped types are stories. |
+| `tracker.type_mapping` | `Bug`→bug, `Story`→story, `Task`→story, `Small Enhancement Request`→story, `Epic`→epic, `Sub-task`→subtask | *File only.* Issue type to work class (`bug`, `investigation`, `story`, `epic`, `subtask`); unmapped types are stories. Map a type such as `Support Question` to `investigation` to have its tickets reproduced and triaged rather than fixed. |
 
 ## Git host and integrations
 
@@ -182,7 +184,7 @@ The board reads no sign-in or OAuth settings: `SELF_HOST_LOCAL_AUTH_EMAIL`,
 | --- | --- | --- |
 | `approvals.in_app_gate` | `lavish` | **Settings → Orchestrator → Plan approvals**. `lavish` puts Approve and Request changes buttons in the plan document; `none` leaves them out and the decision comes from the card, the ticket or the API ([approvals.md](approvals.md)). |
 | `tracker.approvers` | empty | See [Tracker](#tracker). |
-| `PREPCOOK_API_TOKEN` (secret) | unset (bearer access off) | The bearer token the approvals API accepts from scripts. |
+| `PREPCOOK_API_TOKEN` (secret) | unset (bearer access off) | The bearer token the approvals and card APIs accept from scripts and other services ([api.md](api.md)). Filing a card needs it. |
 
 ## Secrets
 
@@ -196,7 +198,8 @@ names the ones its scripts need ([scripts.md](scripts.md#secrets)).
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `playbooks` | the shipped texts | **Settings → Playbooks**, scope Global: the prompt each stage's agent starts from, keyed `<work_class>:<stage>` plus `investigation:planning`, `reviewing`, `triage` and `rca_analysis` ([playbooks.md](playbooks.md)). |
+| `playbooks` | the shipped texts | **Settings → Playbooks**, scope Global: the prompt each stage's agent starts from, keyed `<work_class>:<stage>` (`investigation:planning` among them) plus `pattern:planning`, `reviewing`, `comment_reply` and `rca_analysis` ([playbooks.md](playbooks.md)). |
+| `playbook_keys` | `1` | *Kept by Prep Cook.* Which key names `playbooks` uses. A config without it was saved before `investigation:planning` (the pattern review's text) became `pattern:planning` and `triage` became `comment_reply`; both are renamed, globally and in every board's overrides, the first time it is read. |
 
 ## Per-board overrides
 
@@ -211,7 +214,7 @@ empty inherits the global value.
 | `executor_profile` | unset (inherit) | *File only.* The coding agent for this board. |
 | `autonomy` | unset (inherit) | Autonomy for this board. |
 | `autonomy_review_iterations` | unset (inherit) | Review-fix rounds for this board. |
-| `investigation_threshold` | unset (inherit) | Investigation threshold for this board. |
+| `pattern_threshold` | unset (inherit) | Pattern-review threshold for this board (`investigation_threshold` in older configs). |
 | `deployed_retention` | `inherit` | `off`, or `{ "days": n }`: days in Close before Clean up. |
 | `cleanup_retention` | `inherit` | `off`, or `{ "days": n }`: days in Clean up before deletion. |
 | `tracker.watcher_enabled` | unset (on only for `tracker.project_id`) | **Ticket pickup** for this board. |

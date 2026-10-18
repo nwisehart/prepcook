@@ -14,6 +14,7 @@ use serde_json::Value;
 use services::services::{
     analytics::AnalyticsService,
     approvals::{Approvals, decisions::Decisions},
+    cards::Cards,
     config::{Config, ConfigError},
     container::{ContainerError, ContainerService},
     events::{EventError, EventService},
@@ -114,6 +115,10 @@ pub trait Deployment: Clone + Send + Sync + 'static {
 
     /// Applies plan decisions (see `docs/approvals.md`).
     fn decisions(&self) -> &Decisions;
+
+    /// Makes, reads and converts cards for callers outside the board (see
+    /// `docs/api.md`).
+    fn cards(&self) -> &Cards;
 
     fn remote_client(&self) -> Result<RemoteClient, RemoteClientNotConfigured> {
         Err(RemoteClientNotConfigured)

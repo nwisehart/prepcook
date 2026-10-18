@@ -41,6 +41,8 @@ use uuid::Uuid;
 use self::{
     discord::DiscordNotifier, slack::SlackNotifier, teams::TeamsNotifier, webhook::WebhookNotifier,
 };
+use api_types::{CardOrigin, HarnessOutcome, TriageReport, WorkClass};
+
 use crate::services::{
     config::{Config, NotificationTarget, TargetOrigin},
     integrations::{Descriptor, FieldKind, SecretPrecedence, resolve_secret, secret_name},
@@ -194,6 +196,31 @@ pub struct PlanningEscalation {
     pub next_steps: Vec<String>,
     /// The whole planning summary.
     pub summary: String,
+}
+
+/// What an investigation's reproduction harness showed.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct HarnessRef {
+    /// Worktree-relative path of the harness, when it is still on disk.
+    pub path: Option<String>,
+    pub outcome: HarnessOutcome,
+}
+
+/// An investigation card reached Triaged with its report.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct InvestigationCompleted {
+    pub issue: IssueRef,
+    /// The six sections as fields, plus the whole comment as `markdown`.
+    pub report: TriageReport,
+    /// The RCA as filed in the knowledge store, when it has been.
+    pub rca_url: Option<String>,
+    pub rca_id: Option<Uuid>,
+    pub harness: HarnessRef,
+    /// The level the report's Confidence section opens with.
+    pub confidence: Option<Confidence>,
+    /// Who filed the card through `POST /api/cards`; `None` for a card made
+    /// any other way.
+    pub source: Option<CardOrigin>,
 }
 
 /// Which digest list a section is.
@@ -364,12 +391,25 @@ pub enum Event {
         issue: IssueRef,
         mentions: Vec<Mention>,
     },
+    /// An investigation card finished: reproduced, explained, triaged.
+    InvestigationCompleted(InvestigationCompleted),
+    /// A card's work class was changed (an investigation converted to a bug).
+    CardConverted {
+        issue: IssueRef,
+        from: WorkClass,
+        to: WorkClass,
+        /// Who converted it, as the caller named them.
+        by: String,
+        /// The column the card moved to: `Executing` when the plan carried
+        /// over, `Planning` when it is planned again.
+        column: String,
+    },
 }
 
 impl Event {
     /// Every kind string, in declaration order. A stable contract: routing
     /// (`events` on a target) and the webhook `type` field use these.
-    pub const KINDS: [&'static str; 14] = [
+    pub const KINDS: [&'static str; 16] = [
         "seat_limit_hit",
         "seat_exhausted",
         "seat_expired",
@@ -384,6 +424,8 @@ impl Event {
         "replan_requested",
         "blocker_mr_opened",
         "mention_needs_human",
+        "investigation_completed",
+        "card_converted",
     ];
 
     pub fn kind(&self) -> &'static str {
@@ -402,12 +444,17 @@ impl Event {
             Self::ReplanRequested { .. } => "replan_requested",
             Self::BlockerMrOpened { .. } => "blocker_mr_opened",
             Self::MentionNeedsHuman { .. } => "mention_needs_human",
+            Self::InvestigationCompleted(_) => "investigation_completed",
+            Self::CardConverted { .. } => "card_converted",
         }
     }
 
     pub fn severity(&self) -> Severity {
         match self {
-            Self::SeatRecovered {} | Self::DailyDigest(_) => Severity::Info,
+            Self::SeatRecovered {}
+            | Self::DailyDigest(_)
+            | Self::InvestigationCompleted(_)
+            | Self::CardConverted { .. } => Severity::Info,
             Self::SeatLimitHit { .. }
             | Self::TicketClosedWithOpenMrs { .. }
             | Self::ReplanRequested { .. }
@@ -441,8 +488,10 @@ impl Event {
             | Self::PipelineEscalated { issue, .. }
             | Self::ReplanRequested { issue, .. }
             | Self::BlockerMrOpened { issue, .. }
-            | Self::MentionNeedsHuman { issue, .. } => Some(issue),
+            | Self::MentionNeedsHuman { issue, .. }
+            | Self::CardConverted { issue, .. } => Some(issue),
             Self::PlanningEscalated(escalation) => Some(&escalation.issue),
+            Self::InvestigationCompleted(completed) => Some(&completed.issue),
             Self::SeatLimitHit { .. }
             | Self::SeatExhausted { .. }
             | Self::SeatExpired {}
@@ -496,6 +545,19 @@ impl Event {
             Self::MentionNeedsHuman { issue, .. } => format!(
                 "{}: the agent was mentioned but no session is running",
                 issue.key
+            ),
+            Self::InvestigationCompleted(completed) => format!(
+                "{}: investigation triaged — {}",
+                completed.issue.key,
+                completed.issue.short_title()
+            ),
+            Self::CardConverted {
+                issue, from, to, ..
+            } => format!(
+                "{}: converted from {} to {}",
+                issue.key,
+                from.as_str(),
+                to.as_str()
             ),
         }
     }
@@ -555,6 +617,10 @@ impl Event {
                 mr_url, summary, ..
             } => format!("{summary}\n{mr_url}"),
             Self::MentionNeedsHuman { mentions, .. } => mention_listing(mentions),
+            Self::InvestigationCompleted(completed) => investigation_summary(completed),
+            Self::CardConverted { by, column, .. } => {
+                format!("Converted by {by}; the card is in {column}.")
+            }
         }
     }
 
@@ -581,6 +647,29 @@ pub(crate) const SEAT_EXPIRED_BODY: &str = "Agents can't run until it's re-authe
 
 pub(crate) const REPLAN_DECISION: &str = "A human decides: move the ticket back to Plan (then \
      forward again to re-arm) to re-plan, or reply on the MR if the agent misread the review.";
+
+/// The report's what/why/workaround and the confidence, in plain text.
+pub(crate) fn investigation_summary(completed: &InvestigationCompleted) -> String {
+    let report = &completed.report;
+    let mut out = format!(
+        "**What happens:** {}\n**Why:** {}",
+        clip(report.what_happens.trim(), 400),
+        clip(report.why.trim(), 700)
+    );
+    if !report.workaround.trim().is_empty() {
+        out.push_str(&format!(
+            "\n**Workaround:** {}",
+            clip(report.workaround.trim(), 300)
+        ));
+    }
+    if !report.confidence.trim().is_empty() {
+        out.push_str(&format!(
+            "\n**Confidence:** {}",
+            clip(report.confidence.trim(), 200)
+        ));
+    }
+    out
+}
 
 /// "!12, !13".
 pub(crate) fn mr_list(numbers: &[i64]) -> String {
@@ -1245,13 +1334,51 @@ pub(crate) mod test_support {
                 summary: "Export drops the last row".to_string(),
             },
             Event::MentionNeedsHuman {
-                issue,
+                issue: issue.clone(),
                 mentions: vec![Mention {
                     author: "Ada".to_string(),
                     text: "can you take a look?".to_string(),
                 }],
             },
+            Event::InvestigationCompleted(investigation_completed()),
+            Event::CardConverted {
+                issue,
+                from: WorkClass::Investigation,
+                to: WorkClass::Bug,
+                by: "Ada".to_string(),
+                column: "Executing".to_string(),
+            },
         ]
+    }
+
+    pub fn investigation_completed() -> InvestigationCompleted {
+        InvestigationCompleted {
+            issue: issue(),
+            report: TriageReport {
+                what_happens: "Exports stop one row short.".to_string(),
+                location: "Reports → Export, CSV only.".to_string(),
+                why: "The pager drops the last page.".to_string(),
+                scope: "Every CSV export over 500 rows; a defect.".to_string(),
+                workaround: "Export as XLSX.".to_string(),
+                confidence: "High — reproduced on main.".to_string(),
+                markdown: "TRIAGE REPORT\n\n## What happens\nExports stop one row short."
+                    .to_string(),
+            },
+            rca_url: Some(
+                "https://prepcook.example.com/api/knowledge/documents/d/html".to_string(),
+            ),
+            rca_id: Some(Uuid::nil()),
+            harness: HarnessRef {
+                path: Some(".repro/BUG-7/repro.mjs".to_string()),
+                outcome: HarnessOutcome::Reproduced,
+            },
+            confidence: Some(Confidence::High),
+            source: Some(CardOrigin {
+                kind: api_types::OriginKind::Tammy,
+                reference: "https://example.slack.com/archives/C1/p1".to_string(),
+                reporter: Some("Grace".to_string()),
+            }),
+        }
     }
 }
 
@@ -1290,8 +1417,76 @@ mod tests {
                 "replan_requested",
                 "blocker_mr_opened",
                 "mention_needs_human",
+                "investigation_completed",
+                "card_converted",
             ]
         );
+    }
+
+    /// The `investigation_completed` payload is a contract a support agent
+    /// reads (`docs/notifications.md`); every field is present, null or not.
+    #[test]
+    fn the_investigation_payload_has_the_documented_shape() {
+        let event = Event::InvestigationCompleted(investigation_completed());
+        assert_eq!(event.severity(), Severity::Info);
+        let data = event.data();
+        let keys: Vec<&str> = data
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        let mut sorted = keys.clone();
+        sorted.sort_unstable();
+        assert_eq!(
+            sorted,
+            [
+                "confidence",
+                "harness",
+                "issue",
+                "rca_id",
+                "rca_url",
+                "report",
+                "source"
+            ]
+        );
+        let mut report: Vec<&str> = data["report"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        report.sort_unstable();
+        assert_eq!(
+            report,
+            [
+                "confidence",
+                "markdown",
+                "scope",
+                "what_happens",
+                "where",
+                "why",
+                "workaround"
+            ]
+        );
+        assert_eq!(data["harness"]["outcome"], "reproduced");
+        assert_eq!(data["harness"]["path"], ".repro/BUG-7/repro.mjs");
+        assert_eq!(data["confidence"], "high");
+        assert_eq!(data["source"]["kind"], "tammy");
+        assert_eq!(
+            data["source"]["ref"],
+            "https://example.slack.com/archives/C1/p1"
+        );
+        assert_eq!(data["source"]["reporter"], "Grace");
+        assert_eq!(data["issue"]["key"], "BUG-7");
+
+        let converted = every_event().pop().unwrap();
+        assert_eq!(converted.kind(), "card_converted");
+        assert_eq!(converted.severity(), Severity::Info);
+        let data = converted.data();
+        assert_eq!(data["from"], "investigation");
+        assert_eq!(data["to"], "bug");
+        assert_eq!(data["column"], "Executing");
     }
 
     #[test]

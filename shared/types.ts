@@ -439,7 +439,7 @@ comment?: string,
  */
 by?: string, };
 
-export type WorkClass = "bug" | "story" | "epic" | "subtask";
+export type WorkClass = "bug" | "investigation" | "story" | "epic" | "subtask";
 
 export type JiraRef = { 
 /**
@@ -805,6 +805,54 @@ branch: string, requested_at: string, finished_at?: string | null,
  */
 result?: string | null, };
 
+export type OriginKind = "tammy" | "incident" | "api";
+
+export type CardOrigin = { kind: OriginKind, 
+/**
+ * The filer's own reference: a thread URL, an incident id.
+ */
+ref: string, 
+/**
+ * The person the filer was acting for, as it names them.
+ */
+reporter?: string | null, };
+
+export type CardAttachment = { name: string, url: string, };
+
+export type TriageReport = { what_happens: string, where: string, why: string, scope: string, workaround: string, 
+/**
+ * The Confidence section as written: the level and its one-line reason.
+ */
+confidence: string, 
+/**
+ * The whole comment.
+ */
+markdown: string, };
+
+export type HarnessOutcome = "reproduced" | "not_reproduced" | "unknown" | "missing";
+
+export type HarnessRecord = { 
+/**
+ * Worktree-relative path of the harness, when it is still on disk.
+ */
+path?: string | null, outcome: HarnessOutcome, };
+
+export type TriageRecord = { report: TriageReport, confidence?: ConfidenceLevel | null, harness?: HarnessRecord | null, 
+/**
+ * The card comment the report was read from.
+ */
+comment_id?: string | null, recorded_at: string, 
+/**
+ * Set once `investigation_completed` has gone out, so it goes out once.
+ */
+notified_at?: string | null, 
+/**
+ * Set once the report is on the tracker ticket.
+ */
+tracker_posted_at?: string | null, };
+
+export type ConversionRecord = { from: WorkClass, to: WorkClass, by: string, at: string, };
+
 export type IssueExtMetadata = { 
 /**
  * Planning-stage outcome; see [`PlanningVerdict`].
@@ -820,13 +868,34 @@ playbook_started_at?: string | null, work_class?: WorkClass | null, jira?: JiraR
  */
 epic_key?: string | null, 
 /**
- * Name of the RCA-graph node this ticket was raised to investigate. Its
- * presence is what marks a ticket as an investigation: the work is to
+ * Name of the RCA-graph node this ticket was raised to review. Its
+ * presence is what marks a ticket as a pattern review: the work is to
  * explain why a class of bug recurs and recommend what would stop it, not
- * to fix one instance, so it takes a different playbook and never reaches
- * the implementing stages.
+ * to fix one instance, so it takes the `pattern:planning` playbook and
+ * never reaches the implementing stages.
  */
-investigation_node?: string | null, spec?: SpecRef | null, 
+pattern_node?: string | null, 
+/**
+ * Who filed the card through `POST /api/cards`, shown on the card.
+ */
+origin?: CardOrigin | null, 
+/**
+ * Files the filer attached by URL.
+ */
+attachments?: Array<CardAttachment>, 
+/**
+ * Whatever else the filer passed as `metadata`, kept apart so it can
+ * never stand in for a workflow key.
+ */
+external?: JsonValue | null, 
+/**
+ * An investigation's finished triage; see [`TriageRecord`].
+ */
+triage?: TriageRecord | null, 
+/**
+ * Every change of work class, oldest first; see [`ConversionRecord`].
+ */
+conversions?: Array<ConversionRecord>, spec?: SpecRef | null, 
 /**
  * Merge request URL once pushed.
  */
@@ -860,6 +929,82 @@ verify?: VerifyState | null,
  * [`ApprovalRecord`].
  */
 approvals?: Array<ApprovalRecord>, };
+
+export type CreateCardRequest = { 
+/**
+ * The board; defaults to `orchestrator.default_board`, else the first
+ * configured board.
+ */
+project_id?: string, title: string, 
+/**
+ * Markdown.
+ */
+description?: string, 
+/**
+ * `investigation`, `bug` or `story`.
+ */
+work_class: WorkClass, origin: CardOrigin, attachments: Array<CardAttachment>, 
+/**
+ * Anything else the filer wants kept with the card; stored under
+ * `external` in its metadata.
+ */
+metadata?: JsonValue, 
+/**
+ * `true` places the card in Plan, where the orchestrator picks it up;
+ * `false` (the default) leaves it in To Do.
+ */
+start: boolean, };
+
+export type CreatedCard = { id: string, 
+/**
+ * The card on the board.
+ */
+url: string, 
+/**
+ * The card's board key (`PC-12`).
+ */
+key: string, };
+
+export type ConvertCardRequest = { 
+/**
+ * `bug` or `story`.
+ */
+work_class: WorkClass, 
+/**
+ * Who is converting, as the caller names them.
+ */
+by?: string, };
+
+export type ConvertedCard = { id: string, from: WorkClass, to: WorkClass, 
+/**
+ * The column the card is in now.
+ */
+column: string, 
+/**
+ * True when the RCA and harness counted as the plan and the card went
+ * straight to Executing.
+ */
+plan_carried_over: boolean, };
+
+export type CardView = { id: string, key: string, title: string, url: string, project_id: string, 
+/**
+ * Where the card is in the workflow: `backlog`, `planning`, `triaged`,
+ * `executing`, `reviewing`, `pushed_mr`, `closed`, `cleanup`, or `other`
+ * for a column Prep Cook does not know.
+ */
+status: string, 
+/**
+ * The column's name as the board shows it.
+ */
+column: string, work_class: WorkClass | null, 
+/**
+ * The investigation's triage report, once it has one.
+ */
+report: TriageReport | null, confidence: ConfidenceLevel | null, harness: HarnessRecord | null, comments: number, 
+/**
+ * The RCA in the knowledge store, when one is filed for the card.
+ */
+rca_id: string | null, origin: CardOrigin | null, };
 
 export type LinkPrToIssueRequest = { pr_url: string, pr_number: number, base_branch: string, };
 
@@ -945,7 +1090,13 @@ tracker: TrackerConfig,
 /**
  * Stage playbooks keyed by "{work_class}:{stage}"; see default_playbooks.
  */
-playbooks: { [key in string]?: string }, worktree_pool: WorktreePoolConfig, orchestrator: OrchestratorConfig, 
+playbooks: { [key in string]?: string }, 
+/**
+ * Which playbook key names `playbooks` (and every board's overrides) are
+ * in; see [`CURRENT_PLAYBOOK_KEYS`]. Absent in configs saved before the
+ * keys were renamed, which is how those are recognised.
+ */
+playbook_keys: number, worktree_pool: WorktreePoolConfig, orchestrator: OrchestratorConfig, 
 /**
  * The Sentry connector and merge-request reviewer settings.
  */
@@ -1054,6 +1205,10 @@ export type TrackerKind = "jira" | "github_issues" | "linear";
 
 export type StatusMapping = { planning: string | null, executing: string | null, reviewing: string | null, pushed_mr: string | null, 
 /**
+ * Where an investigation's ticket goes when its card reaches Triaged.
+ */
+triaged: string | null, 
+/**
  * Where the ticket goes when the card reaches Clean-up.
  */
 done: string | null, 
@@ -1092,12 +1247,18 @@ deployed_retention_days: number | null,
  */
 cleanup_retention_days: number | null, 
 /**
- * RCA-graph investigation threshold: a node with this many linked RCA
- * documents (and no investigation story yet) fires a P2
- * `[Investigation]` Jira story imported into To Do. Re-arms after this
- * many NEW edges accumulate past the fire point.
+ * RCA-graph pattern-review threshold: a node with this many linked RCA
+ * documents (and no pattern review filed yet) files a P2 `[Pattern]`
+ * story, imported into To Do. Re-arms after this many NEW edges
+ * accumulate past the fire point. Also read from
+ * `investigation_threshold`, the name older configs saved it under.
  */
-investigation_threshold: number, 
+pattern_threshold: number, 
+/**
+ * The board `POST /api/cards` files into when the request names none.
+ * Unset: the first board under `project_defaults`.
+ */
+default_board: string | null, 
 /**
  * Delete workspace records whose worktree is already gone and which have
  * been idle this many days. Nothing else prunes them: cleanup removes the
@@ -1196,10 +1357,11 @@ deployed_retention: RetentionOverride,
  */
 cleanup_retention: RetentionOverride, 
 /**
- * RCA-graph investigation threshold for this board; smaller boards need
- * a lower bar than the global default to ever fire one.
+ * RCA-graph pattern-review threshold for this board; smaller boards need
+ * a lower bar than the global default to ever fire one. Also read from
+ * `investigation_threshold`, the name older configs saved it under.
  */
-investigation_threshold: number | null, 
+pattern_threshold: number | null, 
 /**
  * The staging-deploy watch: records when each merged change reaches the
  * environment this job deploys. `None` turns the watch off.

@@ -95,16 +95,19 @@ use crate::services::{
         self, CardStage, Decision, DecisionCard, DecisionError, DecisionHost, DecisionRequest,
         DecisionSource,
     },
+    cards::{CardError, CardHost},
     config::{
-        AutonomyMode, Config, DEFAULT_PR_DESCRIPTION_PROMPT, EffectiveProjectSettings,
-        INVESTIGATION_PLAYBOOK_KEY, OrchestratorMode, RCA_ANALYSIS_PLAYBOOK_KEY,
-        REVIEWING_PLAYBOOK_KEY, StatusMapping, TRIAGE_PLAYBOOK_KEY, TrackerConfig,
+        AutonomyMode, COMMENT_REPLY_PLAYBOOK_KEY, Config, DEFAULT_PR_DESCRIPTION_PROMPT,
+        EffectiveProjectSettings, INVESTIGATION_PLAYBOOK_KEY, OrchestratorMode,
+        PATTERN_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY, StatusMapping,
+        TrackerConfig,
     },
     container::{ContainerError, ContainerService},
     daily, jira_watcher,
     notifications::{
-        self, Confidence, Digest, DigestItem, DigestSectionId, Event, IssueRef, Mention,
-        NotificationSource, PlanKind, PlanningEscalation, ThreadRef,
+        self, Confidence, Digest, DigestItem, DigestSectionId, Event, HarnessRef,
+        InvestigationCompleted, IssueRef, Mention, NotificationSource, PlanKind,
+        PlanningEscalation, ThreadRef,
     },
     playbook_context::{self, PlaybookContext},
     remote_client::{RemoteClient, RemoteClientError},
@@ -169,6 +172,11 @@ const TAKEN_OVER_TAG_NAME: &str = "taken-over";
 /// asking for changes within it, i.e. the ticket needs re-planning by a human.
 const NEEDS_REPLAN_TAG_NAME: &str = "needs-replan";
 
+/// Tag on an investigation card whose report is in but whose board has no
+/// Triaged column to move it to. The column is never created on a board's
+/// behalf: adding one is the board owner's call.
+const NEEDS_COLUMN_TAG_NAME: &str = "needs-column";
+
 /// How long a ticket's answer may stay identical before the duration becomes
 /// the news.
 ///
@@ -221,7 +229,7 @@ const STAGING_WATCH_CARD_CAP: usize = 50;
 /// naming them in the note is the honest outcome.
 const REVIEWER_BLAME_DEPTH: usize = 5;
 
-/// Linked-RCA lines carried into an [Investigation] story's description.
+/// Linked-RCA lines carried into a [Pattern] story's description.
 ///
 /// The knowledge graph only grows, so this list has no ceiling of its own: a
 /// node that reached the low hundreds pushed the description past Jira's
@@ -237,7 +245,7 @@ const EVIDENCE_LINE_CHARS: usize = 240;
 /// Characters kept from a graph node's own description in the story.
 const NODE_DESCRIPTION_CHARS: usize = 1_500;
 
-/// Characters of the node name kept in an [Investigation] story's summary.
+/// Characters of the node name kept in a [Pattern] story's summary.
 /// Jira rejects a summary over 255; the fixed scaffolding around the name is
 /// about 45, so this leaves room for a long `kind` label and edge count.
 const STORY_SUMMARY_NAME_CHARS: usize = 180;
@@ -781,6 +789,10 @@ enum StageOrchestratorError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Stage {
     Planning,
+    /// Where an investigation card stops with its triage report. Terminal: the
+    /// orchestrator does nothing to a card here; converting it to a bug moves
+    /// it on.
+    Triaged,
     Executing,
     Reviewing,
     PushedMr,
@@ -792,6 +804,7 @@ impl Stage {
     fn key(self) -> &'static str {
         match self {
             Stage::Planning => "planning",
+            Stage::Triaged => "triaged",
             Stage::Executing => "executing",
             Stage::Reviewing => "reviewing",
             Stage::PushedMr => "pushed_mr",
@@ -802,6 +815,7 @@ impl Stage {
     fn title(self) -> &'static str {
         match self {
             Stage::Planning => "Planning",
+            Stage::Triaged => "Triaged",
             Stage::Executing => "Executing",
             Stage::Reviewing => "Reviewing",
             Stage::PushedMr => "Pushed MR",
@@ -817,6 +831,8 @@ impl Stage {
         };
         if matches(&["plan", "planning"]) {
             Some(Stage::Planning)
+        } else if matches(&["triaged"]) {
+            Some(Stage::Triaged)
         } else if matches(&["execute", "executing"]) {
             Some(Stage::Executing)
         } else if matches(&["review", "reviewing"]) {
@@ -1151,7 +1167,8 @@ fn eob_state(
     reviewer: Option<&str>,
 ) -> Option<EobState> {
     match stage {
-        Stage::Cleanup => None,
+        // An investigation's report is already on the ticket.
+        Stage::Cleanup | Stage::Triaged => None,
         Stage::Executing => Some(EobState::BuildingFix),
         Stage::Reviewing => Some(EobState::AutomatedReview),
         Stage::Planning => {
@@ -1368,8 +1385,9 @@ fn classify(
     stalled_for: Option<u32>,
 ) -> DigestSection {
     // Clean-up is the terminal column: its cards are finished, and the
-    // retention sweeps own what happens to them next.
-    if stage == Stage::Cleanup {
+    // retention sweeps own what happens to them next. Triaged is an
+    // investigation's end, and waits on nobody.
+    if matches!(stage, Stage::Cleanup | Stage::Triaged) {
         return DigestSection::InFlight;
     }
     let open = pull_requests.contains(&PullRequestStatus::Open);
@@ -1429,13 +1447,12 @@ fn parked_on_a_question(planning: Option<&api_types::PlanningVerdict>) -> bool {
 }
 
 fn work_class_label(work_class: WorkClass) -> &'static str {
-    match work_class {
-        WorkClass::Bug => "bug",
-        WorkClass::Story => "story",
-        WorkClass::Epic => "epic",
-        WorkClass::Subtask => "subtask",
-    }
+    work_class.as_str()
 }
+
+/// Why an investigation card never clears the Executing gate.
+const INVESTIGATION_GATE_REASON: &str =
+    "investigation cards do not execute; convert to a bug first";
 
 /// Local mirror of the remote Planning → Executing gate: specs need zero open
 /// questions, RCAs need high confidence, and BOTH additionally require a
@@ -1450,9 +1467,12 @@ fn gate_block_reason(work_class: WorkClass, metadata: &IssueExtMetadata) -> Opti
     if executing_gate_passes(work_class, metadata) {
         return None;
     }
-    if metadata.investigation_node.is_some() {
+    if work_class == WorkClass::Investigation {
+        return Some(INVESTIGATION_GATE_REASON.to_string());
+    }
+    if metadata.pattern_node.is_some() {
         return Some(
-            "an investigation ends at its report — a human decides what the recommendations become"
+            "a pattern review ends at its report — a human decides what the recommendations become"
                 .to_string(),
         );
     }
@@ -1460,7 +1480,7 @@ fn gate_block_reason(work_class: WorkClass, metadata: &IssueExtMetadata) -> Opti
         return Some("no planning verdict has been recorded".to_string());
     };
     let default_kind = match work_class {
-        WorkClass::Bug => "rca",
+        WorkClass::Bug | WorkClass::Investigation => "rca",
         _ => "spec",
     };
     Some(match planning.kind.as_deref().unwrap_or(default_kind) {
@@ -1484,17 +1504,17 @@ fn gate_block_reason(work_class: WorkClass, metadata: &IssueExtMetadata) -> Opti
 }
 
 fn executing_gate_passes(work_class: WorkClass, metadata: &IssueExtMetadata) -> bool {
-    // An investigation ends at its report. Enforced on the card rather than on
-    // the recorded planning kind, so the ticket cannot advance because an agent
-    // filed its verdict as a spec.
-    if metadata.investigation_node.is_some() {
+    // An investigation and a pattern review both end at their report.
+    // Enforced on the card rather than on the recorded planning kind, so the
+    // ticket cannot advance because an agent filed its verdict as a spec.
+    if work_class == WorkClass::Investigation || metadata.pattern_node.is_some() {
         return false;
     }
     let Some(planning) = &metadata.planning else {
         return false;
     };
     let default_kind = match work_class {
-        WorkClass::Bug => "rca",
+        WorkClass::Bug | WorkClass::Investigation => "rca",
         _ => "spec",
     };
     let verdict_passes = match planning.kind.as_deref().unwrap_or(default_kind) {
@@ -1519,12 +1539,7 @@ fn jira_key_for(issue: &Issue, metadata: &IssueExtMetadata) -> String {
 
 /// The card's board page, for links in notifications.
 fn card_url(issue: &Issue) -> String {
-    format!(
-        "{}/projects/{}/issues/{}",
-        public_ui_base(),
-        issue.project_id,
-        issue.id
-    )
+    crate::services::cards::card_url(issue.project_id, issue.id)
 }
 
 /// The ticket a notification is about.
@@ -1582,9 +1597,13 @@ fn launch_plan(
             // been resolved into it by now).
             let Some(work_class) = metadata.work_class else {
                 return LaunchPlan::Skip(Some(
-                    "no work class — tag the card bug, story, epic or subtask".to_string(),
+                    "no work class — tag the card bug, investigation, story, epic or subtask"
+                        .to_string(),
                 ));
             };
+            if stage == Stage::Executing && work_class == WorkClass::Investigation {
+                return LaunchPlan::Skip(Some(INVESTIGATION_GATE_REASON.to_string()));
+            }
             // The remote server enforces the same gate on the column
             // transition, so skip silently instead of attempting a launch it
             // would reject.
@@ -1593,11 +1612,13 @@ fn launch_plan(
                     "planning gate not passed (verdict + Lavish approval required)".to_string(),
                 ));
             }
-            // An investigation asks why a class of bug recurs, so it takes its
+            // A pattern review asks why a class of bug recurs, so it takes its
             // own planning playbook whatever work class the ticket was filed
-            // under.
-            let playbook_key = if stage == Stage::Planning && metadata.investigation_node.is_some()
-            {
+            // under. An investigation card's own key is its class's:
+            // `investigation:planning`.
+            let playbook_key = if stage == Stage::Planning && metadata.pattern_node.is_some() {
+                PATTERN_PLAYBOOK_KEY.to_string()
+            } else if stage == Stage::Planning && work_class == WorkClass::Investigation {
                 INVESTIGATION_PLAYBOOK_KEY.to_string()
             } else {
                 format!("{}:{}", work_class_label(work_class), stage.key())
@@ -1606,6 +1627,15 @@ fn launch_plan(
                 Some(template) => LaunchPlan::Launch(Some(template.clone())),
                 None => LaunchPlan::Skip(Some(format!("no playbook '{playbook_key}' configured"))),
             }
+        }
+        // Terminal: nothing runs here.
+        Stage::Triaged => LaunchPlan::Skip(None),
+        // An investigation never has a branch to review or push; a card
+        // dragged here by hand is left alone rather than reviewed.
+        Stage::Reviewing | Stage::PushedMr
+            if metadata.work_class == Some(WorkClass::Investigation) =>
+        {
+            LaunchPlan::Skip(Some(INVESTIGATION_GATE_REASON.to_string()))
         }
         Stage::Reviewing => {
             if !in_workflow {
@@ -1661,26 +1691,11 @@ fn tracked_key(tracker_configured: bool, metadata: &IssueExtMetadata) -> Option<
 }
 
 /// The work class a card's tags name: a card made on the board has no
-/// work class in its metadata, and its `bug`, `story`, `epic` or `subtask`
-/// tag is how a person says which playbook it takes. The first match in
-/// that order wins, as in the board's own playbook resolution.
+/// work class in its metadata, and its `bug`, `investigation`, `story`, `epic`
+/// or `subtask` tag is how a person says which playbook it takes. The first
+/// match in that order wins, as in the board's own playbook resolution.
 fn work_class_from_tag_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<WorkClass> {
-    let names: Vec<String> = names
-        .into_iter()
-        .map(|name| name.trim().to_ascii_lowercase())
-        .collect();
-    [
-        WorkClass::Bug,
-        WorkClass::Story,
-        WorkClass::Epic,
-        WorkClass::Subtask,
-    ]
-    .into_iter()
-    .find(|work_class| {
-        names
-            .iter()
-            .any(|name| name == work_class_label(*work_class))
-    })
+    WorkClass::from_tag_names(names)
 }
 
 /// Where planning's spec/RCA artifact sits in the worktree. Planning
@@ -1875,7 +1890,7 @@ fn interpolate_playbook(
             metadata.epic_key.clone().unwrap_or_default(),
         ),
     ]);
-    context.fill(template, card)
+    context.fill_for_class(template, card, metadata.work_class)
 }
 
 /// Appends the reasons a re-plan from the card or the API left for the next
@@ -1894,6 +1909,52 @@ fn with_replan_feedback(prompt: String, stage: Stage, metadata: &IssueExtMetadat
              account: the previous plan was rejected for this reason."
         ),
         _ => prompt,
+    }
+}
+
+/// The newest `TRIAGE REPORT` comment posted since `since` (the claim that
+/// started this planning run), parsed. A report from an earlier run of the
+/// same card — before a re-plan — does not count.
+fn latest_triage_report(
+    comments: &[api_types::IssueComment],
+    since: Option<chrono::DateTime<Utc>>,
+) -> Option<(&api_types::IssueComment, api_types::TriageReport)> {
+    comments
+        .iter()
+        .filter(|comment| since.is_none_or(|at| comment.created_at > at))
+        .filter_map(|comment| {
+            api_types::parse_triage_report(&comment.message).map(|report| (comment, report))
+        })
+        .max_by_key(|(comment, _)| comment.created_at)
+}
+
+/// The newest `REPRODUCTION:` comment posted since `since`.
+fn latest_reproduction(
+    comments: &[api_types::IssueComment],
+    since: Option<chrono::DateTime<Utc>>,
+) -> Option<&str> {
+    comments
+        .iter()
+        .filter(|comment| since.is_none_or(|at| comment.created_at > at))
+        .filter(|comment| comment.message.trim_start().starts_with("REPRODUCTION:"))
+        .max_by_key(|comment| comment.created_at)
+        .map(|comment| comment.message.as_str())
+}
+
+/// The card's metadata blob with `triage` set, every other key untouched.
+fn with_triage(blob: &Value, triage: &api_types::TriageRecord) -> Value {
+    IssueExtMetadata {
+        triage: Some(triage.clone()),
+        ..Default::default()
+    }
+    .merge_into(blob)
+}
+
+fn notification_confidence(level: ConfidenceLevel) -> Confidence {
+    match level {
+        ConfidenceLevel::Low => Confidence::Low,
+        ConfidenceLevel::Medium => Confidence::Medium,
+        ConfidenceLevel::High => Confidence::High,
     }
 }
 
@@ -4231,9 +4292,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         Ok(())
     }
 
-    /// RCA knowledge-graph automation (K3 of
-    /// docs/plans/rca-knowledge-graph-plan.md): fires threshold
-    /// investigations and keeps the analysis agent fed with unanalyzed RCAs.
+    /// RCA knowledge-graph automation: files a pattern review when a node
+    /// crosses the threshold, and keeps the analysis agent fed with
+    /// unanalyzed RCAs (see `docs/rca-graph.md`).
     #[allow(clippy::too_many_arguments)]
     async fn scan_knowledge(
         &self,
@@ -4245,9 +4306,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         last_attempts: &mut HashMap<Uuid, Instant>,
     ) -> Result<(), StageOrchestratorError> {
         let project_id = settings.project_id;
-        let threshold = settings.investigation_threshold.max(1) as i64;
+        let threshold = settings.pattern_threshold.max(1) as i64;
 
-        // ── 1. Threshold → [Investigation] story ──────────────────────────
+        // ── 1. Threshold → [Pattern] story ────────────────────────────────
         // Deterministic and stamped: fires once per wave, re-arming only
         // after `threshold` NEW edges accumulate past the fire point.
         let nodes = client.list_kb_nodes(project_id).await?.nodes;
@@ -4324,7 +4385,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 STORY_SUMMARY_NAME_CHARS,
             );
             let story_summary = format!(
-                "[Investigation] {node_label}: recurring {kind_label} across {} bugs",
+                "[Pattern] {node_label}: recurring {kind_label} across {} bugs",
                 node.edge_count
             );
             let description = format!(
@@ -4340,18 +4401,18 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 node.name,
                 node.investigation_jira_key
                     .as_deref()
-                    .map(|prior| format!(" (a prior investigation exists: {prior})"))
+                    .map(|prior| format!(" (a prior pattern review exists: {prior})"))
                     .unwrap_or_default(),
                 evidence.join("\n"),
             );
 
             // Boards can live in different tracker projects; file the
-            // investigation story where this board's tickets live. Without a
-            // tracker the board card is the investigation's only record.
-            let tracker = self.configured_tracker("investigation story").await;
+            // pattern-review story where this board's tickets live. Without a
+            // tracker the board card is the review's only record.
+            let tracker = self.configured_tracker("pattern-review story").await;
             // One node's failure must not abandon the others: `?` here meant a
             // single story the tracker kept rejecting aborted the whole scan on
-            // every tick, so no node got its investigation filed.
+            // every tick, so no node got its pattern review filed.
             // `last_attempts` already backs this node off.
             let filed: Option<(String, String)> = match &tracker {
                 Some(tracker) => {
@@ -4370,7 +4431,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         }
                         Err(e) => {
                             warn!(
-                                "Stage orchestrator: filing the investigation story for node {} \
+                                "Stage orchestrator: filing the pattern-review story for node {} \
                                  failed, continuing the scan: {e}",
                                 node.name
                             );
@@ -4390,7 +4451,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             if let Some(todo_status) = todo_status {
                 let metadata = IssueExtMetadata {
                     work_class: Some(WorkClass::Story),
-                    investigation_node: Some(node.name.clone()),
+                    pattern_node: Some(node.name.clone()),
                     jira: filed.as_ref().map(|(key, url)| JiraRef {
                         key: key.clone(),
                         issue_type: Some("Story".to_string()),
@@ -4414,7 +4475,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         description: Some(card_description),
                         // High on the board, P2 in the tracker, and the two
                         // scales are decoupled on purpose (see
-                        // `board_priority_for`): an investigation is not a
+                        // `board_priority_for`): a pattern review is not a
                         // customer blocker, so raising its tracker priority
                         // would misreport it — but at Medium it queues behind
                         // every bug for ever, which is how six of these came to
@@ -4447,13 +4508,13 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                             .await
                         {
                             warn!(
-                                "Stage orchestrator: could not assign investigation {}: {e}",
+                                "Stage orchestrator: could not assign pattern review {}: {e}",
                                 created.data.simple_id
                             );
                         }
                     }
                     Err(e) => warn!(
-                        "Stage orchestrator: the investigation card for node '{}' could not be \
+                        "Stage orchestrator: the pattern-review card for node '{}' could not be \
                          created: {e}",
                         node.name
                     ),
@@ -4461,7 +4522,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             } else {
                 warn!(
                     "Stage orchestrator: no To Do column in project {project_id}; the \
-                     investigation for node '{}' has no card",
+                     pattern review for node '{}' has no card",
                     node.name
                 );
             }
@@ -4489,7 +4550,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 .await
             {
                 error!(
-                    "Stage orchestrator: investigation {jira_key} was filed but node '{}' could \
+                    "Stage orchestrator: pattern review {jira_key} was filed but node '{}' could \
                      not be stamped ({e}) — it stays armed, so expect a duplicate story until \
                      this is fixed by hand",
                     node.name
@@ -4498,13 +4559,13 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             }
 
             info!(
-                "Stage orchestrator: investigation {jira_key} created for node '{}' ({} edges)",
+                "Stage orchestrator: pattern review {jira_key} created for node '{}' ({} edges)",
                 node.name, node.edge_count
             );
             self.container
                 .notification_service()
                 .notify(
-                    &format!("Investigation created: {jira_key}"),
+                    &format!("Pattern review created: {jira_key}"),
                     &story_summary,
                     None,
                 )
@@ -4701,6 +4762,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         last_attempts: &mut HashMap<Uuid, Instant>,
         launch_budget: &mut u32,
     ) {
+        // Triaged is where an investigation ends: nothing runs there, and
+        // converting the card is what moves it on.
+        if stage == Stage::Triaged {
+            return;
+        }
         let project_id = settings.project_id;
         let mut metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
 
@@ -4738,6 +4804,19 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 // agent here, on the first claimed tick after the stand-up.
                 self.continue_app_launch(client, settings, issue, &metadata, stage)
                     .await;
+                // An investigation finishes on its TRIAGE REPORT comment, in
+                // every autonomy mode: there is no approval to wait for. A
+                // tick that recorded the report leaves the comment gates
+                // below to the next one, for the same reason a decision does.
+                if stage == Stage::Planning
+                    && metadata.work_class == Some(WorkClass::Investigation)
+                    && !takeover_active(&metadata)
+                    && self
+                        .triage_if_reported(client, settings, issue, &metadata)
+                        .await
+                {
+                    return;
+                }
                 // Decisions left as card comments (APPROVE, REQUEST CHANGES:,
                 // REPLAN:) and the PLAN: feedback gate work from any
                 // teammate's machine via the shared board, independent of
@@ -4974,8 +5053,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         // up in the card's worktree before the agent starts. The slot is taken
         // before the claim, so a full runner leaves the card unclaimed in its
         // column and the next tick asks again.
+        let reproduces = match metadata.work_class {
+            Some(WorkClass::Bug) => true,
+            // An investigation reproduces exactly as a bug does, in Planning.
+            Some(WorkClass::Investigation) => stage == Stage::Planning,
+            _ => false,
+        };
         let app_reservation = if matches!(stage, Stage::Planning | Stage::Executing)
-            && metadata.work_class == Some(WorkClass::Bug)
+            && reproduces
             && self.board_has_manifest(settings).await
         {
             match self.container.script_runner().try_reserve() {
@@ -5148,6 +5233,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 .run_cleanup(client, issue, &metadata, &jira_key)
                 .await
                 .map(|summary| (format!("Clean-up done for {jira_key}"), summary, None)),
+            // Returned from at the top: nothing launches in Triaged.
+            Stage::Triaged => return,
         };
 
         match result {
@@ -5393,8 +5480,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             // Reviewing is handled by `handle_review_verdict`, which runs
             // whether or not autonomy is on.
             Stage::Reviewing => Ok(()),
-            // Pushed MR and Clean-up are already fully automated.
-            Stage::PushedMr | Stage::Cleanup => Ok(()),
+            // Pushed MR and Clean-up are already fully automated, and Triaged
+            // is terminal.
+            Stage::PushedMr | Stage::Cleanup | Stage::Triaged => Ok(()),
         };
         if let Err(e) = result {
             warn!(
@@ -5471,6 +5559,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
         let mapping = self.tracker.settings().await.status_mapping;
         let target = match stage {
+            Stage::Triaged => mapping.triaged,
             Stage::Executing => mapping.executing,
             Stage::Reviewing => mapping.reviewing,
             Stage::PushedMr => mapping.pushed_mr,
@@ -5755,6 +5844,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         // stops once execution starts.
         self.poll_jira_comments(client, issue, metadata).await;
 
+        // An investigation has no gate to pass or escalate: its report moves
+        // it to Triaged (see `triage_if_reported`), in every mode.
+        if metadata.work_class == Some(WorkClass::Investigation) {
+            return Ok(());
+        }
         let Some(planning) = &metadata.planning else {
             return Ok(()); // agent still working
         };
@@ -5774,7 +5868,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         let work_class = metadata.work_class.unwrap_or(WorkClass::Story);
         let default_kind = match work_class {
-            WorkClass::Bug => "rca",
+            WorkClass::Bug | WorkClass::Investigation => "rca",
             _ => "spec",
         };
         let kind = planning.kind.as_deref().unwrap_or(default_kind);
@@ -8385,8 +8479,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         let done = match stage {
             // Clean-up runs under takeover and is already the last column;
-            // parking it backwards into Close would undo a human's move.
-            Stage::Cleanup => return,
+            // parking it backwards into Close would undo a human's move. A
+            // triaged card is finished already.
+            Stage::Cleanup | Stage::Triaged => return,
             // Nothing runs in Push MR once the takeover gate is up.
             Stage::PushedMr => true,
             Stage::Planning => {
@@ -8802,6 +8897,282 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 jira_key
             ),
         }
+    }
+
+    /// Finishes an investigation in Planning once its `TRIAGE REPORT` comment
+    /// is on the card: records the report, sends `investigation_completed`
+    /// once, copies the report onto the tracker ticket, and moves the card to
+    /// Triaged. Nothing waits on an approval, in any autonomy mode.
+    ///
+    /// Each step is stamped on the card's `triage` record, so a tick that
+    /// fails part-way resumes where it stopped. Returns whether this tick
+    /// changed the card, so the caller leaves its other gates — which work from
+    /// the snapshot read before — to the next tick.
+    async fn triage_if_reported(
+        &self,
+        client: &RemoteClient,
+        settings: &EffectiveProjectSettings,
+        issue: &Issue,
+        metadata: &IssueExtMetadata,
+    ) -> bool {
+        let project_id = settings.project_id;
+        let jira_key = jira_key_for(issue, metadata);
+        let mut blob = issue.extension_metadata.clone();
+        let mut changed = false;
+
+        let mut triage = match metadata.triage.clone() {
+            Some(triage) => triage,
+            None => {
+                let comments = match client.list_issue_comments(issue.id).await {
+                    Ok(response) => response.issue_comments,
+                    Err(e) => {
+                        warn!(
+                            "Stage orchestrator: reading comments for {}'s triage report failed: {e}",
+                            issue.simple_id
+                        );
+                        return false;
+                    }
+                };
+                let Some((comment, report)) =
+                    latest_triage_report(&comments, metadata.playbook_started_at)
+                else {
+                    return false;
+                };
+                let reproduction = latest_reproduction(&comments, metadata.playbook_started_at);
+                let record = api_types::TriageRecord {
+                    confidence: report.confidence_level(),
+                    harness: Some(api_types::HarnessRecord {
+                        path: self.harness_on_disk(client, issue, &jira_key).await,
+                        outcome: api_types::HarnessOutcome::from_reproduction(reproduction),
+                    }),
+                    report,
+                    comment_id: Some(comment.id),
+                    recorded_at: Utc::now(),
+                    notified_at: None,
+                    tracker_posted_at: None,
+                };
+                blob = with_triage(&blob, &record);
+                if let Err(e) = client
+                    .update_issue(issue.id, &ext_metadata_update(blob.clone()))
+                    .await
+                {
+                    warn!(
+                        "Stage orchestrator: recording {}'s triage report failed: {e}",
+                        issue.simple_id
+                    );
+                    return false;
+                }
+                info!("Stage orchestrator: triage report recorded for {jira_key}");
+                changed = true;
+                record
+            }
+        };
+
+        let mut stamped = false;
+        if triage.notified_at.is_none() {
+            let completed = self
+                .investigation_completed(client, issue, metadata, &triage)
+                .await;
+            self.notifications
+                .send(Some(project_id), Event::InvestigationCompleted(completed))
+                .await;
+            triage.notified_at = Some(Utc::now());
+            stamped = true;
+        }
+        let mut tracker_pending = false;
+        if triage.tracker_posted_at.is_none()
+            && let Some(ticket) = self.tracker_for(issue, metadata, "triage report").await
+        {
+            match ticket
+                .tracker
+                .post_comment(&ticket.key, &secrets::redact(&triage.report.markdown))
+                .await
+            {
+                Ok(()) => {
+                    triage.tracker_posted_at = Some(Utc::now());
+                    stamped = true;
+                }
+                Err(e) => {
+                    // Held in Planning until the ticket has it: once the card
+                    // is in Triaged nothing would try again.
+                    warn!(
+                        "Stage orchestrator: posting {}'s triage report to {} failed (will retry): {e}",
+                        issue.simple_id, ticket.key
+                    );
+                    tracker_pending = true;
+                }
+            }
+        }
+        if stamped {
+            blob = with_triage(&blob, &triage);
+            match client
+                .update_issue(issue.id, &ext_metadata_update(blob))
+                .await
+            {
+                Ok(_) => changed = true,
+                Err(e) => warn!(
+                    "Stage orchestrator: stamping {}'s triage record failed: {e}",
+                    issue.simple_id
+                ),
+            }
+        }
+        if tracker_pending {
+            return changed;
+        }
+        self.move_to_triaged(client, project_id, issue, metadata)
+            .await
+            || changed
+    }
+
+    /// The harness's worktree-relative path, when it is still on disk in the
+    /// card's planning worktree.
+    async fn harness_on_disk(
+        &self,
+        client: &RemoteClient,
+        issue: &Issue,
+        jira_key: &str,
+    ) -> Option<String> {
+        let workspace = self
+            .find_implementation_workspace(client, issue)
+            .await
+            .ok()?;
+        let root = PathBuf::from(workspace.container_ref.as_deref()?);
+        let repos = WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id)
+            .await
+            .ok()?;
+        let relative = format!(".repro/{jira_key}/repro.mjs");
+        repos
+            .iter()
+            .any(|repo| root.join(&repo.name).join(&relative).is_file())
+            .then_some(relative)
+    }
+
+    /// The `investigation_completed` payload for a recorded triage.
+    async fn investigation_completed(
+        &self,
+        client: &RemoteClient,
+        issue: &Issue,
+        metadata: &IssueExtMetadata,
+        triage: &api_types::TriageRecord,
+    ) -> InvestigationCompleted {
+        let mut issue_link = issue_ref(issue, metadata);
+        if let Some(ticket) = self
+            .tracker_for(issue, metadata, "investigation ticket link")
+            .await
+        {
+            issue_link.url = Some(ticket.tracker.issue_url(&ticket.key));
+        }
+        let rca_id = match client
+            .list_kb_documents(issue.project_id, Some("rca"), false)
+            .await
+        {
+            Ok(list) => list
+                .documents
+                .iter()
+                .find(|doc| doc.issue_id == Some(issue.id))
+                .map(|doc| doc.id),
+            Err(e) => {
+                debug!(
+                    "Stage orchestrator: RCA lookup for {} failed: {e}",
+                    issue.simple_id
+                );
+                None
+            }
+        };
+        let harness = triage.harness.clone().unwrap_or(api_types::HarnessRecord {
+            path: None,
+            outcome: api_types::HarnessOutcome::Missing,
+        });
+        InvestigationCompleted {
+            issue: issue_link,
+            report: triage.report.clone(),
+            rca_url: rca_id
+                .map(|id| format!("{}/api/knowledge/documents/{id}/html", public_ui_base())),
+            rca_id,
+            harness: HarnessRef {
+                path: harness.path,
+                outcome: harness.outcome,
+            },
+            confidence: triage.confidence.map(notification_confidence),
+            source: metadata.origin.clone(),
+        }
+    }
+
+    /// Moves a triaged investigation into the Triaged column. A board without
+    /// one keeps the card in Planning, tagged `needs-column`, and says so once
+    /// per card: the column is the board owner's to add. Returns whether the
+    /// card moved.
+    async fn move_to_triaged(
+        &self,
+        client: &RemoteClient,
+        project_id: Uuid,
+        issue: &Issue,
+        metadata: &IssueExtMetadata,
+    ) -> bool {
+        static NEEDS_COLUMN_LOGGED: LazyLock<Mutex<HashSet<Uuid>>> =
+            LazyLock::new(Default::default);
+        let statuses = match client.list_project_statuses(project_id).await {
+            Ok(response) => response.project_statuses,
+            Err(e) => {
+                warn!(
+                    "Stage orchestrator: listing columns to triage {} failed: {e}",
+                    issue.simple_id
+                );
+                return false;
+            }
+        };
+        let Some(triaged) = statuses
+            .iter()
+            .find(|status| Stage::from_status_name(&status.name) == Some(Stage::Triaged))
+        else {
+            if NEEDS_COLUMN_LOGGED.lock().unwrap().insert(issue.id) {
+                warn!(
+                    "Stage orchestrator: {} has its triage report, but board {project_id} has no \
+                     Triaged column; it stays in Planning tagged '{NEEDS_COLUMN_TAG_NAME}' until \
+                     one is added between Plan and Execute",
+                    issue.simple_id
+                );
+                self.link_named_tag(client, project_id, issue, NEEDS_COLUMN_TAG_NAME)
+                    .await;
+            }
+            return false;
+        };
+        let request = UpdateIssueRequest {
+            status_id: Some(triaged.id),
+            title: None,
+            description: None,
+            priority: None,
+            start_date: None,
+            target_date: None,
+            completed_at: None,
+            sort_order: None,
+            parent_issue_id: None,
+            parent_issue_sort_order: None,
+            extension_metadata: None,
+        };
+        if let Err(e) = client.update_issue(issue.id, &request).await {
+            warn!(
+                "Stage orchestrator: moving {} to Triaged failed: {e}",
+                issue.simple_id
+            );
+            return false;
+        }
+        // The tag may predate this process, so it is cleared whether or not
+        // this run put it there.
+        NEEDS_COLUMN_LOGGED.lock().unwrap().remove(&issue.id);
+        self.unlink_named_tag(client, project_id, issue, NEEDS_COLUMN_TAG_NAME)
+            .await;
+        self.post_autonomy_comment(
+            client,
+            issue,
+            "triage: report recorded — moved to Triaged; convert the card to a bug to fix it",
+        )
+        .await;
+        if let Some(ticket) = self.tracker_for(issue, metadata, "stage mirroring").await {
+            self.mirror_stage_to_tracker(Stage::Triaged, &ticket).await;
+        }
+        info!("Stage orchestrator: {} moved to Triaged", issue.simple_id);
+        true
     }
 
     /// Blame-based reviewer picks for a just-created MR. The signal is
@@ -10878,7 +11249,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             last.insert(settings.project_id, Instant::now());
         }
 
-        let Some(template) = settings.playbooks.get(TRIAGE_PLAYBOOK_KEY).cloned() else {
+        let Some(template) = settings.playbooks.get(COMMENT_REPLY_PLAYBOOK_KEY).cloned() else {
             return Ok(());
         };
         let Some(tracker) = self.configured_tracker("comment triage").await else {
@@ -11678,6 +12049,7 @@ fn what_still_runs(stage: Stage) -> &'static str {
         }
         Stage::PushedMr => "The merge request stays as it is for you; nothing advances.",
         Stage::Cleanup => "Clean-up finishes; nothing else runs.",
+        Stage::Triaged => "The triage report is already here; nothing else runs.",
     }
 }
 
@@ -11803,12 +12175,17 @@ pub fn html_to_plaintext(html: &str, cap: usize) -> String {
 /// seeded in the remote's DEFAULT_TAGS so a board looks the same whether the
 /// tag was seeded at project creation or created on demand later.
 fn status_tag_color(tag_name: &str) -> &'static str {
-    if tag_name.eq_ignore_ascii_case(FAILED_TAG_NAME) {
-        "0 84% 60%"
-    } else if tag_name.eq_ignore_ascii_case(TAKEN_OVER_TAG_NAME) {
-        "32 95% 44%"
-    } else {
-        "215 16% 47%"
+    let name = tag_name.trim().to_ascii_lowercase();
+    match name.as_str() {
+        FAILED_TAG_NAME => "0 84% 60%",
+        TAKEN_OVER_TAG_NAME => "32 95% 44%",
+        NEEDS_REPLAN_TAG_NAME | NEEDS_COLUMN_TAG_NAME => "45 93% 47%",
+        "bug" => "355 65% 53%",
+        "investigation" => "188 78% 41%",
+        "story" => "124 82% 30%",
+        "epic" => "271 81% 56%",
+        "subtask" => "205 100% 40%",
+        _ => "215 16% 47%",
     }
 }
 
@@ -11884,7 +12261,7 @@ impl<C: ContainerService + Send + Sync + 'static> DecisionHost for StageOrchestr
             Some(Stage::Executing) => CardStage::Executing,
             Some(Stage::Reviewing) => CardStage::Reviewing,
             Some(Stage::PushedMr) => CardStage::PushedMr,
-            Some(Stage::Cleanup) | None => CardStage::Other,
+            Some(Stage::Cleanup | Stage::Triaged) | None => CardStage::Other,
         };
         let reference = IssueExtMetadata::from_value(&issue.extension_metadata)
             .jira
@@ -11969,6 +12346,177 @@ impl<C: ContainerService + Send + Sync + 'static> DecisionHost for StageOrchestr
     }
 }
 
+impl<C: ContainerService> StageOrchestratorService<C> {
+    fn card_client(&self) -> Result<RemoteClient, CardError> {
+        self.remote_client
+            .clone()
+            .ok_or_else(|| CardError::Unavailable("the board is not connected".to_string()))
+    }
+}
+
+/// A board error as the card API reports it: a request the board refused is
+/// a failure, anything else means the board could not be reached.
+fn card_failure(error: RemoteClientError) -> CardError {
+    match error {
+        RemoteClientError::Http { status, body } if (400..500).contains(&status) => {
+            CardError::Failed(format!(
+                "the board refused the request (HTTP {status}): {body}"
+            ))
+        }
+        other => CardError::Unavailable(other.to_string()),
+    }
+}
+
+/// The orchestrator is also the host the card API runs through: it holds the
+/// board client, the class tags and the notification targets, and its own
+/// user is the one whose cards it works.
+#[async_trait::async_trait]
+impl<C: ContainerService + Send + Sync + 'static> CardHost for StageOrchestratorService<C> {
+    async fn default_board(&self) -> Option<Uuid> {
+        self.config.read().await.default_board()
+    }
+
+    async fn statuses(&self, project_id: Uuid) -> Result<Vec<api_types::ProjectStatus>, CardError> {
+        let client = self.card_client()?;
+        match client.list_project_statuses(project_id).await {
+            Ok(response) => Ok(response.project_statuses),
+            Err(RemoteClientError::Http {
+                status: 403 | 404, ..
+            }) => Err(CardError::UnknownBoard(project_id)),
+            Err(e) => Err(CardError::Unavailable(e.to_string())),
+        }
+    }
+
+    async fn create(
+        &self,
+        request: CreateIssueRequest,
+        work_class: WorkClass,
+    ) -> Result<Issue, CardError> {
+        let client = self.card_client()?;
+        let created = client
+            .create_issue(&request)
+            .await
+            .map_err(card_failure)?
+            .data;
+        // Only cards assigned to this board's user are worked by its
+        // orchestrator; an unassigned card would sit in Plan untouched.
+        match client.profile().await {
+            Ok(profile) => {
+                if let Err(e) = client
+                    .create_issue_assignee(&CreateIssueAssigneeRequest {
+                        id: None,
+                        issue_id: created.id,
+                        user_id: profile.user_id,
+                    })
+                    .await
+                {
+                    warn!(
+                        "Stage orchestrator: could not assign API card {}: {e}",
+                        created.simple_id
+                    );
+                }
+            }
+            Err(e) => warn!(
+                "Stage orchestrator: could not resolve the board user for API card {}: {e}",
+                created.simple_id
+            ),
+        }
+        self.link_named_tag(&client, created.project_id, &created, work_class.as_str())
+            .await;
+        info!(
+            "Stage orchestrator: {} filed through the API as {}",
+            created.simple_id,
+            work_class.as_str()
+        );
+        Ok(created)
+    }
+
+    async fn issue(&self, issue_id: Uuid) -> Result<Option<Issue>, CardError> {
+        let client = self.card_client()?;
+        match client.get_issue(issue_id).await {
+            Ok(issue) => Ok(Some(issue)),
+            Err(RemoteClientError::Http {
+                status: 403 | 404, ..
+            }) => Ok(None),
+            Err(e) => Err(CardError::Unavailable(e.to_string())),
+        }
+    }
+
+    async fn class_from_tags(&self, issue: &Issue) -> Option<WorkClass> {
+        let client = self.remote_client.as_ref()?;
+        self.work_class_from_tags(client, issue).await
+    }
+
+    async fn comment_count(&self, issue: &Issue) -> Result<usize, CardError> {
+        let client = self.card_client()?;
+        client
+            .list_issue_comments(issue.id)
+            .await
+            .map(|response| response.issue_comments.len())
+            .map_err(card_failure)
+    }
+
+    async fn rca_id(&self, issue: &Issue) -> Option<Uuid> {
+        let client = self.remote_client.as_ref()?;
+        client
+            .list_kb_documents(issue.project_id, Some("rca"), false)
+            .await
+            .ok()?
+            .documents
+            .iter()
+            .find(|doc| doc.issue_id == Some(issue.id))
+            .map(|doc| doc.id)
+    }
+
+    async fn write_metadata(&self, issue: &Issue, metadata: Value) -> Result<(), CardError> {
+        self.local_update_issue_metadata(issue.id, metadata)
+            .await
+            .map_err(|e| CardError::Failed(format!("updating the card failed: {e}")))
+    }
+
+    async fn swap_class_tag(&self, issue: &Issue, from: WorkClass, to: WorkClass) {
+        let Some(client) = self.remote_client.as_ref() else {
+            return;
+        };
+        self.unlink_named_tag(client, issue.project_id, issue, from.as_str())
+            .await;
+        self.link_named_tag(client, issue.project_id, issue, to.as_str())
+            .await;
+    }
+
+    async fn move_card(&self, issue: &Issue, status_id: Uuid) -> Result<(), CardError> {
+        let client = self.card_client()?;
+        let request = UpdateIssueRequest {
+            status_id: Some(status_id),
+            title: None,
+            description: None,
+            priority: None,
+            start_date: None,
+            target_date: None,
+            completed_at: None,
+            sort_order: None,
+            parent_issue_id: None,
+            parent_issue_sort_order: None,
+            extension_metadata: None,
+        };
+        client
+            .update_issue(issue.id, &request)
+            .await
+            .map(|_| ())
+            .map_err(|e| CardError::Failed(format!("moving the card failed: {e}")))
+    }
+
+    async fn post_comment(&self, issue: &Issue, text: &str) {
+        if let Some(client) = self.remote_client.as_ref() {
+            post_audit_comment(client, issue.id, &issue.simple_id, text).await;
+        }
+    }
+
+    async fn notify(&self, project_id: Uuid, event: Event) {
+        self.notifications.send(Some(project_id), event).await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use api_types::{JiraRef, PlanningVerdict, SpecRef};
@@ -12018,11 +12566,11 @@ mod tests {
     }
 
     #[test]
-    fn an_investigation_never_clears_the_executing_gate() {
+    fn a_pattern_review_never_clears_the_executing_gate() {
         // Even with a spec-shaped verdict and an approval, which is what an
         // agent would record if it treated the ticket as ordinary work.
         let metadata = IssueExtMetadata {
-            investigation_node: Some("unvalidated data shape assumption".to_string()),
+            pattern_node: Some("unvalidated data shape assumption".to_string()),
             planning: Some(api_types::PlanningVerdict {
                 kind: Some("spec".to_string()),
                 open_questions: Some(0),
@@ -13451,8 +13999,151 @@ mod tests {
             work_class_from_tag_names(["story", "bug"]),
             Some(WorkClass::Bug)
         );
+        // Investigation sits between them.
+        assert_eq!(
+            work_class_from_tag_names(["story", "Investigation"]),
+            Some(WorkClass::Investigation)
+        );
+        assert_eq!(
+            work_class_from_tag_names(["investigation", "bug"]),
+            Some(WorkClass::Bug)
+        );
         assert_eq!(work_class_from_tag_names(["agent-failed"]), None);
         assert_eq!(work_class_from_tag_names([]), None);
+    }
+
+    fn investigation_card() -> IssueExtMetadata {
+        IssueExtMetadata {
+            work_class: Some(WorkClass::Investigation),
+            ..Default::default()
+        }
+    }
+
+    /// Planned exactly as a bug is, with its own playbook; never executed,
+    /// reviewed or pushed, whatever its verdict says.
+    #[test]
+    fn an_investigation_plans_and_then_stops() {
+        let playbooks = crate::services::config::playbooks::default_playbooks();
+        assert_eq!(
+            launch_plan(Stage::Planning, &investigation_card(), &playbooks),
+            LaunchPlan::Launch(playbooks.get(INVESTIGATION_PLAYBOOK_KEY).cloned())
+        );
+        let mut approved = investigation_card();
+        approved.planning = Some(api_types::PlanningVerdict {
+            kind: Some("rca".to_string()),
+            confidence: Some(ConfidenceLevel::High),
+            ..Default::default()
+        });
+        approved.spec = Some(SpecRef {
+            path: Some("docs/specs/PC-1.html".to_string()),
+            approved_at: Some(Utc::now()),
+            ..Default::default()
+        });
+        assert!(!executing_gate_passes(WorkClass::Investigation, &approved));
+        assert_eq!(
+            gate_block_reason(WorkClass::Investigation, &approved).as_deref(),
+            Some("investigation cards do not execute; convert to a bug first")
+        );
+        for stage in [Stage::Executing, Stage::Reviewing, Stage::PushedMr] {
+            assert_eq!(
+                launch_plan(stage, &approved, &playbooks),
+                LaunchPlan::Skip(Some(INVESTIGATION_GATE_REASON.to_string())),
+                "{stage:?}"
+            );
+        }
+        // The same verdict on a bug passes: the class is what refuses.
+        assert!(executing_gate_passes(WorkClass::Bug, &approved));
+        assert_eq!(
+            launch_plan(Stage::Triaged, &approved, &playbooks),
+            LaunchPlan::Skip(None)
+        );
+    }
+
+    /// A pattern review keeps its own playbook, whatever its class.
+    #[test]
+    fn a_pattern_review_takes_the_pattern_playbook() {
+        let playbooks = crate::services::config::playbooks::default_playbooks();
+        let metadata = IssueExtMetadata {
+            work_class: Some(WorkClass::Story),
+            pattern_node: Some("stale cache invalidation".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            launch_plan(Stage::Planning, &metadata, &playbooks),
+            LaunchPlan::Launch(playbooks.get(PATTERN_PLAYBOOK_KEY).cloned())
+        );
+    }
+
+    #[test]
+    fn the_triaged_column_is_recognised() {
+        for name in ["Triaged", " triaged ", "TRIAGED"] {
+            assert_eq!(
+                Stage::from_status_name(name),
+                Some(Stage::Triaged),
+                "{name}"
+            );
+        }
+        assert_eq!(Stage::Triaged.title(), "Triaged");
+        assert_eq!(
+            classify(Stage::Triaged, None, &[], Some(9)),
+            DigestSection::InFlight
+        );
+    }
+
+    fn comment(message: &str, minutes: i64) -> api_types::IssueComment {
+        let at = chrono::DateTime::from_timestamp(1_800_000_000 + minutes * 60, 0).unwrap();
+        api_types::IssueComment {
+            id: Uuid::new_v4(),
+            issue_id: Uuid::nil(),
+            author_id: None,
+            parent_id: None,
+            message: message.to_string(),
+            created_at: at,
+            updated_at: at,
+        }
+    }
+
+    /// The report that moves a card to Triaged is the newest one posted in
+    /// this planning run: one left by a run before a re-plan does not count,
+    /// and the comment-reply agent's `TRIAGE:` line is not a report.
+    #[test]
+    fn the_triage_report_is_read_from_this_runs_comments() {
+        let claimed = chrono::DateTime::from_timestamp(1_800_000_000 + 10 * 60, 0);
+        let comments = vec![
+            comment("TRIAGE REPORT\n## Why\nan old run's answer", 5),
+            comment("REPRODUCTION:\n{\"case\":\"a\",\"pass\":false}", 12),
+            comment("TRIAGE: c\nnew and unrelated", 14),
+            comment(
+                "TRIAGE REPORT\n## Why\nthe pager drops a page\n## Confidence\nlow — no logs",
+                20,
+            ),
+        ];
+        let (found, report) = latest_triage_report(&comments, claimed).unwrap();
+        assert_eq!(found.id, comments[3].id);
+        assert_eq!(report.why, "the pager drops a page");
+        assert_eq!(report.confidence_level(), Some(ConfidenceLevel::Low));
+        assert!(latest_triage_report(&comments[..3], claimed).is_none());
+        assert_eq!(
+            api_types::HarnessOutcome::from_reproduction(latest_reproduction(&comments, claimed)),
+            api_types::HarnessOutcome::Reproduced
+        );
+        assert!(latest_reproduction(&comments[3..], claimed).is_none());
+
+        // Recording it touches only `triage`.
+        let blob = serde_json::json!({ "work_class": "investigation", "foreign": true });
+        let record = api_types::TriageRecord {
+            report,
+            confidence: Some(ConfidenceLevel::Low),
+            harness: None,
+            comment_id: Some(found.id),
+            recorded_at: Utc::now(),
+            notified_at: None,
+            tracker_posted_at: None,
+        };
+        let written = with_triage(&blob, &record);
+        assert_eq!(written["foreign"], true);
+        assert_eq!(written["work_class"], "investigation");
+        assert_eq!(written["triage"]["report"]["why"], "the pager drops a page");
     }
 
     #[test]

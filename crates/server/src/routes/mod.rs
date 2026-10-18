@@ -8,6 +8,7 @@ use crate::{DeploymentImpl, middleware};
 
 pub mod approvals;
 pub mod auth;
+pub mod cards;
 pub mod config;
 pub mod containers;
 pub mod filesystem;
@@ -62,6 +63,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(events::router(&deployment))
         .merge(approvals::router())
         .merge(plan_decisions::router())
+        .merge(cards::router())
         .merge(playbooks::router())
         .merge(scratch::router(&deployment))
         .merge(search::router(&deployment))

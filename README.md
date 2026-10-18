@@ -200,8 +200,18 @@ implementation agent.
 **Clean-up.** Prep Cook runs the repository's clean-up scripts, archives the
 card's worktrees and closes the ticket. Every approved root-cause analysis is
 kept in a knowledge store and linked into a graph of root-cause classes, so a
-cause that keeps coming back becomes visible and can open an investigation of
+cause that keeps coming back becomes visible and can open a pattern review of
 its own.
+
+Not every card is a fix. An **investigation** card — one a support agent files
+through `POST /api/cards` for a customer's problem, say — runs Plan exactly as a
+bug does, then posts a fixed-shape triage report (what happens, where, why,
+scope, workaround, confidence) and stops in a **Triaged** column, with no
+approval to wait for; an `investigation_completed` event carries the report
+back to whoever filed it. An engineer who wants it fixed converts the card to a
+bug, and when the investigation's RCA and harness are good enough to be the
+plan, it goes straight to Execute ([docs/method.md](docs/method.md#investigations),
+[docs/api.md](docs/api.md)).
 
 Prep Cook runs in one of two modes. In **Chef mode** Prep Cook works your own tickets:
 you move cards between columns, approve plans in Lavish (the review page each

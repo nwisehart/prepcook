@@ -14,8 +14,8 @@ use uuid::Uuid;
 use super::{
     Context, Conversational, Delivery, Digest, DigestItem, DigestSection, DigestSectionId, Event,
     HTTP_TIMEOUT, Notifier, NotifyError, PlanKind, PlanningEscalation, REPLAN_DECISION, Reply,
-    SEAT_EXPIRED_BODY, TargetSettings, ThreadRef, clip, mention_listing, mr_list, parse_reply_mark,
-    redact_value,
+    SEAT_EXPIRED_BODY, TargetSettings, ThreadRef, clip, investigation_summary, mention_listing,
+    mr_list, parse_reply_mark, redact_value,
 };
 use crate::services::{
     daily,
@@ -651,6 +651,25 @@ fn render_text(event: &Event) -> String {
             "💬 *{}* — the agent was mentioned on the tracker but no session is running:\n{}",
             escape_text(&issue.key),
             escape_text(&clip(&mention_listing(mentions), 700))
+        ),
+        Event::InvestigationCompleted(completed) => format!(
+            "🔎 *{}* — investigation triaged: {}\n{}",
+            escape_text(&completed.issue.key),
+            escape_text(completed.issue.short_title()),
+            escape_text(&investigation_summary(completed))
+        ),
+        Event::CardConverted {
+            issue,
+            from,
+            to,
+            by,
+            column,
+        } => format!(
+            "↪️ *{}* converted from {} to {} by {} — now in {column}",
+            escape_text(&issue.key),
+            from.as_str(),
+            to.as_str(),
+            escape_text(by)
         ),
         // Rendered as blocks by their own paths; this is their fallback text.
         Event::DailyDigest(digest) => format!("Orchestrator: {}", digest.counts_line()),

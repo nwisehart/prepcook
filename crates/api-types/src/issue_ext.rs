@@ -12,14 +12,278 @@ use serde_json::Value;
 use ts_rs::TS;
 
 /// Work classification driving stage playbooks (bug → root-cause/fix,
-/// story → spec/execute). Mirrored as a visible tag on the issue.
+/// investigation → reproduce/explain/triage, story → spec/execute). Mirrored
+/// as a visible tag on the issue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkClass {
     Bug,
+    /// A reported problem to reproduce and explain but not fix: planning runs
+    /// as for a bug, then the card stops in Triaged with a triage report. An
+    /// engineer converts it to a bug for the fix.
+    Investigation,
     Story,
     Epic,
     Subtask,
+}
+
+impl WorkClass {
+    /// Every class in the order a card's tags are read: when a card carries
+    /// more than one class tag, the first in this order wins.
+    pub const TAG_ORDER: [WorkClass; 5] = [
+        WorkClass::Bug,
+        WorkClass::Investigation,
+        WorkClass::Story,
+        WorkClass::Epic,
+        WorkClass::Subtask,
+    ];
+
+    /// The tag and playbook-key spelling: `bug`, `investigation`, …
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Bug => "bug",
+            Self::Investigation => "investigation",
+            Self::Story => "story",
+            Self::Epic => "epic",
+            Self::Subtask => "subtask",
+        }
+    }
+
+    /// Reads a class word, case-insensitively.
+    pub fn parse(word: &str) -> Option<Self> {
+        let word = word.trim();
+        Self::TAG_ORDER
+            .into_iter()
+            .find(|class| class.as_str().eq_ignore_ascii_case(word))
+    }
+
+    /// The class a card's tags name, by [`Self::TAG_ORDER`]; `None` when no
+    /// tag names one.
+    pub fn from_tag_names<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<Self> {
+        let names: Vec<&str> = names.into_iter().collect();
+        Self::TAG_ORDER.into_iter().find(|class| {
+            names
+                .iter()
+                .any(|name| name.trim().eq_ignore_ascii_case(class.as_str()))
+        })
+    }
+}
+
+/// Where a card made through `POST /api/cards` came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum OriginKind {
+    /// Filed by the Tammy support agent from a Slack thread.
+    Tammy,
+    /// Filed from an incident.
+    Incident,
+    /// Filed by any other API caller.
+    Api,
+}
+
+impl OriginKind {
+    /// How the card names the filer: "Filed by Tammy from …".
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Tammy => "Tammy",
+            Self::Incident => "an incident",
+            Self::Api => "the API",
+        }
+    }
+}
+
+/// The filer of an externally created card, kept on the card and handed back
+/// in its events so the filer can find its own thread again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct CardOrigin {
+    pub kind: OriginKind,
+    /// The filer's own reference: a thread URL, an incident id.
+    #[serde(rename = "ref")]
+    pub reference: String,
+    /// The person the filer was acting for, as it names them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reporter: Option<String>,
+}
+
+/// A file a filer attached by URL.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct CardAttachment {
+    pub name: String,
+    pub url: String,
+}
+
+/// The fixed-shape report an investigation card ends with, parsed from its
+/// `TRIAGE REPORT` card comment. Each field is the section's text as written;
+/// a section the agent left out is empty.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TriageReport {
+    pub what_happens: String,
+    #[serde(rename = "where")]
+    pub location: String,
+    pub why: String,
+    pub scope: String,
+    pub workaround: String,
+    /// The Confidence section as written: the level and its one-line reason.
+    pub confidence: String,
+    /// The whole comment.
+    pub markdown: String,
+}
+
+impl TriageReport {
+    /// The level the Confidence section opens with.
+    pub fn confidence_level(&self) -> Option<ConfidenceLevel> {
+        let word: String = self
+            .confidence
+            .trim_start_matches(|c: char| !c.is_alphanumeric())
+            .chars()
+            .take_while(|c| c.is_alphabetic())
+            .collect();
+        match word.to_ascii_lowercase().as_str() {
+            "high" => Some(ConfidenceLevel::High),
+            "medium" => Some(ConfidenceLevel::Medium),
+            "low" => Some(ConfidenceLevel::Low),
+            _ => None,
+        }
+    }
+}
+
+/// The first line that marks a card comment as an investigation's report.
+pub const TRIAGE_REPORT_HEADING: &str = "TRIAGE REPORT";
+
+/// Reads a `TRIAGE REPORT` comment: the heading alone on the first line
+/// (case-insensitive; a leading `#` or a trailing colon is tolerated), then
+/// `## What happens`, `## Where`, `## Why`, `## Scope`, `## Workaround` and
+/// `## Confidence` sections in any order. `None` when the first line is not
+/// the heading, so `TRIAGE: <a|b|c|d>` from the comment-reply agent never
+/// reads as a report.
+pub fn parse_triage_report(body: &str) -> Option<TriageReport> {
+    let body = body.trim();
+    let mut lines = body.lines();
+    let first = lines.next()?.trim();
+    let heading = first
+        .trim_start_matches('#')
+        .trim()
+        .trim_end_matches(':')
+        .trim();
+    if !heading.eq_ignore_ascii_case(TRIAGE_REPORT_HEADING) {
+        return None;
+    }
+    let mut report = TriageReport {
+        markdown: body.to_string(),
+        ..Default::default()
+    };
+    let mut current: Option<&mut String> = None;
+    let mut pending: Vec<&str> = Vec::new();
+    let flush = |target: Option<&mut String>, pending: &mut Vec<&str>| {
+        if let Some(target) = target {
+            *target = pending.join("\n").trim().to_string();
+        }
+        pending.clear();
+    };
+    for line in lines {
+        if let Some(title) = line.trim_start().strip_prefix("## ") {
+            flush(current.take(), &mut pending);
+            let title = title
+                .trim()
+                .trim_end_matches(':')
+                .trim()
+                .to_ascii_lowercase();
+            current = match title.as_str() {
+                "what happens" => Some(&mut report.what_happens),
+                "where" => Some(&mut report.location),
+                "why" => Some(&mut report.why),
+                "scope" => Some(&mut report.scope),
+                "workaround" => Some(&mut report.workaround),
+                "confidence" => Some(&mut report.confidence),
+                _ => None,
+            };
+            continue;
+        }
+        if current.is_some() {
+            pending.push(line);
+        }
+    }
+    flush(current.take(), &mut pending);
+    Some(report)
+}
+
+/// What the reproduction harness showed, read from the card's `REPRODUCTION:`
+/// comment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessOutcome {
+    /// At least one case failed: the reported behaviour happened.
+    Reproduced,
+    /// Every case passed: the reported behaviour did not happen here.
+    NotReproduced,
+    /// A reproduction comment exists but reports no cases this could read.
+    Unknown,
+    /// No reproduction comment was posted.
+    Missing,
+}
+
+impl HarnessOutcome {
+    /// Reads the harness's JSON lines (`{"case", "expected", "observed",
+    /// "pass"}`) out of a reproduction comment.
+    pub fn from_reproduction(comment: Option<&str>) -> Self {
+        let Some(comment) = comment else {
+            return Self::Missing;
+        };
+        let passes: Vec<bool> = comment
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim().trim_matches('`').trim();
+                let value: Value = serde_json::from_str(line).ok()?;
+                value.get("pass")?.as_bool()
+            })
+            .collect();
+        if passes.is_empty() {
+            Self::Unknown
+        } else if passes.iter().any(|pass| !pass) {
+            Self::Reproduced
+        } else {
+            Self::NotReproduced
+        }
+    }
+}
+
+/// The reproduction harness an investigation left behind.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct HarnessRecord {
+    /// Worktree-relative path of the harness, when it is still on disk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    pub outcome: HarnessOutcome,
+}
+
+/// An investigation's finished triage: the report, and what was done with it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct TriageRecord {
+    pub report: TriageReport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<ConfidenceLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<HarnessRecord>,
+    /// The card comment the report was read from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment_id: Option<uuid::Uuid>,
+    pub recorded_at: DateTime<Utc>,
+    /// Set once `investigation_completed` has gone out, so it goes out once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notified_at: Option<DateTime<Utc>>,
+    /// Set once the report is on the tracker ticket.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracker_posted_at: Option<DateTime<Utc>>,
+}
+
+/// One change of a card's work class, oldest first in
+/// [`IssueExtMetadata::conversions`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ConversionRecord {
+    pub from: WorkClass,
+    pub to: WorkClass,
+    pub by: String,
+    pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -765,13 +1029,35 @@ pub struct IssueExtMetadata {
     /// Jira key of the parent epic, for epic tabs/progress.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epic_key: Option<String>,
-    /// Name of the RCA-graph node this ticket was raised to investigate. Its
-    /// presence is what marks a ticket as an investigation: the work is to
+    /// Name of the RCA-graph node this ticket was raised to review. Its
+    /// presence is what marks a ticket as a pattern review: the work is to
     /// explain why a class of bug recurs and recommend what would stop it, not
-    /// to fix one instance, so it takes a different playbook and never reaches
-    /// the implementing stages.
+    /// to fix one instance, so it takes the `pattern:planning` playbook and
+    /// never reaches the implementing stages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub investigation_node: Option<String>,
+    pub pattern_node: Option<String>,
+    /// `pattern_node` as cards filed before the rename carry it. Read only:
+    /// [`IssueExtMetadata::from_value`] moves it into `pattern_node`, and it
+    /// is never written back.
+    #[serde(default, rename = "investigation_node", skip_serializing)]
+    #[ts(skip)]
+    pub legacy_pattern_node: Option<String>,
+    /// Who filed the card through `POST /api/cards`, shown on the card.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<CardOrigin>,
+    /// Files the filer attached by URL.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<CardAttachment>,
+    /// Whatever else the filer passed as `metadata`, kept apart so it can
+    /// never stand in for a workflow key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external: Option<Value>,
+    /// An investigation's finished triage; see [`TriageRecord`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub triage: Option<TriageRecord>,
+    /// Every change of work class, oldest first; see [`ConversionRecord`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conversions: Vec<ConversionRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec: Option<SpecRef>,
     /// Merge request URL once pushed.
@@ -805,7 +1091,11 @@ pub struct IssueExtMetadata {
 impl IssueExtMetadata {
     /// Lenient parse from the raw blob; returns defaults on any mismatch.
     pub fn from_value(value: &Value) -> Self {
-        serde_json::from_value(value.clone()).unwrap_or_default()
+        let mut metadata: Self = serde_json::from_value(value.clone()).unwrap_or_default();
+        if metadata.pattern_node.is_none() {
+            metadata.pattern_node = metadata.legacy_pattern_node.take();
+        }
+        metadata
     }
 
     /// Merge this struct's keys into an existing blob, preserving any
@@ -821,6 +1111,115 @@ impl IssueExtMetadata {
             }
         }
         Value::Object(base)
+    }
+}
+
+#[cfg(test)]
+mod investigation_tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn class_tags_are_read_in_tag_order() {
+        assert_eq!(
+            WorkClass::from_tag_names(["Investigation"]),
+            Some(WorkClass::Investigation)
+        );
+        assert_eq!(
+            WorkClass::from_tag_names(["story", "investigation"]),
+            Some(WorkClass::Investigation)
+        );
+        assert_eq!(
+            WorkClass::from_tag_names(["investigation", "bug"]),
+            Some(WorkClass::Bug)
+        );
+        assert_eq!(WorkClass::from_tag_names(["urgent"]), None);
+        let words: Vec<&str> = WorkClass::TAG_ORDER.iter().map(|c| c.as_str()).collect();
+        assert_eq!(words, ["bug", "investigation", "story", "epic", "subtask"]);
+        assert_eq!(
+            serde_json::to_value(WorkClass::Investigation).unwrap(),
+            json!("investigation")
+        );
+    }
+
+    /// Cards filed before the rename carry `investigation_node`; they read as
+    /// pattern reviews, and writing the metadata back never re-emits the old key.
+    #[test]
+    fn a_legacy_investigation_node_reads_as_a_pattern_node() {
+        let blob =
+            json!({ "investigation_node": "stale cache invalidation", "work_class": "story" });
+        let metadata = IssueExtMetadata::from_value(&blob);
+        assert_eq!(
+            metadata.pattern_node.as_deref(),
+            Some("stale cache invalidation")
+        );
+        let written = serde_json::to_value(&metadata).unwrap();
+        assert_eq!(written["pattern_node"], "stale cache invalidation");
+        assert!(written.get("investigation_node").is_none());
+        // Both keys present (the old one survives a merge as a foreign key):
+        // the new one wins and the blob still parses.
+        let both = metadata.merge_into(&blob);
+        let reread = IssueExtMetadata::from_value(&both);
+        assert_eq!(
+            reread.pattern_node.as_deref(),
+            Some("stale cache invalidation")
+        );
+        assert_eq!(reread.work_class, Some(WorkClass::Story));
+    }
+
+    const REPORT: &str = "TRIAGE REPORT\n\n## What happens\nExports stop one row short.\n\n\
+        ## Where\nReports → Export, CSV only.\n\n## Why\nThe pager drops the last page.\n\n\
+        ## Scope\nEvery CSV export over 500 rows. A defect, not configuration: the harness \
+        fails on a fresh seed.\n\n## Workaround\nExport as XLSX.\n\n## Confidence\nHigh — \
+        reproduced on main and the candidate change makes the harness pass.";
+
+    #[test]
+    fn a_triage_report_parses_into_its_six_sections() {
+        let report = parse_triage_report(REPORT).unwrap();
+        assert_eq!(report.what_happens, "Exports stop one row short.");
+        assert_eq!(report.location, "Reports → Export, CSV only.");
+        assert_eq!(report.why, "The pager drops the last page.");
+        assert!(report.scope.starts_with("Every CSV export"));
+        assert_eq!(report.workaround, "Export as XLSX.");
+        assert_eq!(report.confidence_level(), Some(ConfidenceLevel::High));
+        assert_eq!(report.markdown, REPORT);
+        let value = serde_json::to_value(&report).unwrap();
+        assert_eq!(value["where"], "Reports → Export, CSV only.");
+    }
+
+    #[test]
+    fn only_the_heading_makes_a_report() {
+        assert!(parse_triage_report("TRIAGE: a\nThe shipped fix failed.").is_none());
+        assert!(parse_triage_report("REPRODUCTION:\n{}").is_none());
+        assert!(parse_triage_report("# Triage report:\n## Why\nx").is_some());
+        let partial =
+            parse_triage_report("triage report\n## Confidence\n**medium**: no logs").unwrap();
+        assert_eq!(partial.confidence_level(), Some(ConfidenceLevel::Medium));
+        assert_eq!(partial.workaround, "");
+    }
+
+    #[test]
+    fn the_harness_outcome_is_read_from_its_json_lines() {
+        let failing =
+            "REPRODUCTION:\n{\"case\":\"a\",\"pass\":true}\n{\"case\":\"b\",\"pass\":false}";
+        assert_eq!(
+            HarnessOutcome::from_reproduction(Some(failing)),
+            HarnessOutcome::Reproduced
+        );
+        let passing = "REPRODUCTION:\n`{\"case\":\"a\",\"pass\":true}`";
+        assert_eq!(
+            HarnessOutcome::from_reproduction(Some(passing)),
+            HarnessOutcome::NotReproduced
+        );
+        assert_eq!(
+            HarnessOutcome::from_reproduction(Some("REPRODUCTION:\nit broke")),
+            HarnessOutcome::Unknown
+        );
+        assert_eq!(
+            HarnessOutcome::from_reproduction(None),
+            HarnessOutcome::Missing
+        );
     }
 }
 

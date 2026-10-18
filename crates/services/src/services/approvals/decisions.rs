@@ -103,6 +103,10 @@ pub enum DecisionError {
         decision: Decision,
         stage: CardStage,
     },
+    /// The card's class has no such decision: an investigation is never
+    /// approved, because its report finishes it.
+    #[error("{0}")]
+    NotForClass(String),
     #[error("{0}")]
     Unavailable(String),
     #[error("{0}")]
@@ -167,6 +171,18 @@ pub async fn apply_decision(
             decision: request.decision,
             stage: card.stage,
         });
+    }
+    // An investigation's report moves it on by itself; approving one would
+    // move it to Executing as though it were a bug. A re-plan still applies.
+    if request.decision != Decision::Replan
+        && IssueExtMetadata::from_value(&card.metadata).work_class
+            == Some(api_types::WorkClass::Investigation)
+    {
+        return Err(DecisionError::NotForClass(format!(
+            "an investigation card is not approved: its triage report finishes it. To fix \
+             what it found, convert it to a bug ({})",
+            card.reference
+        )));
     }
 
     let record = ApprovalRecord {
@@ -614,6 +630,28 @@ mod tests {
             by: "Ada".to_string(),
             source,
         }
+    }
+
+    /// An investigation finishes at its report: approving it, or asking for
+    /// changes to a plan it does not have, is refused and changes nothing.
+    /// A re-plan still runs planning again.
+    #[tokio::test]
+    async fn an_investigation_is_never_approved() {
+        let metadata = serde_json::json!({ "work_class": "investigation" });
+        for decision in [Decision::Approve, Decision::RequestChanges] {
+            let host = FakeHost::with(CardStage::Planning, metadata.clone());
+            let error = apply_decision(&host, request(decision, DecisionSource::Card))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, DecisionError::NotForClass(_)), "{error:?}");
+            assert!(host.moves.lock().unwrap().is_empty());
+            assert_eq!(host.raw(), metadata);
+        }
+        let host = FakeHost::with(CardStage::Planning, metadata);
+        let outcome = apply_decision(&host, request(Decision::Replan, DecisionSource::Card))
+            .await
+            .unwrap();
+        assert!(outcome.moved);
     }
 
     #[tokio::test]

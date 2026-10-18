@@ -13,6 +13,7 @@ use services::services::{
     analytics::{AnalyticsConfig, AnalyticsContext, AnalyticsService, generate_user_id},
     approvals::{Approvals, decisions::Decisions},
     board_secret,
+    cards::Cards,
     config::{Config, load_config_from_file, save_config_to_file},
     container::ContainerService,
     events::EventService,
@@ -68,6 +69,7 @@ pub struct LocalDeployment {
     script_runner: ScriptRunner,
     tracker: TrackerSource,
     decisions: Decisions,
+    cards: Cards,
 }
 
 #[async_trait]
@@ -271,7 +273,7 @@ impl Deployment for LocalDeployment {
         }
         let tracker = TrackerSource::new(config.clone());
         let notifications = NotificationSource::new(config.clone());
-        let decisions = {
+        let (decisions, cards) = {
             let config = config.clone();
             let db = db.clone();
             let container = container.clone();
@@ -287,7 +289,10 @@ impl Deployment for LocalDeployment {
                 notifications.clone(),
             )
             .await;
-            Decisions::new(orchestrator)
+            (
+                Decisions::new(orchestrator.clone()),
+                Cards::new(orchestrator),
+            )
         };
         {
             let db = db.clone();
@@ -331,6 +336,7 @@ impl Deployment for LocalDeployment {
             script_runner,
             tracker,
             decisions,
+            cards,
         };
 
         Ok(deployment)
@@ -410,6 +416,10 @@ impl Deployment for LocalDeployment {
 
     fn decisions(&self) -> &Decisions {
         &self.decisions
+    }
+
+    fn cards(&self) -> &Cards {
+        &self.cards
     }
 }
 

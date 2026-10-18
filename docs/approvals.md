@@ -13,6 +13,16 @@ Approve and request changes are taken while the card is in **Plan**. Re-plan is
 taken from **Plan, Execute, Review or Push MR**. A decision on a card anywhere
 else is refused.
 
+**An investigation card has no gate.** It is planned like a bug — reproduced,
+explained — and its `TRIAGE REPORT` comment moves it to Triaged by itself, in
+Chef mode and Prep mode alike ([method.md](method.md#investigations)). Approve
+and request changes on one are refused with a 409 (on the card or ticket, a
+reply saying so); re-plan still runs its planning again. To have its finding
+fixed, convert it to a bug ([api.md](api.md#convert-a-card)): the conversion is
+recorded as the plan's approval when the investigation's RCA is at high
+confidence and its harness is still on disk, and the card goes straight to
+Execute.
+
 Every decision, wherever it was made, is applied the same way and recorded on
 the card in its metadata as `approvals`: one record per decision with
 `decision`, `by`, `source` (`lavish`, `tracker`, `card` or `api`), `comment` and
@@ -92,7 +102,7 @@ GET  /api/approvals/{issue_id}
 | 200 | Applied; the body's `data` is the `ApprovalRecord` that was written. |
 | 401 | No bearer token while the server has no board secret, or a bearer token that is not `PREPCOOK_API_TOKEN`. |
 | 404 | No such card. |
-| 409 | The card is not in a stage that takes this decision. |
+| 409 | The card is not in a stage that takes this decision, or is an investigation (which takes only re-plan). |
 | 503 | The board could not be reached. |
 
 `GET` answers with every record on the card, oldest first.
@@ -118,9 +128,10 @@ curl -sS -X POST "http://localhost:$PORT/api/approvals/$ISSUE_ID" \
 
 #### The API token
 
-The board's own pages call the endpoint without a token: the server takes such
-a request as the board owner's while it holds a board secret. Scripts and other
-services send a bearer token, which is the `PREPCOOK_API_TOKEN` secret:
+This is the scheme every endpoint in [api.md](api.md) uses. The board's own
+pages call the endpoint without a token: the server takes such a request as the
+board owner's while it holds a board secret. Scripts and other services send a
+bearer token, which is the `PREPCOOK_API_TOKEN` secret:
 
 ```sh
 prepcook secret set PREPCOOK_API_TOKEN     # prompts for the value

@@ -2,6 +2,7 @@ pub mod agent_mcp;
 pub mod analytics;
 pub mod approvals;
 pub mod board_secret;
+pub mod cards;
 pub mod config;
 pub mod container;
 pub mod daily;

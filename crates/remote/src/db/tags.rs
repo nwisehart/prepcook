@@ -18,6 +18,7 @@ pub enum TagError {
 /// story → spec/execute). Values mirror extension_metadata.work_class.
 pub const DEFAULT_TAGS: &[(&str, &str)] = &[
     ("bug", "355 65% 53%"),
+    ("investigation", "188 78% 41%"),
     ("story", "124 82% 30%"),
     ("epic", "271 81% 56%"),
     ("subtask", "205 100% 40%"),
@@ -27,6 +28,7 @@ pub const DEFAULT_TAGS: &[(&str, &str)] = &[
     ("agent-failed", "0 84% 60%"),
     ("taken-over", "32 95% 44%"),
     ("needs-replan", "45 93% 47%"),
+    ("needs-column", "45 93% 47%"),
 ];
 
 pub struct TagRepository;

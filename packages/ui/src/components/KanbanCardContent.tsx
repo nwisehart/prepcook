@@ -1,24 +1,30 @@
-'use client';
+"use client";
 
-import type { MouseEvent, ReactNode } from 'react';
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
+import type { MouseEvent, ReactNode } from "react";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   CircleDashedIcon,
   DotsThreeIcon,
   FileTextIcon,
   PlusIcon,
-} from '@phosphor-icons/react';
-import { cn } from '../lib/cn';
-import { PriorityIcon, type PriorityLevel } from './PriorityIcon';
-import { KanbanBadge } from './KanbanBadge';
-import { KanbanAssignee, type KanbanAssigneeUser } from './KanbanAssignee';
-import { RunningDots } from './RunningDots';
-import { PrBadge, type PrBadgeStatus } from './PrBadge';
+} from "@phosphor-icons/react";
+import { cn } from "../lib/cn";
+import { PriorityIcon, type PriorityLevel } from "./PriorityIcon";
+import { KanbanBadge } from "./KanbanBadge";
+import { KanbanAssignee, type KanbanAssigneeUser } from "./KanbanAssignee";
+import { RunningDots } from "./RunningDots";
+import { PrBadge, type PrBadgeStatus } from "./PrBadge";
 import {
   RelationshipBadge,
   type RelationshipDisplayType,
-} from './RelationshipBadge';
+} from "./RelationshipBadge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./Dropdown";
 
 export interface KanbanTag {
   id: string;
@@ -30,6 +36,25 @@ export interface KanbanRelationship {
   relationshipId: string;
   displayType: RelationshipDisplayType;
   relatedIssueDisplayId: string;
+}
+
+/** The card's work class as a coloured label, with actions behind it. */
+export interface KanbanClassLabel {
+  /** The class, as shown ("investigation"). */
+  name: string;
+  /** Background and text colour classes. */
+  className: string;
+  /** Opened from the label when present (e.g. "Convert to bug"). */
+  actions?: { label: string; onSelect: () => void }[];
+}
+
+/** Who filed the card from outside the board: "Filed by Tammy from thread". */
+export interface KanbanCardOrigin {
+  /** "Filed by Tammy from". */
+  text: string;
+  /** The link's text ("thread"), or the reference itself when not a URL. */
+  linkText: string;
+  url?: string | null;
 }
 
 export interface KanbanPullRequest {
@@ -75,7 +100,7 @@ function formatKanbanDescriptionPreview(
     imageWithNameLabel: (name: string) => string;
     fileLabel: string;
     fileWithNameLabel: (name: string) => string;
-  }
+  },
 ): string {
   return markdown
     .replace(/```[\s\S]*?```/g, options.codeBlockLabel)
@@ -85,7 +110,7 @@ function formatKanbanDescriptionPreview(
         const normalizedAlt = altText.trim();
         const normalizedUrl = url.trim();
         const isImageAttachment =
-          normalizedUrl.startsWith('attachment://') &&
+          normalizedUrl.startsWith("attachment://") &&
           isImageLikeAttachmentName(normalizedAlt);
 
         if (isImageAttachment) {
@@ -97,7 +122,7 @@ function formatKanbanDescriptionPreview(
         return normalizedAlt
           ? options.fileWithNameLabel(normalizedAlt)
           : options.fileLabel;
-      }
+      },
     )
     .replace(
       /(?<!!)\[([^\]]*)\]\((attachment:\/\/[^)]+|\.vibe-attachments\/[^)]+)\)/g,
@@ -106,19 +131,19 @@ function formatKanbanDescriptionPreview(
         return normalizedLabel
           ? options.fileWithNameLabel(normalizedLabel)
           : options.fileLabel;
-      }
+      },
     )
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/^\s*>\s?/gm, '')
-    .replace(/^\s*([-*+]|\d+\.)\s+/gm, '')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-    .replace(/~~([^~]+)~~/g, '$1')
-    .replace(/\s+/g, ' ')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/^\s*([-*+]|\d+\.)\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -148,13 +173,55 @@ export type KanbanCardContentProps<TTag extends KanbanTag = KanbanTag> = {
   /** URL of the approved plan/spec artifact: renders a Plan chip. */
   specUrl?: string | null;
   /** MR publication state while a ticket sits in the Push MR column. */
-  pushState?: 'pushing' | 'pushed' | 'failed' | null;
+  pushState?: "pushing" | "pushed" | "failed" | null;
   /** MR URL once created — fallback Pushed link when no PR badge renders. */
   mrUrl?: string | null;
   /** Orchestrator automation is about to pick this ticket up: renders a
    * pulsing "Agent queued" chip so column moves give instant feedback. */
   agentQueued?: boolean;
+  /** The card's work class label, beside its id. */
+  classLabel?: KanbanClassLabel | null;
+  /** Who filed the card through the card API. */
+  origin?: KanbanCardOrigin | null;
 };
+
+function ClassLabel({ label }: { label: KanbanClassLabel }) {
+  const chipClassName = cn(
+    "inline-flex items-center rounded-sm px-1 text-xs font-medium shrink-0",
+    label.className,
+  );
+  if (!label.actions || label.actions.length === 0) {
+    return <span className={chipClassName}>{label.name}</span>;
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className={cn(chipClassName, "cursor-pointer hover:opacity-80")}
+        >
+          {label.name}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+        {label.actions.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            onClick={(e) => {
+              e.stopPropagation();
+              action.onSelect();
+            }}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
   displayId,
@@ -180,21 +247,23 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
   pushState,
   mrUrl,
   agentQueued,
+  classLabel,
+  origin,
 }: KanbanCardContentProps<TTag>) {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation("common");
   const previewDescription = useMemo(() => {
     if (!description) {
       return null;
     }
 
     const formatted = formatKanbanDescriptionPreview(description, {
-      codeBlockLabel: t('kanban.previewCodeBlock'),
-      imageLabel: t('kanban.previewImage'),
+      codeBlockLabel: t("kanban.previewCodeBlock"),
+      imageLabel: t("kanban.previewImage"),
       imageWithNameLabel: (name: string) =>
-        t('kanban.previewImageWithName', { name }),
-      fileLabel: t('kanban.previewFile'),
+        t("kanban.previewImageWithName", { name }),
+      fileLabel: t("kanban.previewFile"),
       fileWithNameLabel: (name: string) =>
-        t('kanban.previewFileWithName', { name }),
+        t("kanban.previewFileWithName", { name }),
     });
     return formatted.length > 0 ? formatted : null;
   }, [description, t]);
@@ -223,18 +292,19 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
   );
 
   return (
-    <div className={cn('flex flex-col gap-half min-w-0', className)}>
+    <div className={cn("flex flex-col gap-half min-w-0", className)}>
       {/* Row 1: Task ID + sub-issue indicator + loading dots + more actions */}
       <div className="flex items-center justify-between gap-half">
         <div className="flex items-center gap-half min-w-0">
           {isSubIssue && (
             <span className="text-sm text-low">
-              {t('kanban.subIssueIndicator')}
+              {t("kanban.subIssueIndicator")}
             </span>
           )}
           <span className="font-ibm-plex-mono text-sm text-low truncate">
             {displayId}
           </span>
+          {classLabel && <ClassLabel label={classLabel} />}
           {epicKey && (
             <span
               className="inline-flex items-center gap-1 rounded-sm px-1 text-xs text-low border border-border shrink-0"
@@ -258,11 +328,11 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
             }}
             onMouseDown={(e) => e.stopPropagation()}
             className={cn(
-              'p-half -m-half rounded-sm text-low hover:text-normal hover:bg-secondary shrink-0',
+              "p-half -m-half rounded-sm text-low hover:text-normal hover:bg-secondary shrink-0",
               isMobile
-                ? ''
-                : 'invisible opacity-0 group-hover:visible group-hover:opacity-100',
-              'transition-[opacity,color,background-color]'
+                ? ""
+                : "invisible opacity-0 group-hover:visible group-hover:opacity-100",
+              "transition-[opacity,color,background-color]",
             )}
             aria-label="More actions"
             title="More actions"
@@ -274,15 +344,33 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
 
       {/* Row 2: Title */}
       <span className="text-base text-normal truncate">{title}</span>
+      {origin && (
+        <span className="text-xs text-low truncate">
+          {origin.text}{" "}
+          {origin.url ? (
+            <a
+              href={origin.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="underline hover:text-normal"
+            >
+              {origin.linkText}
+            </a>
+          ) : (
+            origin.linkText
+          )}
+        </span>
+      )}
 
       {/* Row 3: Description (optional, truncated) */}
       {previewDescription && (
         <p
           className={cn(
-            'text-sm text-low m-0',
+            "text-sm text-low m-0",
             isMobile
-              ? 'leading-tight line-clamp-2'
-              : 'leading-relaxed line-clamp-4'
+              ? "leading-tight line-clamp-2"
+              : "leading-relaxed line-clamp-4",
           )}
         >
           {previewDescription}
@@ -355,19 +443,19 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
           {agentQueued && (
             <span
               className="flex items-center gap-half px-1.5 py-0.5 rounded text-xs font-medium bg-brand/10 text-brand animate-pulse shrink-0"
-              title={t('kanban.agentQueuedHint')}
+              title={t("kanban.agentQueuedHint")}
             >
-              {t('kanban.agentQueued')}
+              {t("kanban.agentQueued")}
             </span>
           )}
-          {pushState === 'pushing' && (
+          {pushState === "pushing" && (
             <span className="flex items-center gap-half px-1.5 py-0.5 rounded text-xs font-medium bg-brand/10 text-brand animate-pulse shrink-0">
-              {t('kanban.pushStates.pushing')}
+              {t("kanban.pushStates.pushing")}
             </span>
           )}
           {/* Once the MR exists the PR badge is the status: only fall back
               to a Pushed chip when no PR badge will render the link. */}
-          {pushState === 'pushed' && mrUrl && pullRequests.length === 0 && (
+          {pushState === "pushed" && mrUrl && pullRequests.length === 0 && (
             <a
               href={mrUrl}
               target="_blank"
@@ -375,15 +463,15 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
               onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-half px-1.5 py-0.5 rounded text-xs font-medium bg-success/10 text-success hover:bg-success/20 transition-colors shrink-0"
             >
-              {t('kanban.pushStates.pushed')}
+              {t("kanban.pushStates.pushed")}
             </a>
           )}
-          {pushState === 'failed' && (
+          {pushState === "failed" && (
             <span
               className="flex items-center gap-half px-1.5 py-0.5 rounded text-xs font-medium bg-error/10 text-error shrink-0"
-              title={t('kanban.pushStates.failedHint')}
+              title={t("kanban.pushStates.failedHint")}
             >
-              {t('kanban.pushStates.failed')}
+              {t("kanban.pushStates.failed")}
             </span>
           )}
           {specUrl && (
@@ -393,10 +481,10 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-half px-1.5 py-0.5 rounded text-xs font-medium bg-brand/10 text-brand hover:bg-brand/20 transition-colors"
-              title={t('kanban.openApprovedPlan')}
+              title={t("kanban.openApprovedPlan")}
             >
               <FileTextIcon className="size-icon-2xs" weight="bold" />
-              <span>{t('kanban.planChip')}</span>
+              <span>{t("kanban.planChip")}</span>
             </a>
           )}
           {pullRequests.slice(0, 2).map((pr) => (
@@ -434,7 +522,7 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
               className="h-full rounded-full transition-[width]"
               style={{
                 width: `${Math.round((epicProgress.done / epicProgress.total) * 100)}%`,
-                backgroundColor: epicColor ?? 'hsl(var(--brand))',
+                backgroundColor: epicColor ?? "hsl(var(--brand))",
               }}
             />
           </div>

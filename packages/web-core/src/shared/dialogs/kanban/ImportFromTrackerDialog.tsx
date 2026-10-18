@@ -25,6 +25,7 @@ import { refreshFallbackSources } from '@/shared/lib/electric/collections';
 import { defineModal } from '@/shared/lib/modals';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { cn } from '@/shared/lib/utils';
+import { WORK_CLASS_STYLES } from '@/shared/lib/workClass';
 
 interface ImportFromTrackerDialogProps {
   projectId: string;
@@ -38,13 +39,6 @@ export type ImportFromTrackerDialogResult = {
 type PreviewFailure = {
   error?: TrackerImportError;
   message?: string;
-};
-
-const WORK_CLASS_STYLES: Record<WorkClass, string> = {
-  bug: 'bg-red-500/15 text-red-500',
-  story: 'bg-green-500/15 text-green-600',
-  epic: 'bg-purple-500/15 text-purple-500',
-  subtask: 'bg-blue-500/15 text-blue-500',
 };
 
 function WorkClassChip({ workClass }: { workClass: WorkClass }) {

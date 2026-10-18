@@ -500,11 +500,12 @@
           "executing": "Executing",
           "reviewing": "Reviewing",
           "pushed_mr": "Pushed MR",
+          "triaged": "Triaged (investigations)",
           "done": "Clean-up"
         },
         "unmapped": "Not moved",
         "shippedLabel": "Shipped statuses",
-        "shippedHelper": "Comma-separated status names that mean the work shipped. Comments on these tickets go to triage, and a ticket that leaves them can file a follow-up.",
+        "shippedHelper": "Comma-separated status names that mean the work shipped. Comments on these tickets get an automatic reply, and a ticket that leaves them can file a follow-up.",
         "blockerLabel": "Blocker priorities",
         "blockerHelper": "Comma-separated priorities whose merge requests are labelled Blocker and announced in Slack."
       },
@@ -601,9 +602,9 @@
         "label": "Review-fix rounds before escalating",
         "helper": "How many request-changes → fix → re-review cycles autonomy runs before pinging Slack and leaving the ticket for a human."
       },
-      "investigationThreshold": {
-        "label": "Investigation threshold (RCAs per pattern)",
-        "helper": "When an RCA-graph node accumulates this many linked root-cause analyses, a P2 [Investigation] Jira story is created and imported into To Do. Re-fires after the same number of new RCAs land on the node."
+      "patternThreshold": {
+        "label": "Pattern-review threshold (RCAs per pattern)",
+        "helper": "When an RCA-graph node accumulates this many linked root-cause analyses, a P2 [Pattern] story is filed in the tracker (when one is configured) and its card imported into To Do. Re-fires after the same number of new RCAs land on the node."
       },
       "hostSharing": {
         "title": "Host sharing",
