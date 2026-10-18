@@ -1,6 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { XIcon } from '@phosphor-icons/react';
-import type { RunStep, ScriptRunState, StandUpReport } from 'shared/types';
+import type {
+  ReproductionTarget,
+  RunStep,
+  ScriptRunState,
+  StandUpReport,
+} from 'shared/types';
 import { RunningDots } from '@prepcook/ui/components/RunningDots';
 import { cn } from '@/shared/lib/utils';
 import {
@@ -10,6 +15,8 @@ import {
 
 interface ScriptRunPanelProps {
   step: RunStep;
+  /** The reproduction target the run is on. */
+  target: ReproductionTarget;
   state: ScriptRunState | null;
   stateError: unknown;
   logs: LogEntry[];
@@ -21,6 +28,7 @@ interface ScriptRunPanelProps {
 /** The output of one Settings test run, then its step results. */
 export function ScriptRunPanel({
   step,
+  target,
   state,
   stateError,
   logs,
@@ -36,7 +44,7 @@ export function ScriptRunPanel({
       <div className="flex items-center justify-between gap-base px-base py-half border-b border-border">
         <div className="flex items-center gap-half min-w-0">
           <span className="text-sm font-medium text-normal truncate">
-            {t('settings.repos.scripts.run.title', { step })}
+            {t('settings.repos.scripts.run.title', { step, target })}
           </span>
           {isLive ? (
             <span className="flex items-center gap-half text-sm text-low">

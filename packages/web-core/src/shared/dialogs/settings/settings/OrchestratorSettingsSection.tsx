@@ -85,6 +85,7 @@ const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   cleanup_retention: 'inherit',
   pattern_threshold: null,
   deploy_watch: null,
+  reproduction: { target: null },
 };
 
 // Boards written before per-board overrides existed (or by an older client)
@@ -101,6 +102,7 @@ const withOverrideShape = (
     ...EMPTY_DEFAULTS.merge_requests,
     ...defaults.merge_requests,
   },
+  reproduction: { ...EMPTY_DEFAULTS.reproduction, ...defaults.reproduction },
 });
 
 // Overrides are tri-state in the config (null = inherit the global), which a

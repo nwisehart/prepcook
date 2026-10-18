@@ -129,6 +129,17 @@ Generated from the providers' descriptors. A secret field is read from the secre
 | `teams` (Microsoft Teams) | | | | Posts each event as an Adaptive Card to a Teams channel through an incoming webhook. |
 | | `webhook_url` | yes | `TEAMS_WEBHOOK_URL` | **Webhook URL**. The URL of a Teams workflow that posts webhook requests to a channel, or of a channel's Incoming Webhook connector. |
 
+### Reproduction targets
+
+Generated from the providers' descriptors. Each field is a key of the `app_runs` section; a remote target has no global settings, only each repository's `[app.remote]`. A board picks its target with `reproduction.target`.
+
+| `kind` | Field | Required | Secret name | What it is |
+| --- | --- | --- | --- | --- |
+| `local` (This machine) | | | | Builds and starts the app from [app] in the card's worktree and serves it on a port of this machine. |
+| | `port_range` | yes |  | **Port range**. Ports handed to app runs, `<first>-<last>` inclusive; each run gets one as $PREPCOOK_PORT. |
+| | `max_parallel` | yes |  | **Apps at once**. Local apps up at the same time. Each is a full app stack, so this is bounded by the machine's memory; a stand-up past it waits for the next scan. |
+| `remote` (Remote deploy) | | | | Runs [app.remote] from the repository's .prepcook/scripts.toml to deploy the branch to a preview environment, dev tenant or staging slot, and reproduces and verifies against the URL the deploy reports. Everything it runs is in the manifest; choose it per board. |
+
 ### Ticketing providers
 
 Generated from the providers' descriptors. A secret field is read from the secrets store under the name shown, then from the config, then from the environment variable of that name. Each field is a key of the `ticketing` section.
@@ -190,12 +201,16 @@ MCP Servers** edits that config when you save there, and the toolkit's
 
 ## App runs
 
-*File only.* How the script runner stands apps up ([scripts.md](scripts.md)).
+**Settings → Reproduction**. Where bug cards' apps are stood up: the `local`
+target on this machine, or the `remote` target, which deploys with each
+repository's `[app.remote]` ([scripts.md](scripts.md#remote-targets)). The
+reproduction targets are listed under [Reproduction targets](#reproduction-targets).
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `app_runs.port_range` | `4200-4299` | Ports handed to app runs, inclusive. |
-| `app_runs.max_parallel` | `2` | Apps up at once. A stand-up past this waits for the next scan. |
+| `app_runs.port_range` | `4200-4299` | **Port range**: ports handed to local app runs, inclusive. |
+| `app_runs.max_parallel` | `2` | **Apps at once**: local apps up at once. A stand-up past this waits for the next scan. Remote apps are capped by `[app.remote] max_parallel` instead. |
+| `app_runs.default_target` | `local` | **Default target**: `local` or `remote`, for every board that does not choose. |
 
 ## Board
 
@@ -266,6 +281,7 @@ empty inherits the global value.
 | `merge_requests.reviewer_exclude_emails` | empty | **Exclude authors**, added to the global list. |
 | `merge_requests.bot_logins` | empty | **Ignore MR comments from**, added to the global list. |
 | `deploy_watch` | unset (off) | **Staging deploy job** and **branch**: records when each merged change reaches staging. Both are needed. |
+| `reproduction.target` | unset (inherit `app_runs.default_target`) | **Settings → Reproduction → Boards**: `local` or `remote`. A board set to `remote` whose repository has no `[app.remote]` stops its stand-ups with `target-unconfigured`. |
 | `playbooks` | empty | **Settings → Playbooks**, scope this board: texts for this board only. |
 
 ## Everything else

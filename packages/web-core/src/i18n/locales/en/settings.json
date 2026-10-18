@@ -55,7 +55,9 @@
         "usage": "Usage",
         "usageDesc": "Token spend per model and workspace",
         "notifications": "Notifications",
-        "notificationsDesc": "Where escalations, the digest and alerts are sent"
+        "notificationsDesc": "Where escalations, the digest and alerts are sent",
+        "reproduction": "Reproduction",
+        "reproductionDesc": "Where bug cards' apps run: this machine or a remote deploy"
       }
     },
     "board": {
@@ -780,6 +782,10 @@
         "missingTitle": "This repository has no .prepcook/scripts.toml",
         "invalidTitle": "This repository's .prepcook/scripts.toml cannot be read",
         "hint": "Prep Cook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
+        "target": {
+          "title": "Reproduction target",
+          "hint": "The board this repository belongs to chooses it in Settings → Reproduction. Test stand-up and every Test run below run on it."
+        },
         "steps": {
           "title": "App steps",
           "timeout": "timeout {{seconds}}s",
@@ -800,7 +806,7 @@
           "title": "Product profile"
         },
         "run": {
-          "title": "Test run: {{step}}",
+          "title": "Test run: {{step}} ({{target}})",
           "running": "Running…",
           "close": "Close",
           "startError": "The run did not start: {{message}}",
@@ -1006,6 +1012,26 @@
       "save": {
         "success": "Notification targets saved.",
         "error": "Failed to save notification targets."
+      }
+    },
+    "reproduction": {
+      "targets": {
+        "title": "Reproduction targets",
+        "description": "Where a bug card's app is stood up while its agents reproduce the bug, and where a branch is verified before it merges. Both targets run the same stages from the repository's .prepcook/scripts.toml and hand the agents a URL; docs/scripts.md describes them."
+      },
+      "defaultTarget": {
+        "label": "Default target",
+        "helper": "Used by every board that does not choose its own below."
+      },
+      "boards": {
+        "title": "Boards",
+        "description": "A board set to Remote deploy needs [app.remote] in its repository's .prepcook/scripts.toml; without it, its stand-ups stop with target-unconfigured and the card says why.",
+        "empty": "No boards are configured yet; add one under Orchestrator.",
+        "inherit": "Default ({{name}})"
+      },
+      "save": {
+        "success": "Reproduction settings saved.",
+        "error": "Failed to save reproduction settings."
       }
     },
     "connectors": {

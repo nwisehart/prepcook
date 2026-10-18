@@ -27,6 +27,7 @@ END = "<!-- END GENERATED: integrations -->"
 # Section titles for areas whose name does not read well capitalised.
 AREA_TITLES = {
     "notifications": "Notification providers",
+    "reproduction": "Reproduction targets",
     "ticketing": "Ticketing providers",
 }
 
@@ -38,6 +39,11 @@ SECRET_NOTE = (
 AREA_NOTES = {
     "notifications": f"{SECRET_NOTE}; a board's own target reads its config value first.",
     "ticketing": f"{SECRET_NOTE}. Each field is a key of the `ticketing` section.",
+    "reproduction": (
+        "Each field is a key of the `app_runs` section; a remote target has no "
+        "global settings, only each repository's `[app.remote]`. A board picks "
+        "its target with `reproduction.target`."
+    ),
 }
 
 

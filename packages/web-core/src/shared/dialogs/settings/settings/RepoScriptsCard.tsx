@@ -5,13 +5,15 @@ import {
   PlayIcon,
   SpinnerIcon,
 } from '@phosphor-icons/react';
-import type { Manifest, RunStep, Step } from 'shared/types';
+import type { Manifest, ReproductionTarget, RunStep, Step } from 'shared/types';
 import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
 import { cn } from '@/shared/lib/utils';
 import { useRepoScripts } from '@/shared/hooks/useRepoScripts';
 import { useRepoScriptRun } from '@/shared/hooks/useRepoScriptRun';
 import { SettingsCard } from './SettingsComponents';
 import { ScriptRunPanel } from './ScriptRunPanel';
+import { useIntegrationDescriptors } from './IntegrationSection';
+import { REPRODUCTION_AREA } from './ReproductionSettingsSection';
 
 /** Shown under a missing or invalid manifest; mirrors docs/scripts.md. */
 const MINIMAL_MANIFEST_EXAMPLE = `[app]
@@ -27,9 +29,48 @@ interface StepRow {
   timeoutSecs: number;
 }
 
-/** The `[app]` steps that are configured, in the order a stand-up runs them. */
-function configuredSteps(manifest: Manifest): StepRow[] {
+/**
+ * The steps `target` runs that are configured, in the order a stand-up runs
+ * them: `[app]` for the local target; `[app] setup` then `[app.remote]` for a
+ * remote one, which builds where it deploys.
+ */
+function configuredSteps(
+  manifest: Manifest,
+  target: ReproductionTarget
+): StepRow[] {
   const { app } = manifest;
+  if (target === 'remote' && app.remote) {
+    const remote = app.remote;
+    const rows: StepRow[] = [];
+    if (app.setup) {
+      rows.push({
+        step: 'setup',
+        command: app.setup,
+        timeoutSecs: app.timeouts.setup,
+      });
+    }
+    rows.push({
+      step: 'start',
+      command: remote.start,
+      timeoutSecs: remote.timeouts.start,
+    });
+    if (remote.ready) {
+      const isUrl = remote.ready.url != null;
+      rows.push({
+        step: 'ready',
+        command: (isUrl ? remote.ready.url : remote.ready.command) ?? '',
+        readyKind: isUrl ? 'url' : 'command',
+        timeoutSecs: remote.ready.timeout_secs,
+      });
+    }
+    for (const step of ['seed', 'test', 'stop'] as const) {
+      const command = remote[step];
+      if (command) {
+        rows.push({ step, command, timeoutSecs: remote.timeouts[step] });
+      }
+    }
+    return rows;
+  }
   const rows: StepRow[] = [];
   if (app.setup) {
     rows.push({
@@ -95,9 +136,16 @@ export function RepoScriptsCard({ repoId }: RepoScriptsCardProps) {
   const { t } = useTranslation(['settings', 'common']);
   const scriptsQuery = useRepoScripts(repoId);
   const scriptRun = useRepoScriptRun(repoId);
+  const descriptors = useIntegrationDescriptors();
   const response = scriptsQuery.data;
   const manifest = response?.manifest ?? null;
-  const runBusy = scriptRun.isLive || scriptRun.isStarting;
+  const target = response?.target ?? 'local';
+  const targetDescriptor = descriptors.data?.[REPRODUCTION_AREA]?.find(
+    (descriptor) => descriptor.kind === target
+  );
+  const targetProblem = response?.target_problem ?? null;
+  const runBusy =
+    scriptRun.isLive || scriptRun.isStarting || targetProblem != null;
 
   const runStep = (step: RunStep) => scriptRun.start(step);
 
@@ -149,6 +197,10 @@ export function RepoScriptsCard({ repoId }: RepoScriptsCardProps) {
       ) : manifest ? (
         <ManifestView
           manifest={manifest}
+          target={target}
+          targetName={targetDescriptor?.display_name ?? target}
+          targetSummary={targetDescriptor?.summary ?? null}
+          targetProblem={targetProblem}
           missingSecrets={response?.required_secrets_missing ?? []}
           runBusy={runBusy}
           onRunStep={runStep}
@@ -169,6 +221,7 @@ export function RepoScriptsCard({ repoId }: RepoScriptsCardProps) {
       {scriptRun.run && (
         <ScriptRunPanel
           step={scriptRun.run.step}
+          target={scriptRun.state?.target ?? target}
           state={scriptRun.state}
           stateError={scriptRun.stateError}
           logs={scriptRun.logs}
@@ -217,17 +270,25 @@ function ManifestProblem({
 
 function ManifestView({
   manifest,
+  target,
+  targetName,
+  targetSummary,
+  targetProblem,
   missingSecrets,
   runBusy,
   onRunStep,
 }: {
   manifest: Manifest;
+  target: ReproductionTarget;
+  targetName: string;
+  targetSummary: string | null;
+  targetProblem: string | null;
   missingSecrets: string[];
   runBusy: boolean;
   onRunStep: (step: RunStep) => void;
 }) {
   const { t } = useTranslation('settings');
-  const steps = configuredSteps(manifest);
+  const steps = configuredSteps(manifest, target);
   const hooks = (['setup', 'cleanup', 'archive'] as const)
     .map((hook) => ({ hook, command: manifest.workspace[hook] }))
     .filter((entry): entry is { hook: typeof entry.hook; command: string } =>
@@ -249,6 +310,20 @@ function ManifestView({
           )}
         </Subsection>
       )}
+
+      <Subsection title={t('settings.repos.scripts.target.title')}>
+        <div className="flex items-center gap-half">
+          <span className="inline-flex items-center rounded-sm bg-secondary border border-border px-half py-0.5 text-sm text-normal">
+            {targetName}
+          </span>
+          <span className="text-sm font-ibm-plex-mono text-low">{target}</span>
+        </div>
+        {targetSummary && <p className="text-sm text-low">{targetSummary}</p>}
+        <p className="text-sm text-low">
+          {t('settings.repos.scripts.target.hint')}
+        </p>
+        {targetProblem && <ErrorBox>{targetProblem}</ErrorBox>}
+      </Subsection>
 
       <Subsection title={t('settings.repos.scripts.steps.title')}>
         {steps.map((row) => (

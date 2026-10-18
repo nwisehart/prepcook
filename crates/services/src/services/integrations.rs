@@ -1,7 +1,7 @@
 //! What every integration area shares: the descriptor a provider publishes
 //! about itself, and how its secret-shaped fields are resolved.
 //!
-//! An area (notifications, ticketing) is a module under `services/<area>/`
+//! An area (notifications, ticketing, reproduction) is a module under `services/<area>/`
 //! with one file per provider. Each provider describes itself with a [`Descriptor`];
 //! Settings renders one generic section per area from those descriptors, and
 //! `docs/configuration.md` carries a table generated from the same data, so a
@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::services::{config::Config, notifications, secrets::Secrets, tracker};
+use crate::services::{config::Config, notifications, reproduction, secrets::Secrets, tracker};
 
 /// How Settings renders one field and what the config holds for it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -118,6 +118,7 @@ pub fn descriptors() -> BTreeMap<String, Vec<Descriptor>> {
             notifications::descriptors(),
         ),
         (tracker::AREA.to_string(), tracker::descriptors()),
+        (reproduction::AREA.to_string(), reproduction::descriptors()),
     ])
 }
 
@@ -133,6 +134,7 @@ pub async fn test(
     let result = match area {
         notifications::AREA => notifications::test_target(config, kind, fields).await,
         tracker::AREA => tracker::test_provider(config, kind, fields).await,
+        reproduction::AREA => reproduction::test_target(config, kind, fields).await,
         other => Err(format!("unknown integration area: {other}")),
     };
     match result {
@@ -281,5 +283,10 @@ mod tests {
             .map(|descriptor| descriptor.kind.as_str())
             .collect();
         assert_eq!(ticketing, ["jira", "github_issues", "linear", "pagerduty"]);
+        let reproduction: Vec<&str> = all["reproduction"]
+            .iter()
+            .map(|descriptor| descriptor.kind.as_str())
+            .collect();
+        assert_eq!(reproduction, ["local", "remote"]);
     }
 }

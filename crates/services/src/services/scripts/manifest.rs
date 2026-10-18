@@ -51,6 +51,79 @@ pub struct AppScripts {
     pub stop: Option<String>,
     #[serde(default)]
     pub timeouts: StepTimeouts,
+    /// How the app is deployed somewhere other than this machine, for boards
+    /// whose reproduction target is `remote`.
+    #[serde(default)]
+    pub remote: Option<RemoteScripts>,
+}
+
+/// `[app.remote]`: commands that deploy the worktree's app to an environment
+/// that is reached over the network (a preview environment, a dev tenant, a
+/// per-branch staging slot) rather than served from this machine. They run
+/// on this machine, in the worktree, like every other command; `start`
+/// returns once the deploy is done instead of serving in the foreground.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteScripts {
+    /// Deploys the app and reports its base URL: a `PREPCOOK_APP_URL=<url>`
+    /// line written to `$PREPCOOK_ENV_OUT`, or failing that the last line of
+    /// stdout that starts with `http://` or `https://`.
+    pub start: String,
+    /// Polled against the reported URL.
+    #[serde(default)]
+    pub ready: Option<ReadyCheck>,
+    /// Loads test data into the deployed app; writes `KEY=VALUE` lines to
+    /// `$PREPCOOK_ENV_OUT`. `[app] seed` is not used for a remote app: a
+    /// local seed may write to local storage the deployed app never reads.
+    #[serde(default)]
+    pub seed: Option<String>,
+    /// Tests the deployed app; the exit code is the verdict.
+    #[serde(default)]
+    pub test: Option<String>,
+    /// Destroys what `start` deployed.
+    #[serde(default)]
+    pub stop: Option<String>,
+    /// Redeploys in place. Unset, a restart is `stop` then `start`.
+    #[serde(default)]
+    pub restart: Option<String>,
+    /// Remote apps up at once, across every worktree. Each one is a deployed
+    /// environment, so this is usually lower than the local limit.
+    #[serde(default = "default_remote_max_parallel")]
+    #[ts(type = "number")]
+    pub max_parallel: u32,
+    #[serde(default)]
+    pub timeouts: RemoteTimeouts,
+}
+
+fn default_remote_max_parallel() -> u32 {
+    1
+}
+
+/// `[app.remote.timeouts]`, in seconds. `setup` and `build` come from
+/// `[app.timeouts]`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(deny_unknown_fields, default)]
+pub struct RemoteTimeouts {
+    /// Time allowed for `start` (or `restart`) to deploy and exit.
+    #[ts(type = "number")]
+    pub start: u64,
+    #[ts(type = "number")]
+    pub seed: u64,
+    #[ts(type = "number")]
+    pub test: u64,
+    #[ts(type = "number")]
+    pub stop: u64,
+}
+
+impl Default for RemoteTimeouts {
+    fn default() -> Self {
+        Self {
+            start: 1800,
+            seed: 600,
+            test: 1800,
+            stop: 900,
+        }
+    }
 }
 
 /// `ready = { url = "/health" }` or `ready = { command = "..." }`.
@@ -182,7 +255,18 @@ impl Manifest {
             ("workspace.cleanup", self.workspace.cleanup.as_deref()),
             ("workspace.archive", self.workspace.archive.as_deref()),
         ];
-        for (key, command) in commands {
+        let remote = self.app.remote.as_ref();
+        let remote_commands = [
+            ("app.remote.start", remote.map(|r| r.start.as_str())),
+            ("app.remote.seed", remote.and_then(|r| r.seed.as_deref())),
+            ("app.remote.test", remote.and_then(|r| r.test.as_deref())),
+            ("app.remote.stop", remote.and_then(|r| r.stop.as_deref())),
+            (
+                "app.remote.restart",
+                remote.and_then(|r| r.restart.as_deref()),
+            ),
+        ];
+        for (key, command) in commands.into_iter().chain(remote_commands) {
             if command.is_some_and(|c| c.trim().is_empty()) {
                 return Err(format!(
                     "{key} is empty; remove the key or give it a command"
@@ -190,23 +274,14 @@ impl Manifest {
             }
         }
         if let Some(ready) = &self.app.ready {
-            match (&ready.url, &ready.command) {
-                (Some(url), None) => {
-                    if !url.starts_with('/') {
-                        return Err(format!(
-                            "app.ready.url {url:?} must be a path starting with '/'; it is \
-                             appended to $PREPCOOK_APP_URL"
-                        ));
-                    }
-                }
-                (None, Some(command)) if !command.trim().is_empty() => {}
-                (None, Some(_)) => return Err("app.ready.command is empty".to_string()),
-                _ => {
-                    return Err("app.ready needs exactly one of `url` or `command`".to_string());
-                }
+            validate_ready("app.ready", ready)?;
+        }
+        if let Some(remote) = remote {
+            if let Some(ready) = &remote.ready {
+                validate_ready("app.remote.ready", ready)?;
             }
-            if ready.timeout_secs == 0 {
-                return Err("app.ready.timeout_secs must be above 0".to_string());
+            if remote.max_parallel == 0 {
+                return Err("app.remote.max_parallel must be above 0".to_string());
             }
         }
         if let Some(name) = self
@@ -237,6 +312,28 @@ impl Manifest {
     pub fn workspace_archive(&self) -> Option<&str> {
         self.workspace.archive.as_deref()
     }
+}
+
+fn validate_ready(key: &str, ready: &ReadyCheck) -> Result<(), String> {
+    match (&ready.url, &ready.command) {
+        (Some(url), None) => {
+            if !url.starts_with('/') {
+                return Err(format!(
+                    "{key}.url {url:?} must be a path starting with '/'; it is \
+                     appended to $PREPCOOK_APP_URL"
+                ));
+            }
+        }
+        (None, Some(command)) if !command.trim().is_empty() => {}
+        (None, Some(_)) => return Err(format!("{key}.command is empty")),
+        _ => {
+            return Err(format!("{key} needs exactly one of `url` or `command`"));
+        }
+    }
+    if ready.timeout_secs == 0 {
+        return Err(format!("{key}.timeout_secs must be above 0"));
+    }
+    Ok(())
 }
 
 /// The manifest path for a worktree or repository root.
@@ -384,6 +481,52 @@ evidence_tools = "The app logs to logs/app.log."
         );
         assert!(parse("[app]\nstart = \"x\"\nready = { url = \"health\" }\n").is_err());
         assert!(parse("[app]\nstart = \"x\"\n[secrets]\nrequires = [\"NOT-OK\"]\n").is_err());
+    }
+
+    #[test]
+    fn a_remote_table_parses_with_its_own_defaults_and_rules() {
+        let manifest = parse(
+            r#"
+[app]
+start = "pnpm start"
+
+[app.remote]
+start = "./scripts/deploy-preview.sh"
+ready = { url = "/health", timeout_secs = 600 }
+stop = "./scripts/destroy-preview.sh"
+
+[app.remote.timeouts]
+start = 900
+"#,
+        )
+        .unwrap();
+        let remote = manifest.app.remote.unwrap();
+        assert_eq!(remote.start, "./scripts/deploy-preview.sh");
+        assert_eq!(remote.ready.unwrap().timeout_secs, 600);
+        assert_eq!(remote.max_parallel, 1);
+        assert_eq!(remote.timeouts.start, 900);
+        assert_eq!(remote.timeouts.stop, RemoteTimeouts::default().stop);
+        assert!(remote.seed.is_none() && remote.restart.is_none());
+        assert!(
+            parse("[app]\nstart = \"x\"\n")
+                .unwrap()
+                .app
+                .remote
+                .is_none()
+        );
+
+        let bad = |table: &str| parse(&format!("[app]\nstart = \"x\"\n[app.remote]\n{table}"));
+        assert!(
+            bad("ready = { url = \"/\" }\n").is_err(),
+            "start is required"
+        );
+        assert!(bad("start = \" \"\n").is_err());
+        assert!(bad("start = \"d\"\nmax_parallel = 0\n").is_err());
+        assert!(bad("start = \"d\"\nready = { url = \"health\" }\n").is_err());
+        let error = bad("start = \"d\"\nstrat = \"y\"\n").unwrap_err();
+        assert!(error.to_string().contains("strat"), "{error}");
+        let error = bad("start = \"d\"\nrestart = \"\"\n").unwrap_err();
+        assert!(error.to_string().contains("app.remote.restart"), "{error}");
     }
 
     #[test]

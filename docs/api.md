@@ -227,17 +227,18 @@ status, is in [approvals.md](approvals.md#the-api).
 
 ## Scripts and app runs
 
-These drive a repository's `.prepcook/scripts.toml` ([scripts.md](scripts.md)).
+These drive a repository's `.prepcook/scripts.toml` ([scripts.md](scripts.md)), on
+the reproduction target the repository's board uses (`local` or `remote`).
 
 | Endpoint | What it does |
 | --- | --- |
-| `GET /api/repos/{repo_id}/scripts` | The repository's parsed manifest, or the error that stopped it, plus `required_secrets_missing`. |
-| `POST /api/repos/{repo_id}/scripts/run` | Runs one step in the repository's checkout: `{ "step": "setup" \| "build" \| "start" \| "ready" \| "seed" \| "test" \| "stop" \| "stand-up" }`. Returns `{ "run_id": … }` at once. `start` and `ready` tear the app down once it is ready. |
+| `GET /api/repos/{repo_id}/scripts` | The repository's parsed manifest, or the error that stopped it, plus `required_secrets_missing`, the board's `target`, and `target_problem` when that target cannot run the manifest. |
+| `POST /api/repos/{repo_id}/scripts/run` | Runs one step in the repository's checkout: `{ "step": "setup" \| "build" \| "start" \| "ready" \| "seed" \| "test" \| "stop" \| "stand-up" }`. Returns `{ "run_id": … }` at once. `start` and `ready` tear the app down once it is ready; on a remote target `stand-up` deploys, seeds and destroys. |
 | `GET /api/script-runs/{run_id}` | That run's state; `report` is set once `finished_at` is. |
 | `GET /api/script-runs/{run_id}/raw-logs/ws` | A WebSocket streaming the run's output. |
-| `POST /api/app-runs` | `{ "worktree": "<path>" }`: stands the app up in a workspace's worktree for the agent running there, which owns it until its process ends. Refused when an app already runs for that worktree, the path is not in a workspace, or no agent is running there. Returns the run's `status` (URL, port, seed variable names) and the stand-up `report`. |
-| `GET /api/app-runs/current?worktree=<path>` | The app running for that worktree, or `null`. |
-| `POST /api/app-runs/{run_id}/restart` | Rebuilds and restarts a running app from the worktree's current files; same answer as `POST /api/app-runs`. |
+| `POST /api/app-runs` | `{ "worktree": "<path>" }`: stands the app up in a workspace's worktree for the agent running there, which owns it until its process ends. Refused when an app already runs for that worktree, the path is not in a workspace, or no agent is running there. Returns the run's `status` (URL, `target_kind`, port for a local app, seed variable names) and the stand-up `report`. |
+| `GET /api/app-runs/current?worktree=<path>` | The app running for that worktree, with `health` from its target's ready check, or `null`. |
+| `POST /api/app-runs/{run_id}/restart` | Stands a running app up again from the worktree's current files (a remote one is redeployed with `[app.remote] restart`, or stopped and deployed again); same answer as `POST /api/app-runs`. |
 
 Agents reach the last three through the `app_status` and `app_restart` tools
 rather than over HTTP.

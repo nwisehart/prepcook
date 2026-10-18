@@ -1,15 +1,21 @@
-//! Runs a repository's `.prepcook/scripts.toml` in a worktree: stands the app up
-//! on a port this process allocates, tests it, and tears it down.
+//! Runs a repository's `.prepcook/scripts.toml` in a worktree: stands the app up,
+//! tests it, and tears it down. This is the engine behind both reproduction
+//! targets (see [`crate::services::reproduction`]): `local` serves the app on
+//! a port this process allocates, `remote` runs `[app.remote]` to deploy it
+//! and works against the URL the deploy reports.
 //!
-//! A stood-up app is an [`AppRun`]. Its start command runs in its own process
-//! group, so tearing it down kills everything the command spawned. Teardown is
-//! explicit ([`ScriptRunner::tear_down`]) and also happens when the last handle
-//! to a run is dropped, so a run that a caller forgets cannot hold a port, a
-//! slot or a process past its owner.
+//! A stood-up app is an [`AppRun`]. A local app's start command runs in its
+//! own process group, so tearing it down kills everything the command
+//! spawned; a remote app is torn down by its `stop` command. Teardown is
+//! explicit and also happens when the last handle to a run is dropped, so a
+//! run that a caller forgets cannot hold a port, a slot, a process or a
+//! deployed environment past its owner.
 //!
-//! Runs are capped at `app_runs.max_parallel`. A caller that cannot get a slot
-//! gets [`StandUpOutcome::Busy`] immediately rather than a queue: the
-//! orchestrator leaves the card in its column and asks again on its next tick.
+//! Local runs are capped at `app_runs.max_parallel` and remote runs at
+//! `[app.remote] max_parallel`, each with its own slots. A caller that cannot
+//! get a slot gets [`StandUpOutcome::Busy`] immediately rather than a queue:
+//! the orchestrator leaves the card in its column and asks again on its next
+//! tick.
 //!
 //! Every line a script prints goes to the run's [`MsgStore`] with known secret
 //! values redacted, which is what lets the execution-process log routes stream
@@ -40,10 +46,13 @@ use utils::{
 use uuid::Uuid;
 
 use super::{
-    manifest::{self, Manifest, ManifestError},
+    manifest::{self, Manifest, ManifestError, ReadyCheck, StepTimeouts},
     ports::{self, PortAllocator},
 };
-use crate::services::secrets::{self, Secrets};
+use crate::services::{
+    reproduction::{ReproTarget, ReproTargetKind, ReproductionTarget, StandUpRequest},
+    secrets::{self, Secrets},
+};
 
 /// Lines kept for a step's `log_tail`.
 const LOG_TAIL_LINES: usize = 60;
@@ -53,6 +62,14 @@ const POLL_INTERVAL: Duration = Duration::from_millis(500);
 /// Bound on reading what a finished command left in its pipes. A command that
 /// backgrounds a child holding stdout open would otherwise hold the step.
 const PIPE_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
+/// Bound on one ready probe made for a status check.
+const STATUS_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+/// The `$PREPCOOK_ENV_OUT` line a remote deploy reports its address in.
+const APP_URL_VAR: &str = "PREPCOOK_APP_URL";
+/// The `$PREPCOOK_ENV_OUT` line a remote deploy may name what it deployed in
+/// (an environment name, a deployment id); handed back to `stop` and
+/// `restart` as `$PREPCOOK_TARGET_REF`.
+const TARGET_REF_VAR: &str = "PREPCOOK_TARGET_REF";
 
 /// One step of the manifest's `[app]` section.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -135,13 +152,17 @@ impl StepReport {
 /// on: [`Self::is_branch_fault`] means the code in the worktree is the problem
 /// and the agent that wrote it can act on the evidence;
 /// [`Self::is_runner_fault`] means the setup is the problem — no manifest, a
-/// secret not set, no free port — and a person has to act.
+/// secret not set, no free port, a board set to a target the manifest does
+/// not describe — and a person has to act.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", content = "detail", rename_all = "kebab-case")]
 pub enum StandUpOutcome {
     Ok,
     ManifestMissing,
     ManifestInvalid,
+    /// The board's reproduction target is one the manifest has no table for
+    /// (`remote` without `[app.remote]`).
+    TargetUnconfigured,
     SetupFailed,
     BuildFailed,
     StartFailed,
@@ -178,6 +199,7 @@ impl StandUpOutcome {
             self,
             Self::ManifestMissing
                 | Self::ManifestInvalid
+                | Self::TargetUnconfigured
                 | Self::PortUnavailable
                 | Self::SecretMissing(_)
                 | Self::Error(_)
@@ -190,6 +212,7 @@ impl StandUpOutcome {
             Self::Ok => "ok",
             Self::ManifestMissing => "manifest-missing",
             Self::ManifestInvalid => "manifest-invalid",
+            Self::TargetUnconfigured => "target-unconfigured",
             Self::SetupFailed => "setup-failed",
             Self::BuildFailed => "build-failed",
             Self::StartFailed => "start-failed",
@@ -210,6 +233,7 @@ impl StandUpOutcome {
             label,
             "manifest-missing"
                 | "manifest-invalid"
+                | "target-unconfigured"
                 | "port-unavailable"
                 | "secret-missing"
                 | "busy"
@@ -241,7 +265,11 @@ pub struct StandUpReport {
 }
 
 impl StandUpReport {
-    fn new(outcome: StandUpOutcome, steps: Vec<StepReport>, message: Option<String>) -> Self {
+    pub(crate) fn new(
+        outcome: StandUpOutcome,
+        steps: Vec<StepReport>,
+        message: Option<String>,
+    ) -> Self {
         Self {
             steps,
             outcome,
@@ -338,7 +366,7 @@ pub struct StandUpOptions {
     pub ticket_key: String,
     /// The branch `$PREPCOOK_CHANGED_FILES` is computed against.
     pub target_branch: Option<String>,
-    /// A slot taken earlier with [`ScriptRunner::try_reserve`]; without one,
+    /// A slot taken earlier with the target's `try_reserve`; without one,
     /// stand-up takes its own or answers `Busy`.
     pub reservation: Option<SlotReservation>,
     /// Where the run's output goes; a fresh store when absent.
@@ -348,26 +376,158 @@ pub struct StandUpOptions {
     pub preferred_port: Option<u16>,
 }
 
+/// The commands a run executes, resolved from the manifest for its target.
+#[derive(Debug, Clone)]
+struct Commands {
+    setup: Option<String>,
+    build: Option<String>,
+    start: String,
+    ready: Option<ReadyCheck>,
+    seed: Option<String>,
+    test: Option<String>,
+    stop: Option<String>,
+    restart: Option<String>,
+    timeouts: StepTimeouts,
+    /// Where the target's own commands come from, for messages.
+    section: &'static str,
+    /// Remote runs up at once; unused for local runs, which read the config.
+    max_parallel: usize,
+}
+
+impl Commands {
+    fn local(manifest: &Manifest) -> Self {
+        let app = &manifest.app;
+        Self {
+            setup: app.setup.clone(),
+            build: app.build.clone(),
+            start: app.start.clone(),
+            ready: app.ready.clone(),
+            seed: app.seed.clone(),
+            test: app.test.clone(),
+            stop: app.stop.clone(),
+            restart: None,
+            timeouts: app.timeouts,
+            section: "[app]",
+            max_parallel: 0,
+        }
+    }
+
+    /// `None` when the manifest has no `[app.remote]`.
+    fn remote(manifest: &Manifest) -> Option<Self> {
+        let app = &manifest.app;
+        let remote = app.remote.as_ref()?;
+        Some(Self {
+            setup: app.setup.clone(),
+            build: app.build.clone(),
+            start: remote.start.clone(),
+            ready: remote.ready.clone(),
+            seed: remote.seed.clone(),
+            test: remote.test.clone(),
+            stop: remote.stop.clone(),
+            restart: remote.restart.clone(),
+            timeouts: StepTimeouts {
+                setup: app.timeouts.setup,
+                build: app.timeouts.build,
+                start: remote.timeouts.start,
+                seed: remote.timeouts.seed,
+                test: remote.timeouts.test,
+                stop: remote.timeouts.stop,
+            },
+            section: "[app.remote]",
+            max_parallel: (remote.max_parallel as usize).max(1),
+        })
+    }
+
+    /// The table `step`'s command is read from.
+    fn section_of(&self, step: Step) -> &'static str {
+        match step {
+            Step::Setup | Step::Build => "[app]",
+            _ => self.section,
+        }
+    }
+
+    fn nothing_to_run(&self, step: Step) -> StepReport {
+        StepReport::note(
+            step,
+            format!(
+                "no `{}` in {}; nothing to run",
+                step.label(),
+                self.section_of(step)
+            ),
+        )
+    }
+}
+
+/// Why a board set to `remote` cannot stand up from `root`'s manifest.
+pub(crate) fn remote_missing_message(root: &Path) -> String {
+    format!(
+        "this board reproduces against a remote target, but {} in {} has no [app.remote] \
+         table. Add one (docs/scripts.md#remote-targets) or set the board's reproduction \
+         target to local.",
+        manifest::MANIFEST_PATH,
+        root.display()
+    )
+}
+
+/// A remote redeploy in place: `[app.remote] restart` run as the start step,
+/// with the address and reference of what it replaces.
+struct Redeploy {
+    command: String,
+    url: String,
+    target_ref: Option<String>,
+}
+
 /// The parts of a run teardown needs, shared by every handle to it.
 struct RunInner {
     run_id: Uuid,
-    port: u16,
-    url: String,
+    kind: ReproductionTarget,
+    /// Local runs only.
+    port: Option<u16>,
+    /// A remote run's address is known once its deploy reports it.
+    url: Mutex<String>,
+    /// What a remote deploy named the thing it deployed.
+    target_ref: Mutex<Option<String>>,
     worktree: PathBuf,
     ticket_key: String,
     target_branch: Option<String>,
     manifest: Manifest,
-    /// What every script receives on top of the process environment.
-    script_env: Vec<(String, String)>,
+    commands: Commands,
+    /// What every script receives on top of the process environment. A
+    /// remote run gains `PREPCOOK_APP_URL` once its deploy reports it.
+    script_env: Mutex<Vec<(String, String)>>,
     secret_env: Vec<(String, String)>,
     run_dir: PathBuf,
+    env_out: PathBuf,
     log: Arc<MsgStore>,
     started_at: DateTime<Utc>,
     child: Mutex<Option<AsyncGroupChild>>,
     start_tail: Arc<Mutex<VecDeque<String>>>,
+    /// A remote run's `start` has run, so teardown owes it a `stop`.
+    deployed: AtomicBool,
     ports: Arc<PortAllocator>,
     slot: Mutex<Option<SlotReservation>>,
     torn_down: AtomicBool,
+}
+
+impl RunInner {
+    fn url(&self) -> String {
+        lock(&self.url).clone()
+    }
+
+    fn target_ref(&self) -> Option<String> {
+        lock(&self.target_ref).clone()
+    }
+
+    fn script_env(&self) -> Vec<(String, String)> {
+        lock(&self.script_env).clone()
+    }
+
+    /// Sets (or replaces) one variable every later script receives.
+    fn set_script_var(&self, name: &str, value: &str) {
+        let mut env = lock(&self.script_env);
+        env.retain(|(key, _)| key != name);
+        env.push((name.to_string(), value.to_string()));
+    }
 }
 
 impl Drop for RunInner {
@@ -398,18 +558,50 @@ impl Drop for RunInner {
             .get_mut()
             .unwrap_or_else(|p| p.into_inner())
             .take();
+        // A deployed remote app outlives this process unless its `stop`
+        // runs; run it in the background, then clean up the run directory.
+        if self.kind == ReproductionTarget::Remote
+            && self.deployed.load(Ordering::SeqCst)
+            && let Some(stop) = self.commands.stop.clone()
+            && let Ok(handle) = tokio::runtime::Handle::try_current()
+        {
+            warn!(
+                "app run {} dropped without a teardown; running its remote stop",
+                self.run_id
+            );
+            let worktree = self.worktree.clone();
+            let env = self
+                .script_env
+                .get_mut()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone();
+            let log = self.log.clone();
+            let timeout = Duration::from_secs(self.commands.timeouts.stop);
+            let run_dir = self.run_dir.clone();
+            handle.spawn(async move {
+                run_command(Step::Stop, &stop, &worktree, &env, timeout, &log).await;
+                let _ = std::fs::remove_dir_all(&run_dir);
+            });
+            return;
+        }
         let _ = std::fs::remove_dir_all(&self.run_dir);
     }
 }
 
-/// A stood-up app. Cheap to clone; the app stays up until
-/// [`ScriptRunner::tear_down`] or until the last clone is dropped.
+/// A stood-up app. Cheap to clone; the app stays up until its target tears
+/// it down or until the last clone is dropped.
 #[derive(Clone)]
 pub struct AppRun {
     pub run_id: Uuid,
-    pub port: u16,
+    /// The target that stood it up.
+    pub target_kind: ReproductionTarget,
+    /// The port a local app listens on; `None` for a remote app.
+    pub port: Option<u16>,
     pub url: String,
-    /// What the seed script wrote to `$PREPCOOK_ENV_OUT`.
+    /// What a remote deploy named the thing it deployed, when it said.
+    /// Opaque: handed back to its `stop` and `restart` scripts.
+    pub target_ref: Option<String>,
+    /// What the seed script (and a remote deploy) wrote to `$PREPCOOK_ENV_OUT`.
     pub env: BTreeMap<String, String>,
     pub started_at: DateTime<Utc>,
     pub log: Arc<MsgStore>,
@@ -423,6 +615,7 @@ impl std::fmt::Debug for AppRun {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AppRun")
             .field("run_id", &self.run_id)
+            .field("target_kind", &self.target_kind)
             .field("url", &self.url)
             .field("worktree", &self.worktree)
             .field("env", &self.env.keys().collect::<Vec<_>>())
@@ -431,13 +624,33 @@ impl std::fmt::Debug for AppRun {
 }
 
 impl AppRun {
+    /// A handle on a live run that was never handed back to a caller (a
+    /// verification in progress), with no seed output or steps.
+    fn from_inner(inner: Arc<RunInner>) -> Self {
+        Self {
+            run_id: inner.run_id,
+            target_kind: inner.kind,
+            port: inner.port,
+            url: inner.url(),
+            target_ref: inner.target_ref(),
+            env: BTreeMap::new(),
+            started_at: inner.started_at,
+            log: inner.log.clone(),
+            worktree: inner.worktree.clone(),
+            steps: Vec::new(),
+            inner,
+        }
+    }
+
     /// The variables an agent session working against this run receives: the
     /// app's address, the seed's output and every secret.
-    pub fn session_env(&self) -> HashMap<String, String> {
+    pub(crate) fn session_env(&self) -> HashMap<String, String> {
         let mut env: HashMap<String, String> = self.inner.secret_env.iter().cloned().collect();
         env.extend(self.env.clone());
         env.insert("PREPCOOK_APP_URL".into(), self.url.clone());
-        env.insert("PREPCOOK_PORT".into(), self.port.to_string());
+        if let Some(port) = self.port {
+            env.insert("PREPCOOK_PORT".into(), port.to_string());
+        }
         env.insert(
             "PREPCOOK_WORKTREE".into(),
             self.worktree.to_string_lossy().into_owned(),
@@ -449,12 +662,14 @@ impl AppRun {
     pub fn status(&self, workspace_id: Option<Uuid>) -> AppRunStatus {
         AppRunStatus {
             run_id: self.run_id,
+            target_kind: self.target_kind,
             worktree: self.worktree.to_string_lossy().into_owned(),
             url: self.url.clone(),
             port: self.port,
             seed_env_names: self.env.keys().cloned().collect(),
             started_at: self.started_at,
             workspace_id,
+            health: None,
         }
     }
 
@@ -463,16 +678,28 @@ impl AppRun {
     }
 }
 
+/// Whether a run's app answers, as its target's status check found it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RunStatus {
+    pub up: bool,
+    /// What was checked and what it answered.
+    pub message: String,
+}
+
 /// A run as the API shows it. Names of the seed's variables, never values.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct AppRunStatus {
     pub run_id: Uuid,
+    pub target_kind: ReproductionTarget,
     pub worktree: String,
     pub url: String,
-    pub port: u16,
+    /// `None` for a remote app.
+    pub port: Option<u16>,
     pub seed_env_names: Vec<String>,
     pub started_at: DateTime<Utc>,
     pub workspace_id: Option<Uuid>,
+    /// Filled in when the caller asked the target to check.
+    pub health: Option<RunStatus>,
 }
 
 /// A Settings "Test run": in progress until `finished_at` is set.
@@ -480,6 +707,8 @@ pub struct AppRunStatus {
 pub struct ScriptRunState {
     pub run_id: Uuid,
     pub step: RunStep,
+    /// The reproduction target the step ran on.
+    pub target: ReproductionTarget,
     pub worktree: String,
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
@@ -501,8 +730,12 @@ struct Adoption {
 
 struct RunnerInner {
     settings: RwLock<RunnerSettings>,
+    /// The `app_runs` values the settings were last built from; see
+    /// [`ScriptRunner::sync_settings`].
+    applied: Mutex<Option<(String, u32)>>,
     ports: Arc<PortAllocator>,
     slots: Arc<AtomicUsize>,
+    remote_slots: Arc<AtomicUsize>,
     live: Mutex<HashMap<Uuid, Weak<RunInner>>>,
     adopted: Mutex<HashMap<Uuid, Adoption>>,
     setup_done: Mutex<HashSet<PathBuf>>,
@@ -529,201 +762,25 @@ impl Plan {
         test: false,
         stop: false,
     };
-}
 
-/// Runs `.prepcook/scripts.toml`. Held by the deployment; clones share state.
-#[derive(Clone)]
-pub struct ScriptRunner {
-    inner: Arc<RunnerInner>,
-}
+    /// A remote deploy builds where it deploys, so `[app] build` is not part
+    /// of a remote stand-up; `setup` is, because the deploy, seed and test
+    /// scripts run here and need the worktree's dependencies.
+    const REMOTE_STAND_UP: Plan = Plan {
+        build: false,
+        ..Self::STAND_UP
+    };
 
-impl Default for ScriptRunner {
-    fn default() -> Self {
-        Self::new(RunnerSettings::default())
-    }
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|p| p.into_inner())
-}
-
-impl ScriptRunner {
-    pub fn new(settings: RunnerSettings) -> Self {
-        Self {
-            inner: Arc::new(RunnerInner {
-                settings: RwLock::new(settings),
-                ports: Arc::new(PortAllocator::new()),
-                slots: Arc::new(AtomicUsize::new(0)),
-                live: Mutex::new(HashMap::new()),
-                adopted: Mutex::new(HashMap::new()),
-                setup_done: Mutex::new(HashSet::new()),
-                script_runs: Mutex::new(VecDeque::new()),
-            }),
+    fn stand_up(kind: ReproductionTarget) -> Self {
+        match kind {
+            ReproductionTarget::Local => Self::STAND_UP,
+            ReproductionTarget::Remote => Self::REMOTE_STAND_UP,
         }
     }
 
-    pub fn apply_settings(&self, settings: RunnerSettings) {
-        *self
-            .inner
-            .settings
-            .write()
-            .unwrap_or_else(|p| p.into_inner()) = settings;
-    }
-
-    fn settings(&self) -> RunnerSettings {
-        self.inner
-            .settings
-            .read()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone()
-    }
-
-    pub fn load_manifest(&self, worktree: &Path) -> Result<Manifest, ManifestError> {
-        manifest::load_manifest(worktree)
-    }
-
-    /// Takes a slot, or `None` when all `max_parallel` are in use.
-    pub fn try_reserve(&self) -> Option<SlotReservation> {
-        let max = self.settings().max_parallel;
-        self.inner
-            .slots
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
-                (used < max).then_some(used + 1)
-            })
-            .ok()
-            .map(|_| SlotReservation {
-                slots: self.inner.slots.clone(),
-            })
-    }
-
-    pub fn slots_in_use(&self) -> usize {
-        self.inner.slots.load(Ordering::SeqCst)
-    }
-
-    /// Whether a stand-up in this process already ran `setup` successfully in
-    /// `worktree`, so the workspace setup hook need not run it again.
-    pub fn has_completed_setup(&self, worktree: &Path) -> bool {
-        lock(&self.inner.setup_done).contains(worktree)
-    }
-
-    // -- Stand-up, test, teardown ------------------------------------------
-
-    /// setup → build → start → ready → seed, in `worktree`. On success the app
-    /// is up and the returned run owns it.
-    pub async fn stand_up(
-        &self,
-        worktree: &Path,
-        opts: StandUpOptions,
-    ) -> Result<AppRun, StandUpReport> {
-        self.execute(worktree, opts, Plan::STAND_UP).await
-    }
-
-    /// Runs `test` against a stood-up app, with `$PREPCOOK_CHANGED_FILES` set.
-    pub async fn test(&self, run: &AppRun) -> StepReport {
-        let inner = &run.inner;
-        let Some(command) = inner.manifest.app.test.clone() else {
-            return StepReport::note(Step::Test, "no `test` in [app]; nothing to run");
-        };
-        let mut env = inner.script_env.clone();
-        env.extend(run.env.clone());
-        env.push((
-            "PREPCOOK_CHANGED_FILES".into(),
-            changed_files(&inner.worktree, inner.target_branch.as_deref()).await,
-        ));
-        run_command(
-            Step::Test,
-            &command,
-            &inner.worktree,
-            &env,
-            Duration::from_secs(inner.manifest.app.timeouts.test),
-            &inner.log,
-        )
-        .await
-    }
-
-    /// Stand-up, then `test`, then teardown: the pre-merge verification.
-    pub async fn verify(&self, worktree: &Path, opts: StandUpOptions) -> StandUpReport {
-        let run = match self.stand_up(worktree, opts).await {
-            Ok(run) => run,
-            Err(report) => return report,
-        };
-        let test = self.test(&run).await;
-        let mut steps = run.steps.clone();
-        let passed = test.succeeded();
-        steps.push(test);
-        self.tear_down(&run).await;
-        StandUpReport::new(
-            if passed {
-                StandUpOutcome::Ok
-            } else {
-                StandUpOutcome::TestFailed
-            },
-            steps,
-            None,
-        )
-    }
-
-    /// Runs `stop` (bounded by its timeout), kills the start process group and
-    /// gives back the port and the slot. Always completes, whatever `stop`
-    /// does; a second call is a no-op.
-    pub async fn tear_down(&self, run: &AppRun) {
-        lock(&self.inner.adopted).remove(&run.run_id);
-        self.tear_down_inner(&run.inner).await;
-    }
-
-    async fn tear_down_inner(&self, inner: &Arc<RunInner>) {
-        if inner.torn_down.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        let child = lock(&inner.child).take();
-        if child.is_some()
-            && let Some(stop) = inner.manifest.app.stop.clone()
-        {
-            let report = run_command(
-                Step::Stop,
-                &stop,
-                &inner.worktree,
-                &inner.script_env,
-                Duration::from_secs(inner.manifest.app.timeouts.stop),
-                &inner.log,
-            )
-            .await;
-            if !report.succeeded() {
-                warn!(
-                    "app run {}: stop {} — killing the process group regardless",
-                    inner.run_id,
-                    if report.timed_out {
-                        "timed out".to_string()
-                    } else {
-                        format!("exited {:?}", report.exit)
-                    }
-                );
-            }
-        }
-        if let Some(mut child) = child
-            && let Err(e) = utils::process::kill_process_group(&mut child).await
-        {
-            warn!("app run {}: kill failed: {e}", inner.run_id);
-        }
-        inner.ports.release(inner.run_id);
-        lock(&inner.slot).take();
-        lock(&self.inner.live).remove(&inner.run_id);
-        let _ = std::fs::remove_dir_all(&inner.run_dir);
-        debug!("app run {} torn down", inner.run_id);
-    }
-
-    /// One step on its own, for the Settings "Test run" button. `start` and
-    /// `ready` stand the app up without setup, build or seed and tear it down
-    /// once it is ready (or once `start`'s timeout passes with the process
-    /// still up, when there is no ready check).
-    pub async fn run_one(
-        &self,
-        worktree: &Path,
-        step: RunStep,
-        opts: StandUpOptions,
-    ) -> StandUpReport {
-        let plan = match step {
-            RunStep::StandUp => Plan::STAND_UP,
+    fn for_step(kind: ReproductionTarget, step: RunStep) -> Self {
+        match step {
+            RunStep::StandUp => Self::stand_up(kind),
             RunStep::Setup => Plan {
                 setup: true,
                 ..Default::default()
@@ -748,8 +805,276 @@ impl ScriptRunner {
                 stop: true,
                 ..Default::default()
             },
+        }
+    }
+}
+
+/// Runs `.prepcook/scripts.toml`. Held by the deployment; clones share state.
+/// Stand-ups go through a [`ReproTarget`], which picks how the app is stood
+/// up; the bookkeeping every target shares (slots, runs handed to
+/// workspaces, the Settings test runs) lives here.
+#[derive(Clone)]
+pub struct ScriptRunner {
+    inner: Arc<RunnerInner>,
+}
+
+impl Default for ScriptRunner {
+    fn default() -> Self {
+        Self::new(RunnerSettings::default())
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+impl ScriptRunner {
+    pub fn new(settings: RunnerSettings) -> Self {
+        Self {
+            inner: Arc::new(RunnerInner {
+                settings: RwLock::new(settings),
+                applied: Mutex::new(None),
+                ports: Arc::new(PortAllocator::new()),
+                slots: Arc::new(AtomicUsize::new(0)),
+                remote_slots: Arc::new(AtomicUsize::new(0)),
+                live: Mutex::new(HashMap::new()),
+                adopted: Mutex::new(HashMap::new()),
+                setup_done: Mutex::new(HashSet::new()),
+                script_runs: Mutex::new(VecDeque::new()),
+            }),
+        }
+    }
+
+    pub fn apply_settings(&self, settings: RunnerSettings) {
+        *self
+            .inner
+            .settings
+            .write()
+            .unwrap_or_else(|p| p.into_inner()) = settings;
+    }
+
+    /// Rebuilds the settings from `app_runs` when those values changed since
+    /// the last call, so a config edited anywhere reaches the runner without
+    /// re-parsing (and re-warning about) an unchanged range on every call.
+    pub fn sync_settings(&self, port_range: &str, max_parallel: u32) {
+        let wanted = (port_range.to_string(), max_parallel);
+        let mut applied = lock(&self.inner.applied);
+        if applied.as_ref() == Some(&wanted) {
+            return;
+        }
+        self.apply_settings(RunnerSettings::from_config(port_range, max_parallel));
+        *applied = Some(wanted);
+    }
+
+    pub(crate) fn settings(&self) -> RunnerSettings {
+        self.inner
+            .settings
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+
+    pub fn load_manifest(&self, worktree: &Path) -> Result<Manifest, ManifestError> {
+        manifest::load_manifest(worktree)
+    }
+
+    /// Takes a local slot, or `None` when all `max_parallel` are in use.
+    pub(crate) fn try_reserve(&self) -> Option<SlotReservation> {
+        let max = self.settings().max_parallel;
+        reserve(&self.inner.slots, max)
+    }
+
+    /// Takes a remote slot, or `None` when `max` are in use.
+    pub(crate) fn try_reserve_remote(&self, max: usize) -> Option<SlotReservation> {
+        reserve(&self.inner.remote_slots, max.max(1))
+    }
+
+    fn try_reserve_for(
+        &self,
+        commands: &Commands,
+        kind: ReproductionTarget,
+    ) -> Option<SlotReservation> {
+        match kind {
+            ReproductionTarget::Local => self.try_reserve(),
+            ReproductionTarget::Remote => self.try_reserve_remote(commands.max_parallel),
+        }
+    }
+
+    pub fn slots_in_use(&self) -> usize {
+        self.inner.slots.load(Ordering::SeqCst)
+    }
+
+    pub fn remote_slots_in_use(&self) -> usize {
+        self.inner.remote_slots.load(Ordering::SeqCst)
+    }
+
+    /// Whether a stand-up in this process already ran `setup` successfully in
+    /// `worktree`, so the workspace setup hook need not run it again.
+    pub fn has_completed_setup(&self, worktree: &Path) -> bool {
+        lock(&self.inner.setup_done).contains(worktree)
+    }
+
+    // -- Stand-up, test, teardown ------------------------------------------
+
+    /// The stand-up for `kind`, in `worktree`. On success the app is up and
+    /// the returned run owns it.
+    pub(crate) async fn stand_up_as(
+        &self,
+        kind: ReproductionTarget,
+        worktree: &Path,
+        opts: StandUpOptions,
+    ) -> Result<AppRun, StandUpReport> {
+        self.execute(worktree, opts, Plan::stand_up(kind), kind, None)
+            .await
+    }
+
+    /// Runs `test` against a stood-up app, with `$PREPCOOK_CHANGED_FILES` set.
+    pub(crate) async fn test(&self, run: &AppRun) -> StepReport {
+        let inner = &run.inner;
+        let Some(command) = inner.commands.test.clone() else {
+            return inner.commands.nothing_to_run(Step::Test);
         };
-        match self.execute(worktree, opts, plan).await {
+        let mut env = inner.script_env();
+        env.extend(run.env.clone());
+        env.push((
+            "PREPCOOK_CHANGED_FILES".into(),
+            changed_files(&inner.worktree, inner.target_branch.as_deref()).await,
+        ));
+        run_command(
+            Step::Test,
+            &command,
+            &inner.worktree,
+            &env,
+            Duration::from_secs(inner.commands.timeouts.test),
+            &inner.log,
+        )
+        .await
+    }
+
+    /// Runs `seed` again against a stood-up app. What it writes is registered
+    /// for redaction; the run's recorded environment is the stand-up's.
+    pub(crate) async fn seed(&self, run: &AppRun) -> StepReport {
+        let inner = &run.inner;
+        let Some(command) = inner.commands.seed.clone() else {
+            return inner.commands.nothing_to_run(Step::Seed);
+        };
+        let report = run_command(
+            Step::Seed,
+            &command,
+            &inner.worktree,
+            &inner.script_env(),
+            Duration::from_secs(inner.commands.timeouts.seed),
+            &inner.log,
+        )
+        .await;
+        register_sensitive(&read_env_out(&inner.env_out));
+        report
+    }
+
+    /// Stand-up, then `test`, then teardown: the pre-merge verification.
+    pub(crate) async fn verify_as(
+        &self,
+        kind: ReproductionTarget,
+        worktree: &Path,
+        opts: StandUpOptions,
+    ) -> StandUpReport {
+        let run = match self.stand_up_as(kind, worktree, opts).await {
+            Ok(run) => run,
+            Err(report) => return report,
+        };
+        let test = self.test(&run).await;
+        let mut steps = run.steps.clone();
+        let passed = test.succeeded();
+        steps.push(test);
+        self.tear_down(&run).await;
+        StandUpReport::new(
+            if passed {
+                StandUpOutcome::Ok
+            } else {
+                StandUpOutcome::TestFailed
+            },
+            steps,
+            None,
+        )
+    }
+
+    /// Runs `stop` (bounded by its timeout), kills a local app's start
+    /// process group and gives back the port and the slot. Always completes,
+    /// whatever `stop` does; a second call is a no-op.
+    pub(crate) async fn tear_down(&self, run: &AppRun) {
+        lock(&self.inner.adopted).remove(&run.run_id);
+        self.tear_down_inner(&run.inner, true).await;
+    }
+
+    /// `run_stop` false skips the `stop` command: for a remote run about to
+    /// be redeployed in place, whose environment must survive.
+    async fn tear_down_inner(&self, inner: &Arc<RunInner>, run_stop: bool) {
+        if inner.torn_down.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let child = lock(&inner.child).take();
+        let owes_stop = match inner.kind {
+            ReproductionTarget::Local => child.is_some(),
+            ReproductionTarget::Remote => inner.deployed.load(Ordering::SeqCst),
+        };
+        if run_stop
+            && owes_stop
+            && let Some(stop) = inner.commands.stop.clone()
+        {
+            let report = run_command(
+                Step::Stop,
+                &stop,
+                &inner.worktree,
+                &inner.script_env(),
+                Duration::from_secs(inner.commands.timeouts.stop),
+                &inner.log,
+            )
+            .await;
+            if !report.succeeded() {
+                let how = if report.timed_out {
+                    "timed out".to_string()
+                } else {
+                    format!("exited {:?}", report.exit)
+                };
+                match inner.kind {
+                    ReproductionTarget::Local => warn!(
+                        "app run {}: stop {how} — killing the process group regardless",
+                        inner.run_id
+                    ),
+                    ReproductionTarget::Remote => warn!(
+                        "app run {}: remote stop {how} — what it deployed may still be up",
+                        inner.run_id
+                    ),
+                }
+            }
+        }
+        if let Some(mut child) = child
+            && let Err(e) = utils::process::kill_process_group(&mut child).await
+        {
+            warn!("app run {}: kill failed: {e}", inner.run_id);
+        }
+        inner.ports.release(inner.run_id);
+        lock(&inner.slot).take();
+        lock(&self.inner.live).remove(&inner.run_id);
+        let _ = std::fs::remove_dir_all(&inner.run_dir);
+        debug!("app run {} torn down", inner.run_id);
+    }
+
+    /// One step on its own, for the Settings "Test run" button. `start` and
+    /// `ready` stand the app up without setup, build or seed and tear it down
+    /// once it is ready (for a local app with no ready check, once
+    /// `start`'s timeout passes with the process still up).
+    pub(crate) async fn run_one_as(
+        &self,
+        kind: ReproductionTarget,
+        worktree: &Path,
+        step: RunStep,
+        opts: StandUpOptions,
+    ) -> StandUpReport {
+        match self
+            .execute(worktree, opts, Plan::for_step(kind, step), kind, None)
+            .await
+        {
             Ok(run) => {
                 let steps = run.steps.clone();
                 self.tear_down(&run).await;
@@ -764,32 +1089,30 @@ impl ScriptRunner {
         worktree: &Path,
         opts: StandUpOptions,
         plan: Plan,
+        kind: ReproductionTarget,
+        redeploy: Option<Redeploy>,
     ) -> Result<AppRun, StandUpReport> {
         let log = opts.log.clone().unwrap_or_default();
         let fail = |outcome: StandUpOutcome, message: String| -> Result<AppRun, StandUpReport> {
             log.push(LogMsg::Stderr(format!("{}\n", secrets::redact(&message))));
             Err(StandUpReport::new(outcome, Vec::new(), Some(message)))
         };
-
-        let reservation = if plan.start {
-            match opts.reservation {
-                Some(reservation) => Some(reservation),
-                None => match self.try_reserve() {
-                    Some(reservation) => Some(reservation),
-                    None => {
-                        return fail(
-                            StandUpOutcome::Busy,
-                            format!(
-                                "all {} app-run slots are in use",
-                                self.settings().max_parallel
-                            ),
-                        );
-                    }
-                },
-            }
-        } else {
-            opts.reservation
+        let busy = |max: usize| {
+            fail(
+                StandUpOutcome::Busy,
+                format!("all {max} app-run slots are in use"),
+            )
         };
+
+        // A local slot is taken before the manifest is read; a remote one
+        // after, because its limit is in the manifest.
+        let mut reservation = opts.reservation;
+        if kind == ReproductionTarget::Local && plan.start && reservation.is_none() {
+            match self.try_reserve() {
+                Some(taken) => reservation = Some(taken),
+                None => return busy(self.settings().max_parallel),
+            }
+        }
 
         let manifest = match manifest::load_manifest(worktree) {
             Ok(manifest) => manifest,
@@ -803,6 +1126,24 @@ impl ScriptRunner {
                 return fail(StandUpOutcome::Error(e.to_string()), e.to_string());
             }
         };
+        let commands = match kind {
+            ReproductionTarget::Local => Commands::local(&manifest),
+            ReproductionTarget::Remote => match Commands::remote(&manifest) {
+                Some(commands) => commands,
+                None => {
+                    return fail(
+                        StandUpOutcome::TargetUnconfigured,
+                        remote_missing_message(worktree),
+                    );
+                }
+            },
+        };
+        if kind == ReproductionTarget::Remote && plan.start && reservation.is_none() {
+            match self.try_reserve_for(&commands, kind) {
+                Some(taken) => reservation = Some(taken),
+                None => return busy(commands.max_parallel),
+            }
+        }
 
         let secrets = Secrets::load();
         if let Err(missing) = secrets.check_required(&manifest.secrets.requires) {
@@ -818,14 +1159,19 @@ impl ScriptRunner {
         }
 
         let run_id = opts.run_id.unwrap_or_else(Uuid::new_v4);
-        let range = self.settings().port_range;
-        let port = match self
-            .inner
-            .ports
-            .allocate_preferring(&range, run_id, opts.preferred_port)
-        {
-            Ok(port) => port,
-            Err(e) => return fail(StandUpOutcome::PortUnavailable, e.to_string()),
+        let port = match kind {
+            ReproductionTarget::Local => {
+                let range = self.settings().port_range;
+                match self
+                    .inner
+                    .ports
+                    .allocate_preferring(&range, run_id, opts.preferred_port)
+                {
+                    Ok(port) => Some(port),
+                    Err(e) => return fail(StandUpOutcome::PortUnavailable, e.to_string()),
+                }
+            }
+            ReproductionTarget::Remote => None,
         };
 
         let run_dir = std::env::temp_dir()
@@ -842,40 +1188,77 @@ impl ScriptRunner {
             );
         }
 
-        let url = format!("http://127.0.0.1:{port}");
         let secret_env = secrets.env_vars();
-        let mut script_env: Vec<(String, String)> = vec![
-            ("PREPCOOK_PORT".into(), port.to_string()),
-            ("PORT".into(), port.to_string()),
-            ("PREPCOOK_APP_URL".into(), url.clone()),
-            (
-                "PREPCOOK_WORKTREE".into(),
-                worktree.to_string_lossy().into_owned(),
-            ),
-            ("PREPCOOK_TICKET_KEY".into(), opts.ticket_key.clone()),
-            ("PREPCOOK_RUN_ID".into(), run_id.to_string()),
-            (
-                "PREPCOOK_ENV_OUT".into(),
-                env_out.to_string_lossy().into_owned(),
-            ),
-        ];
+        let (url, target_ref, mut script_env) = match (port, &redeploy) {
+            (Some(port), _) => {
+                let url = format!("http://127.0.0.1:{port}");
+                let env: Vec<(String, String)> = vec![
+                    ("PREPCOOK_PORT".into(), port.to_string()),
+                    ("PORT".into(), port.to_string()),
+                    ("PREPCOOK_APP_URL".into(), url.clone()),
+                    (
+                        "PREPCOOK_WORKTREE".into(),
+                        worktree.to_string_lossy().into_owned(),
+                    ),
+                    ("PREPCOOK_TICKET_KEY".into(), opts.ticket_key.clone()),
+                    ("PREPCOOK_RUN_ID".into(), run_id.to_string()),
+                    (
+                        "PREPCOOK_ENV_OUT".into(),
+                        env_out.to_string_lossy().into_owned(),
+                    ),
+                ];
+                (url, None, env)
+            }
+            (None, redeploy) => {
+                let mut env: Vec<(String, String)> = vec![
+                    (
+                        "PREPCOOK_WORKTREE".into(),
+                        worktree.to_string_lossy().into_owned(),
+                    ),
+                    ("PREPCOOK_TICKET_KEY".into(), opts.ticket_key.clone()),
+                    ("PREPCOOK_RUN_ID".into(), run_id.to_string()),
+                    ("PREPCOOK_BRANCH".into(), current_branch(worktree).await),
+                    (
+                        "PREPCOOK_ENV_OUT".into(),
+                        env_out.to_string_lossy().into_owned(),
+                    ),
+                ];
+                // A redeploy is told what it replaces.
+                let (url, target_ref) = match redeploy {
+                    Some(previous) => {
+                        env.push((APP_URL_VAR.into(), previous.url.clone()));
+                        if let Some(target_ref) = &previous.target_ref {
+                            env.push((TARGET_REF_VAR.into(), target_ref.clone()));
+                        }
+                        (previous.url.clone(), previous.target_ref.clone())
+                    }
+                    None => (String::new(), None),
+                };
+                (url, target_ref, env)
+            }
+        };
         script_env.extend(secret_env.iter().cloned());
 
         let inner = Arc::new(RunInner {
             run_id,
+            kind,
             port,
-            url: url.clone(),
+            url: Mutex::new(url),
+            target_ref: Mutex::new(target_ref),
             worktree: worktree.to_path_buf(),
             ticket_key: opts.ticket_key.clone(),
             target_branch: opts.target_branch.clone(),
             manifest: manifest.clone(),
-            script_env: script_env.clone(),
+            commands: commands.clone(),
+            script_env: Mutex::new(script_env),
             secret_env,
             run_dir,
+            env_out: env_out.clone(),
             log: log.clone(),
             started_at: Utc::now(),
             child: Mutex::new(None),
             start_tail: Arc::new(Mutex::new(VecDeque::new())),
+            deployed: AtomicBool::new(false),
             ports: self.inner.ports.clone(),
             slot: Mutex::new(reservation),
             torn_down: AtomicBool::new(false),
@@ -885,21 +1268,27 @@ impl ScriptRunner {
             live.retain(|_, weak| weak.strong_count() > 0);
             live.insert(run_id, Arc::downgrade(&inner));
         }
-        info!("app run {run_id}: {} on port {port}", worktree.display());
+        match port {
+            Some(port) => info!("app run {run_id}: {} on port {port}", worktree.display()),
+            None => info!(
+                "app run {run_id}: {} on a remote target",
+                worktree.display()
+            ),
+        }
 
         let mut steps: Vec<StepReport> = Vec::new();
-        let timeouts = manifest.app.timeouts;
+        let timeouts = commands.timeouts;
         let simple = [
             (
                 plan.setup,
                 Step::Setup,
-                manifest.app.setup.as_deref(),
+                commands.setup.as_deref(),
                 timeouts.setup,
             ),
             (
                 plan.build,
                 Step::Build,
-                manifest.app.build.as_deref(),
+                commands.build.as_deref(),
                 timeouts.build,
             ),
         ];
@@ -909,10 +1298,7 @@ impl ScriptRunner {
             }
             let Some(command) = command else {
                 if !plan.start {
-                    steps.push(StepReport::note(
-                        step,
-                        format!("no `{}` in [app]; nothing to run", step.label()),
-                    ));
+                    steps.push(commands.nothing_to_run(step));
                 }
                 continue;
             };
@@ -920,7 +1306,7 @@ impl ScriptRunner {
                 step,
                 command,
                 worktree,
-                &script_env,
+                &inner.script_env(),
                 Duration::from_secs(timeout),
                 &log,
             )
@@ -935,26 +1321,36 @@ impl ScriptRunner {
             }
         }
 
+        let mut seed_env = BTreeMap::new();
         if plan.start {
-            match self.start_and_wait(&inner, plan.seed).await {
+            let started = match kind {
+                ReproductionTarget::Local => self.start_and_wait(&inner, plan.seed).await,
+                ReproductionTarget::Remote => {
+                    let command = redeploy.map(|r| r.command);
+                    self.deploy_and_wait(&inner, command).await
+                }
+            };
+            match started {
                 Ok(reports) => steps.extend(reports),
-                Err((reports, outcome)) => {
+                Err((reports, outcome, message)) => {
                     steps.extend(reports);
-                    let report = self.abort_with(&inner, steps, outcome).await;
+                    let report = self.abort_with(&inner, steps, outcome, message).await;
                     return Err(report);
                 }
             }
+            if kind == ReproductionTarget::Remote {
+                seed_env = handed_on(read_env_out(&env_out));
+            }
         }
 
-        let mut seed_env = BTreeMap::new();
         if plan.seed {
-            match manifest.app.seed.as_deref() {
+            match commands.seed.as_deref() {
                 Some(command) => {
                     let report = run_command(
                         Step::Seed,
                         command,
                         worktree,
-                        &script_env,
+                        &inner.script_env(),
                         Duration::from_secs(timeouts.seed),
                         &log,
                     )
@@ -965,11 +1361,10 @@ impl ScriptRunner {
                         return Err(self.abort(&inner, steps, Step::Seed).await);
                     }
                     seed_env = read_env_out(&env_out);
-                    for (name, value) in &seed_env {
-                        if secrets::is_sensitive_name(name) {
-                            secrets::register_redaction(value);
-                        }
+                    if kind == ReproductionTarget::Remote {
+                        seed_env = handed_on(seed_env);
                     }
+                    register_sensitive(&seed_env);
                     if !seed_env.is_empty() {
                         log.push_stdout(format!(
                             "seed wrote {}\n",
@@ -977,10 +1372,7 @@ impl ScriptRunner {
                         ));
                     }
                 }
-                None if !plan.start => steps.push(StepReport::note(
-                    Step::Seed,
-                    "no `seed` in [app]; nothing to run",
-                )),
+                None if !plan.start => steps.push(commands.nothing_to_run(Step::Seed)),
                 None => {}
             }
         }
@@ -989,13 +1381,13 @@ impl ScriptRunner {
             (
                 plan.test,
                 Step::Test,
-                manifest.app.test.as_deref(),
+                commands.test.as_deref(),
                 timeouts.test,
             ),
             (
                 plan.stop,
                 Step::Stop,
-                manifest.app.stop.as_deref(),
+                commands.stop.as_deref(),
                 timeouts.stop,
             ),
         ] {
@@ -1003,13 +1395,10 @@ impl ScriptRunner {
                 continue;
             }
             let Some(command) = command else {
-                steps.push(StepReport::note(
-                    step,
-                    format!("no `{}` in [app]; nothing to run", step.label()),
-                ));
+                steps.push(commands.nothing_to_run(step));
                 continue;
             };
-            let mut env = script_env.clone();
+            let mut env = inner.script_env();
             if step == Step::Test {
                 env.push((
                     "PREPCOOK_CHANGED_FILES".into(),
@@ -1034,8 +1423,10 @@ impl ScriptRunner {
 
         Ok(AppRun {
             run_id,
+            target_kind: kind,
             port,
-            url,
+            url: inner.url(),
+            target_ref: inner.target_ref(),
             env: seed_env,
             started_at: inner.started_at,
             log,
@@ -1051,7 +1442,7 @@ impl ScriptRunner {
         steps: Vec<StepReport>,
         step: Step,
     ) -> StandUpReport {
-        self.abort_with(inner, steps, StandUpOutcome::failed_step(step))
+        self.abort_with(inner, steps, StandUpOutcome::failed_step(step), None)
             .await
     }
 
@@ -1060,13 +1451,14 @@ impl ScriptRunner {
         inner: &Arc<RunInner>,
         steps: Vec<StepReport>,
         outcome: StandUpOutcome,
+        message: Option<String>,
     ) -> StandUpReport {
         inner.log.push(LogMsg::Stderr(format!(
             "stand-up stopped: {}\n",
             outcome.label()
         )));
-        self.tear_down_inner(inner).await;
-        StandUpReport::new(outcome, steps, None)
+        self.tear_down_inner(inner, true).await;
+        StandUpReport::new(outcome, steps, message)
     }
 
     /// Spawns `start` in its own process group, waits for it to listen on its
@@ -1076,38 +1468,48 @@ impl ScriptRunner {
     /// listening port is ready — or, for a single-step test run
     /// (`wait_for_listen` false), a process still up when `timeouts.start`
     /// runs out.
-    async fn start_and_wait(
-        &self,
-        inner: &Arc<RunInner>,
-        wait_for_listen: bool,
-    ) -> Result<Vec<StepReport>, (Vec<StepReport>, StandUpOutcome)> {
-        let manifest = &inner.manifest;
-        let timeouts = manifest.app.timeouts;
-        let command = manifest.app.start.clone();
+    async fn start_and_wait(&self, inner: &Arc<RunInner>, wait_for_listen: bool) -> StartResult {
+        let commands = &inner.commands;
+        let timeouts = commands.timeouts;
+        let command = commands.start.clone();
+        let port = inner.port.expect("a local run has a port");
+        let url = inner.url();
+        let script_env = inner.script_env();
         inner
             .log
             .push_stdout(format!("$ {}    # start\n", secrets::redact(&command)));
         let spawned_at = Instant::now();
-        let mut child = match shell_command(&command, &inner.worktree, &inner.script_env)
-            .group_spawn_no_window()
-        {
-            Ok(child) => child,
-            Err(e) => {
-                let report = StepReport {
-                    step: Step::Start,
-                    exit: None,
-                    timed_out: false,
-                    duration_ms: 0,
-                    log_tail: format!("could not start the shell: {e}"),
-                };
-                return Err((vec![report], StandUpOutcome::StartFailed));
-            }
-        };
+        let mut child =
+            match shell_command(&command, &inner.worktree, &script_env).group_spawn_no_window() {
+                Ok(child) => child,
+                Err(e) => {
+                    let report = StepReport {
+                        step: Step::Start,
+                        exit: None,
+                        timed_out: false,
+                        duration_ms: 0,
+                        log_tail: format!("could not start the shell: {e}"),
+                    };
+                    return Err((vec![report], StandUpOutcome::StartFailed, None));
+                }
+            };
         if let Some(stdout) = child.inner().stdout.take() {
-            pump(stdout, inner.log.clone(), inner.start_tail.clone(), false);
+            pump(
+                stdout,
+                inner.log.clone(),
+                inner.start_tail.clone(),
+                false,
+                None,
+            );
         }
         if let Some(stderr) = child.inner().stderr.take() {
-            pump(stderr, inner.log.clone(), inner.start_tail.clone(), true);
+            pump(
+                stderr,
+                inner.log.clone(),
+                inner.start_tail.clone(),
+                true,
+                None,
+            );
         }
         *lock(&inner.child) = Some(child);
 
@@ -1130,13 +1532,17 @@ impl ScriptRunner {
 
         // 1. Listening.
         let listen_deadline = spawned_at + Duration::from_secs(timeouts.start);
-        let ready_check = manifest.app.ready.clone();
+        let ready_check = commands.ready.clone();
         let listen_required = wait_for_listen || ready_check.is_some();
         loop {
             if let Some(code) = exited() {
-                return Err((vec![start_report(code, false)], StandUpOutcome::StartFailed));
+                return Err((
+                    vec![start_report(code, false)],
+                    StandUpOutcome::StartFailed,
+                    None,
+                ));
             }
-            if port_is_listening(inner.port).await {
+            if port_is_listening(port).await {
                 break;
             }
             if Instant::now() >= listen_deadline {
@@ -1146,10 +1552,14 @@ impl ScriptRunner {
                     return Ok(vec![start_report(None, false)]);
                 }
                 inner.log.push(LogMsg::Stderr(format!(
-                    "start did not listen on port {} within {}s\n",
-                    inner.port, timeouts.start
+                    "start did not listen on port {port} within {}s\n",
+                    timeouts.start
                 )));
-                return Err((vec![start_report(None, true)], StandUpOutcome::NotReady));
+                return Err((
+                    vec![start_report(None, true)],
+                    StandUpOutcome::NotReady,
+                    None,
+                ));
             }
             tokio::time::sleep(POLL_INTERVAL).await;
         }
@@ -1161,44 +1571,31 @@ impl ScriptRunner {
         };
         let ready_started = Instant::now();
         let deadline = ready_started + Duration::from_secs(ready.timeout_secs);
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()
-            .map_err(|e| (vec![started.clone()], StandUpOutcome::Error(e.to_string())))?;
-        let mut last = String::new();
+        let client = probe_client().map_err(|e| {
+            (
+                vec![started.clone()],
+                StandUpOutcome::Error(e.clone()),
+                None,
+            )
+        })?;
         loop {
             if let Some(code) = exited() {
-                return Err((vec![start_report(code, false)], StandUpOutcome::StartFailed));
+                return Err((
+                    vec![start_report(code, false)],
+                    StandUpOutcome::StartFailed,
+                    None,
+                ));
             }
-            let passed = match (&ready.url, &ready.command) {
-                (Some(path), _) => {
-                    let target = format!("{}{path}", inner.url);
-                    match client.get(&target).send().await {
-                        Ok(response) if response.status().is_success() => true,
-                        Ok(response) => {
-                            last = format!("GET {target} → {}", response.status());
-                            false
-                        }
-                        Err(e) => {
-                            last = format!("GET {target} → {e}");
-                            false
-                        }
-                    }
-                }
-                (None, Some(command)) => {
-                    let remaining = deadline.saturating_duration_since(Instant::now());
-                    let report = run_command_quiet(
-                        command,
-                        &inner.worktree,
-                        &inner.script_env,
-                        remaining.max(Duration::from_secs(1)),
-                    )
-                    .await;
-                    last = report.log_tail;
-                    report.exit == Some(0) && !report.timed_out
-                }
-                (None, None) => true,
-            };
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let (passed, last) = probe_ready_once(
+                &client,
+                &ready,
+                &url,
+                &inner.worktree,
+                &script_env,
+                remaining,
+            )
+            .await;
             if passed {
                 inner.log.push_stdout("ready\n".to_string());
                 return Ok(vec![
@@ -1234,9 +1631,196 @@ impl ScriptRunner {
                         },
                     ],
                     StandUpOutcome::NotReady,
+                    None,
                 ));
             }
             tokio::time::sleep(POLL_INTERVAL).await;
+        }
+    }
+
+    /// Runs a remote target's `start` (or `command`, for a redeploy) to
+    /// completion within `timeouts.start`, takes the app's address from what
+    /// it reported, then polls the ready check against that address. A
+    /// deploy that fails is `StartFailed`; one that succeeds without saying
+    /// where the app is breaks the script contract, which is the setup's
+    /// problem (`Error`); never passing the check is `NotReady`.
+    async fn deploy_and_wait(&self, inner: &Arc<RunInner>, command: Option<String>) -> StartResult {
+        let commands = &inner.commands;
+        let command = command.unwrap_or_else(|| commands.start.clone());
+        inner.deployed.store(true, Ordering::SeqCst);
+        let (report, printed_url) = run_command_reporting_url(
+            Step::Start,
+            &command,
+            &inner.worktree,
+            &inner.script_env(),
+            Duration::from_secs(commands.timeouts.start),
+            &inner.log,
+        )
+        .await;
+        if !report.succeeded() {
+            return Err((vec![report], StandUpOutcome::StartFailed, None));
+        }
+
+        let written = read_env_out(&inner.env_out);
+        let reported = written
+            .get(APP_URL_VAR)
+            .cloned()
+            .or(printed_url)
+            .or_else(|| Some(inner.url()).filter(|url| !url.is_empty()));
+        let Some(url) = reported.as_deref().and_then(base_url) else {
+            let message = match reported {
+                Some(bad) => format!(
+                    "{} start reported {bad:?} as the app's address, which is not an http(s) URL",
+                    commands.section
+                ),
+                None => format!(
+                    "{} start exited 0 without reporting the app's address: write \
+                     {APP_URL_VAR}=<url> to $PREPCOOK_ENV_OUT, or print the URL as the last \
+                     http(s) line on stdout (docs/scripts.md#remote-targets)",
+                    commands.section
+                ),
+            };
+            inner
+                .log
+                .push(LogMsg::Stderr(format!("{}\n", secrets::redact(&message))));
+            return Err((
+                vec![report],
+                StandUpOutcome::Error(message.clone()),
+                Some(message),
+            ));
+        };
+        *lock(&inner.url) = url.clone();
+        inner.set_script_var(APP_URL_VAR, &url);
+        if let Some(target_ref) = written.get(TARGET_REF_VAR).filter(|r| !r.is_empty()) {
+            *lock(&inner.target_ref) = Some(target_ref.clone());
+            inner.set_script_var(TARGET_REF_VAR, target_ref);
+        }
+        inner.log.push_stdout(format!("deployed at {url}\n"));
+        let deployed = report;
+
+        let Some(ready) = commands.ready.clone() else {
+            return Ok(vec![deployed]);
+        };
+        let ready_started = Instant::now();
+        let deadline = ready_started + Duration::from_secs(ready.timeout_secs);
+        let client = probe_client().map_err(|e| {
+            (
+                vec![deployed.clone()],
+                StandUpOutcome::Error(e.clone()),
+                None,
+            )
+        })?;
+        let script_env = inner.script_env();
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let (passed, last) = probe_ready_once(
+                &client,
+                &ready,
+                &url,
+                &inner.worktree,
+                &script_env,
+                remaining,
+            )
+            .await;
+            if passed {
+                inner.log.push_stdout("ready\n".to_string());
+                return Ok(vec![
+                    deployed,
+                    StepReport {
+                        step: Step::Ready,
+                        exit: Some(0),
+                        timed_out: false,
+                        duration_ms: ready_started.elapsed().as_millis() as u64,
+                        log_tail: String::new(),
+                    },
+                ]);
+            }
+            if Instant::now() >= deadline {
+                let tail = secrets::redact(&last);
+                inner.log.push(LogMsg::Stderr(format!(
+                    "not ready after {}s: {tail}\n",
+                    ready.timeout_secs
+                )));
+                return Err((
+                    vec![
+                        deployed,
+                        StepReport {
+                            step: Step::Ready,
+                            exit: None,
+                            timed_out: true,
+                            duration_ms: ready_started.elapsed().as_millis() as u64,
+                            log_tail: format!("ready check: {tail}"),
+                        },
+                    ],
+                    StandUpOutcome::NotReady,
+                    None,
+                ));
+            }
+            tokio::time::sleep(POLL_INTERVAL).await;
+        }
+    }
+
+    /// Whether `run`'s app answers: for a local app, its start process is up
+    /// and listening; then, for either, one pass of its ready check.
+    pub(crate) async fn probe(&self, run: &AppRun) -> RunStatus {
+        let inner = &run.inner;
+        let down = |message: String| RunStatus { up: false, message };
+        if inner.torn_down.load(Ordering::SeqCst) {
+            return down("the app has been torn down".to_string());
+        }
+        if inner.kind == ReproductionTarget::Local {
+            let exited = {
+                let mut guard = lock(&inner.child);
+                match guard.as_mut().map(|child| child.try_wait()) {
+                    Some(Ok(None)) => None,
+                    Some(Ok(Some(status))) => Some(status.code()),
+                    Some(Err(_)) | None => Some(None),
+                }
+            };
+            if let Some(code) = exited {
+                return down(match code {
+                    Some(code) => format!("the start process exited {code}"),
+                    None => "the start process is not running".to_string(),
+                });
+            }
+            if let Some(port) = inner.port
+                && !port_is_listening(port).await
+            {
+                return down(format!("nothing is listening on port {port}"));
+            }
+        }
+        let url = inner.url();
+        let Some(ready) = inner.commands.ready.clone() else {
+            return RunStatus {
+                up: true,
+                message: match inner.kind {
+                    ReproductionTarget::Local => format!("listening at {url}; no ready check"),
+                    ReproductionTarget::Remote => {
+                        format!("deployed at {url}; no ready check to ask")
+                    }
+                },
+            };
+        };
+        let client = match probe_client() {
+            Ok(client) => client,
+            Err(e) => return down(e),
+        };
+        let (passed, said) = probe_ready_once(
+            &client,
+            &ready,
+            &url,
+            &inner.worktree,
+            &inner.script_env(),
+            STATUS_PROBE_TIMEOUT,
+        )
+        .await;
+        RunStatus {
+            up: passed,
+            message: if passed {
+                format!("ready at {url}")
+            } else {
+                format!("not ready: {}", secrets::redact(&said))
+            },
         }
     }
 
@@ -1366,13 +1950,14 @@ impl ScriptRunner {
             .filter_map(|(_, weak)| weak.upgrade())
             .collect();
         for inner in &live {
-            self.tear_down_inner(inner).await;
+            self.tear_down_inner(inner, true).await;
         }
     }
 
     /// The run serving `path` — a worktree, a directory inside one, or the
-    /// workspace directory that holds it.
-    pub fn current_for_worktree(&self, path: &Path) -> Option<AppRunStatus> {
+    /// workspace directory that holds it — and the workspace it was handed
+    /// to, if any.
+    pub fn current_run_for_worktree(&self, path: &Path) -> Option<(AppRun, Option<Uuid>)> {
         let matches = |worktree: &Path| {
             worktree == path || path.starts_with(worktree) || worktree.starts_with(path)
         };
@@ -1380,27 +1965,38 @@ impl ScriptRunner {
             .values()
             .find(|a| matches(&a.run.worktree))
         {
-            return Some(adoption.run.status(Some(adoption.workspace_id)));
+            return Some((adoption.run.clone(), Some(adoption.workspace_id)));
         }
         lock(&self.inner.live)
             .values()
             .filter_map(Weak::upgrade)
             .find(|inner| matches(&inner.worktree) && !inner.torn_down.load(Ordering::SeqCst))
-            .map(|inner| AppRunStatus {
-                run_id: inner.run_id,
-                worktree: inner.worktree.to_string_lossy().into_owned(),
-                url: inner.url.clone(),
-                port: inner.port,
-                seed_env_names: Vec::new(),
-                started_at: inner.started_at,
-                workspace_id: None,
-            })
+            .map(|inner| (AppRun::from_inner(inner), None))
     }
 
-    /// Tears a workspace's run down and stands it up again in the same
-    /// worktree, on the same port when it is still free, keeping its binding
-    /// to the agent process. For an agent testing a candidate change.
-    pub async fn restart(&self, run_id: Uuid) -> Result<(AppRunStatus, StandUpReport), String> {
+    /// [`Self::current_run_for_worktree`] as the API shows it.
+    pub fn current_for_worktree(&self, path: &Path) -> Option<AppRunStatus> {
+        self.current_run_for_worktree(path)
+            .map(|(run, workspace_id)| run.status(workspace_id))
+    }
+
+    /// The target an adopted run was stood up with.
+    pub fn adopted_kind(&self, run_id: Uuid) -> Option<ReproductionTarget> {
+        lock(&self.inner.adopted)
+            .get(&run_id)
+            .map(|adoption| adoption.run.target_kind)
+    }
+
+    /// Stands a workspace's run up again in the same worktree, keeping its
+    /// binding to the agent process. For an agent testing a candidate
+    /// change. A local app is torn down and comes back on the same port
+    /// when it is still free; a remote one runs `[app.remote] restart` in
+    /// place when the manifest has one, and is otherwise stopped and
+    /// deployed again.
+    pub(crate) async fn restart(
+        &self,
+        run_id: Uuid,
+    ) -> Result<(AppRunStatus, StandUpReport), String> {
         let adoption = lock(&self.inner.adopted).remove(&run_id);
         let Some(adoption) = adoption else {
             return Err(if lock(&self.inner.live).contains_key(&run_id) {
@@ -1412,19 +2008,35 @@ impl ScriptRunner {
             });
         };
         let old = adoption.run;
+        let kind = old.target_kind;
         let opts = StandUpOptions {
             ticket_key: old.inner.ticket_key.clone(),
             target_branch: old.inner.target_branch.clone(),
             reservation: None,
             log: Some(old.log.clone()),
             run_id: None,
-            preferred_port: Some(old.port),
+            preferred_port: old.port,
         };
         let worktree = old.worktree.clone();
+        let redeploy = match kind {
+            ReproductionTarget::Remote => {
+                old.inner.commands.restart.clone().map(|command| Redeploy {
+                    command,
+                    url: old.url.clone(),
+                    target_ref: old.inner.target_ref(),
+                })
+            }
+            ReproductionTarget::Local => None,
+        };
         old.log.push_stdout("restarting\n".to_string());
-        self.tear_down(&old).await;
+        // A redeploy replaces what is there, so the old run gives back its
+        // slot without destroying its environment.
+        self.tear_down_inner(&old.inner, redeploy.is_none()).await;
         drop(old);
-        match self.stand_up(&worktree, opts).await {
+        match self
+            .execute(&worktree, opts, Plan::stand_up(kind), kind, redeploy)
+            .await
+        {
             Ok(run) => {
                 let report = StandUpReport::new(StandUpOutcome::Ok, run.steps.clone(), None);
                 let status = run.status(Some(adoption.workspace_id));
@@ -1448,10 +2060,15 @@ impl ScriptRunner {
 
     // -- Script runs for the Settings UI -----------------------------------
 
-    /// Starts `step` in `worktree` in the background and returns its id at
-    /// once. Output streams from [`Self::script_run_log`]; the report lands in
-    /// [`Self::script_run`] when it finishes.
-    pub fn spawn_script_run(&self, worktree: PathBuf, step: RunStep) -> Uuid {
+    /// Starts `step` on `target` in `worktree` in the background and returns
+    /// its id at once. Output streams from [`Self::script_run_log`]; the
+    /// report lands in [`Self::script_run`] when it finishes.
+    pub fn spawn_script_run(
+        &self,
+        target: ReproTargetKind,
+        worktree: PathBuf,
+        step: RunStep,
+    ) -> Uuid {
         let run_id = Uuid::new_v4();
         let log = Arc::new(MsgStore::new());
         {
@@ -1463,6 +2080,7 @@ impl ScriptRunner {
                 state: ScriptRunState {
                     run_id,
                     step,
+                    target: target.target(),
                     worktree: worktree.to_string_lossy().into_owned(),
                     started_at: Utc::now(),
                     finished_at: None,
@@ -1473,12 +2091,12 @@ impl ScriptRunner {
         }
         let runner = self.clone();
         tokio::spawn(async move {
-            let opts = StandUpOptions {
+            let request = StandUpRequest {
                 log: Some(log.clone()),
                 run_id: Some(run_id),
-                ..Default::default()
+                ..StandUpRequest::new(worktree)
             };
-            let report = runner.run_one(&worktree, step, opts).await;
+            let report = target.run_step(request, step).await;
             log.push_stdout(format!("result: {}\n", report.outcome.label()));
             {
                 let mut runs = lock(&runner.inner.script_runs);
@@ -1521,8 +2139,8 @@ impl ScriptRunner {
 
     /// What the preview's dev server receives: a port from the runner's range
     /// held for `process_id` until [`Self::release_process`], and the same
-    /// variables a stand-up's scripts get.
-    pub fn dev_server_env(
+    /// variables a local stand-up's scripts get.
+    pub(crate) fn dev_server_env(
         &self,
         process_id: Uuid,
         worktree: &Path,
@@ -1538,6 +2156,117 @@ impl ScriptRunner {
         );
         env.insert("PREPCOOK_RUN_ID".into(), process_id.to_string());
         Ok(env)
+    }
+}
+
+/// What a start phase came to: its step reports, or those with the outcome
+/// and an optional message for a person.
+type StartResult = Result<Vec<StepReport>, (Vec<StepReport>, StandUpOutcome, Option<String>)>;
+
+fn reserve(slots: &Arc<AtomicUsize>, max: usize) -> Option<SlotReservation> {
+    slots
+        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
+            (used < max).then_some(used + 1)
+        })
+        .ok()
+        .map(|_| SlotReservation {
+            slots: slots.clone(),
+        })
+}
+
+/// The variables `$PREPCOOK_ENV_OUT` hands on to an agent session: all of
+/// them but the address and reference a remote deploy reports, which the
+/// run carries itself.
+fn handed_on(mut env: BTreeMap<String, String>) -> BTreeMap<String, String> {
+    env.remove(APP_URL_VAR);
+    env.remove(TARGET_REF_VAR);
+    env
+}
+
+/// Registers the values of sensitive-looking variables for redaction.
+fn register_sensitive(env: &BTreeMap<String, String>) {
+    for (name, value) in env {
+        if secrets::is_sensitive_name(name) {
+            secrets::register_redaction(value);
+        }
+    }
+}
+
+/// `raw` as an app base URL: an absolute http(s) URL with no trailing slash,
+/// so a ready path can be appended. `None` for anything else.
+pub(crate) fn base_url(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let parsed = reqwest::Url::parse(raw).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return None;
+    }
+    Some(raw.trim_end_matches('/').to_string())
+}
+
+/// The URL a stdout line announces: the line, when it starts with `http://`
+/// or `https://`, up to the first whitespace.
+fn url_in_line(line: &str) -> Option<String> {
+    let line = line.trim();
+    (line.starts_with("http://") || line.starts_with("https://"))
+        .then(|| line.split_whitespace().next().unwrap_or(line).to_string())
+}
+
+fn probe_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// One pass of a ready check against `base_url`: a GET of the path that
+/// passes on 2xx, or the command exiting 0 within `remaining` (at least a
+/// second). Returns whether it passed and what it last said.
+async fn probe_ready_once(
+    client: &reqwest::Client,
+    ready: &ReadyCheck,
+    base_url: &str,
+    worktree: &Path,
+    env: &[(String, String)],
+    remaining: Duration,
+) -> (bool, String) {
+    match (&ready.url, &ready.command) {
+        (Some(path), _) => {
+            let target = format!("{base_url}{path}");
+            match client.get(&target).send().await {
+                Ok(response) if response.status().is_success() => (true, String::new()),
+                Ok(response) => (false, format!("GET {target} → {}", response.status())),
+                Err(e) => (false, format!("GET {target} → {e}")),
+            }
+        }
+        (None, Some(command)) => {
+            let report = run_command_quiet(
+                command,
+                worktree,
+                env,
+                remaining.max(Duration::from_secs(1)),
+            )
+            .await;
+            (report.exit == Some(0) && !report.timed_out, report.log_tail)
+        }
+        (None, None) => (true, String::new()),
+    }
+}
+
+/// The worktree's checked-out branch, `$PREPCOOK_BRANCH` for remote scripts.
+/// Empty when git cannot say or the worktree is on a detached HEAD.
+async fn current_branch(worktree: &Path) -> String {
+    let output = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(worktree)
+        .args(["symbolic-ref", "--short", "-q", "HEAD"])
+        .stdin(Stdio::null())
+        .output()
+        .await;
+    match output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => String::new(),
     }
 }
 
@@ -1574,12 +2303,14 @@ fn tail_text(tail: &Mutex<VecDeque<String>>) -> String {
 }
 
 /// Copies a pipe into the log and the tail line by line, redacted. Invalid
-/// UTF-8 is replaced rather than ending the copy.
+/// UTF-8 is replaced rather than ending the copy. With `last_url`, the last
+/// line that announces a URL (see [`url_in_line`]) is kept there, unredacted.
 fn pump<R>(
     reader: R,
     log: Arc<MsgStore>,
     tail: Arc<Mutex<VecDeque<String>>>,
     stderr: bool,
+    last_url: Option<Arc<Mutex<Option<String>>>>,
 ) -> tokio::task::JoinHandle<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -1593,7 +2324,13 @@ where
                 Ok(0) | Err(_) => break,
                 Ok(_) => {
                     let raw = String::from_utf8_lossy(&buf);
-                    let line = secrets::redact(raw.trim_end_matches(['\n', '\r']));
+                    let raw = raw.trim_end_matches(['\n', '\r']);
+                    if let Some(slot) = &last_url
+                        && let Some(url) = url_in_line(raw)
+                    {
+                        *lock(slot) = Some(url);
+                    }
+                    let line = secrets::redact(raw);
                     push_tail(&tail, line.clone());
                     let text = format!("{line}\n");
                     log.push(if stderr {
@@ -1617,12 +2354,41 @@ async fn run_command(
     timeout: Duration,
     log: &Arc<MsgStore>,
 ) -> StepReport {
+    run_command_logged(step, command, cwd, env, timeout, log, None).await
+}
+
+/// [`run_command`], also returning the last URL the command printed on
+/// stdout: a remote deploy's address when it does not write one to
+/// `$PREPCOOK_ENV_OUT`.
+async fn run_command_reporting_url(
+    step: Step,
+    command: &str,
+    cwd: &Path,
+    env: &[(String, String)],
+    timeout: Duration,
+    log: &Arc<MsgStore>,
+) -> (StepReport, Option<String>) {
+    let url = Arc::new(Mutex::new(None));
+    let report = run_command_logged(step, command, cwd, env, timeout, log, Some(url.clone())).await;
+    let url = lock(&url).take();
+    (report, url)
+}
+
+async fn run_command_logged(
+    step: Step,
+    command: &str,
+    cwd: &Path,
+    env: &[(String, String)],
+    timeout: Duration,
+    log: &Arc<MsgStore>,
+    last_url: Option<Arc<Mutex<Option<String>>>>,
+) -> StepReport {
     log.push_stdout(format!(
         "$ {}    # {}\n",
         secrets::redact(command),
         step.label()
     ));
-    let report = run_command_into(step, command, cwd, env, timeout, Some(log)).await;
+    let report = run_command_into(step, command, cwd, env, timeout, Some(log), last_url).await;
     if !report.succeeded() {
         log.push(LogMsg::Stderr(format!(
             "{} {}\n",
@@ -1645,7 +2411,7 @@ async fn run_command_quiet(
     env: &[(String, String)],
     timeout: Duration,
 ) -> StepReport {
-    run_command_into(Step::Ready, command, cwd, env, timeout, None).await
+    run_command_into(Step::Ready, command, cwd, env, timeout, None, None).await
 }
 
 async fn run_command_into(
@@ -1655,6 +2421,7 @@ async fn run_command_into(
     env: &[(String, String)],
     timeout: Duration,
     log: Option<&Arc<MsgStore>>,
+    last_url: Option<Arc<Mutex<Option<String>>>>,
 ) -> StepReport {
     let started = Instant::now();
     let tail = Arc::new(Mutex::new(VecDeque::new()));
@@ -1673,10 +2440,10 @@ async fn run_command_into(
     let sink = log.cloned().unwrap_or_default();
     let mut pumps = Vec::new();
     if let Some(stdout) = child.inner().stdout.take() {
-        pumps.push(pump(stdout, sink.clone(), tail.clone(), false));
+        pumps.push(pump(stdout, sink.clone(), tail.clone(), false, last_url));
     }
     if let Some(stderr) = child.inner().stderr.take() {
-        pumps.push(pump(stderr, sink.clone(), tail.clone(), true));
+        pumps.push(pump(stderr, sink.clone(), tail.clone(), true, None));
     }
     let (exit, timed_out) = match tokio::time::timeout(timeout, child.wait()).await {
         Ok(Ok(status)) => (status.code(), false),
@@ -1745,7 +2512,7 @@ async fn changed_files(worktree: &Path, target: Option<&str>) -> String {
     }
 }
 
-/// The `KEY=VALUE` lines a seed script appended to `$PREPCOOK_ENV_OUT`.
+/// The `KEY=VALUE` lines a script appended to `$PREPCOOK_ENV_OUT`.
 fn read_env_out(path: &Path) -> BTreeMap<String, String> {
     let Ok(raw) = std::fs::read_to_string(path) else {
         return BTreeMap::new();
@@ -1775,6 +2542,34 @@ fn read_env_out(path: &Path) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::reproduction::LocalTarget;
+
+    /// The local target's operations, as the tests below drive them.
+    impl ScriptRunner {
+        async fn stand_up(
+            &self,
+            worktree: &Path,
+            opts: StandUpOptions,
+        ) -> Result<AppRun, StandUpReport> {
+            self.stand_up_as(ReproductionTarget::Local, worktree, opts)
+                .await
+        }
+
+        async fn verify(&self, worktree: &Path, opts: StandUpOptions) -> StandUpReport {
+            self.verify_as(ReproductionTarget::Local, worktree, opts)
+                .await
+        }
+
+        async fn run_one(
+            &self,
+            worktree: &Path,
+            step: RunStep,
+            opts: StandUpOptions,
+        ) -> StandUpReport {
+            self.run_one_as(ReproductionTarget::Local, worktree, step, opts)
+                .await
+        }
+    }
 
     /// A worktree holding `manifest` as its `.prepcook/scripts.toml`.
     fn worktree(manifest: &str) -> tempfile::TempDir {
@@ -1819,6 +2614,7 @@ start = 30
         let runner = [
             StandUpOutcome::ManifestMissing,
             StandUpOutcome::ManifestInvalid,
+            StandUpOutcome::TargetUnconfigured,
             StandUpOutcome::PortUnavailable,
             StandUpOutcome::SecretMissing("X".into()),
             StandUpOutcome::Error("boom".into()),
@@ -1895,8 +2691,10 @@ start = 30
             )
             .await
             .unwrap_or_else(|report| panic!("stand-up failed: {report:?}"));
-        assert!((4620..=4639).contains(&run.port));
-        assert_eq!(run.url, format!("http://127.0.0.1:{}", run.port));
+        let port = run.port.expect("a local run has a port");
+        assert!((4620..=4639).contains(&port));
+        assert_eq!(run.url, format!("http://127.0.0.1:{port}"));
+        assert_eq!(run.target_kind, ReproductionTarget::Local);
         assert_eq!(
             run.env.get("PREPCOOK_TEST_USER_EMAIL").map(String::as_str),
             Some("user@example.com")
@@ -1906,13 +2704,13 @@ start = 30
         assert_eq!(runner.slots_in_use(), 1);
         let session = run.session_env();
         assert_eq!(session.get("PREPCOOK_APP_URL"), Some(&run.url));
-        assert_eq!(session.get("PREPCOOK_PORT"), Some(&run.port.to_string()));
+        assert_eq!(session.get("PREPCOOK_PORT"), Some(&port.to_string()));
         // The seeded password is registered for redaction.
         assert_eq!(
             secrets::redact("pw is pw-from-seed-123"),
             "pw is [redacted]"
         );
-        assert!(port_is_listening(run.port).await);
+        assert!(port_is_listening(port).await);
         assert_eq!(
             runner.current_for_worktree(dir.path()).map(|s| s.run_id),
             Some(run.run_id)
@@ -1922,7 +2720,6 @@ start = 30
         assert!(test.succeeded(), "{test:?}");
         assert!(test.log_tail.contains("testing BUG-1"), "{}", test.log_tail);
 
-        let port = run.port;
         runner.tear_down(&run).await;
         assert!(!port_is_listening(port).await, "the app is gone");
         assert_eq!(runner.slots_in_use(), 0);
@@ -2011,7 +2808,7 @@ start = 30
             .stand_up(dir.path(), StandUpOptions::default())
             .await
             .unwrap();
-        let port = run.port;
+        let port = run.port.unwrap();
         drop(run);
         // Drop kills the group and frees the port and the slot synchronously.
         assert_eq!(runner.slots_in_use(), 0);
@@ -2036,7 +2833,7 @@ start = 30
             .await
             .unwrap();
         let (workspace, process) = (Uuid::new_v4(), Uuid::new_v4());
-        let port = run.port;
+        let port = run.port.unwrap();
         runner.adopt(run, workspace);
         assert!(runner.bind_process(Uuid::new_v4(), process).is_none());
         let env = runner.bind_process(workspace, process).unwrap();
@@ -2049,7 +2846,7 @@ start = 30
             .restart(runner.current_for_worktree(dir.path()).unwrap().run_id)
             .await
             .unwrap();
-        assert_eq!(restarted.0.port, port, "comes back on the same port");
+        assert_eq!(restarted.0.port, Some(port), "comes back on the same port");
         assert_eq!(restarted.1.outcome, StandUpOutcome::Ok);
 
         runner.release_process(process).await;
@@ -2079,7 +2876,11 @@ start = 30
         assert_eq!(report.steps.last().unwrap().step, Step::Ready);
         assert_eq!(runner.slots_in_use(), 0);
 
-        let id = runner.spawn_script_run(dir.path().to_path_buf(), RunStep::Setup);
+        let id = runner.spawn_script_run(
+            LocalTarget::new(runner.clone()).into(),
+            dir.path().to_path_buf(),
+            RunStep::Setup,
+        );
         let mut state = runner.script_run(id).unwrap();
         for _ in 0..100 {
             if state.finished_at.is_some() {
@@ -2088,8 +2889,34 @@ start = 30
             tokio::time::sleep(Duration::from_millis(100)).await;
             state = runner.script_run(id).unwrap();
         }
+        assert_eq!(state.target, ReproductionTarget::Local);
         assert_eq!(state.report.unwrap().outcome, StandUpOutcome::Ok);
         assert!(runner.script_run_log(id).is_some());
+    }
+
+    #[test]
+    fn urls_are_read_from_stdout_lines_and_normalised() {
+        assert_eq!(
+            url_in_line("https://pr-12.preview.example.com/  deployed").as_deref(),
+            Some("https://pr-12.preview.example.com/")
+        );
+        assert_eq!(
+            url_in_line("  http://10.0.0.5:8080\r").as_deref(),
+            Some("http://10.0.0.5:8080")
+        );
+        assert_eq!(url_in_line("deployed to https://x.example.com"), None);
+        assert_eq!(url_in_line("ftp://x"), None);
+        assert_eq!(
+            base_url("https://pr-12.preview.example.com/").as_deref(),
+            Some("https://pr-12.preview.example.com")
+        );
+        assert_eq!(
+            base_url(" http://127.0.0.1:9000/app ").as_deref(),
+            Some("http://127.0.0.1:9000/app")
+        );
+        for bad in ["", "preview.example.com", "ftp://x.example.com", "http://"] {
+            assert_eq!(base_url(bad), None, "{bad:?}");
+        }
     }
 
     #[test]

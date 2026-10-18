@@ -5,6 +5,11 @@ test itself in `.prepcook/scripts.toml` at its root. Prep Cook runs those script
 in the card's worktree, on a port it allocates, and hands the app's address and
 test login to the agent through environment variables.
 
+That is the `local` reproduction target. A board can instead use the `remote`
+target, which runs `[app.remote]` to deploy the branch to a preview
+environment, a dev tenant or a staging slot and works against the URL the
+deploy reports; see [Remote targets](#remote-targets).
+
 A repository without the file still works: its cards run without an app, and
 the pre-merge verification step is skipped.
 
@@ -26,6 +31,21 @@ ready = { url = "/health", timeout_secs = 300 }
 seed = "node scripts/seed.js" # optional; load test data, write KEY=VALUE lines to $PREPCOOK_ENV_OUT
 test = "pnpm test"            # optional; the exit code is the verdict
 stop = "pnpm stop"            # optional; runs before Prep Cook kills the start process group
+
+[app.remote]                  # optional; the remote target (see "Remote targets")
+start = "./scripts/deploy-preview.sh"   # required; deploys, reports the URL, exits
+ready = { url = "/health", timeout_secs = 600 }   # optional; against the reported URL
+seed = "node scripts/seed-remote.mjs"   # optional; [app] seed is not used remotely
+test = "pnpm test:e2e"        # optional; [app] test is not used remotely
+stop = "./scripts/destroy-preview.sh"   # optional; destroys what start deployed
+restart = "./scripts/deploy-preview.sh --update"  # optional; default is stop, then start
+max_parallel = 1              # remote apps up at once (default 1)
+
+[app.remote.timeouts]         # seconds; these are the defaults
+start = 1800
+seed = 600
+test = 1800
+stop = 900
 
 [app.timeouts]                # seconds; these are the defaults
 setup = 900
@@ -73,7 +93,7 @@ Teardown runs `stop` (bounded by `timeouts.stop`), then signals the whole start
 process group (SIGINT, SIGTERM, SIGKILL, two seconds apart) and frees the port.
 Teardown always completes, whether or not `stop` succeeds.
 
-At most `app_runs.max_parallel` apps (default 2) are up at once. A stand-up
+At most `app_runs.max_parallel` local apps (default 2) are up at once. A stand-up
 asked for while every slot is taken is refused as `busy` immediately; the
 orchestrator leaves the card where it is and asks again on its next tick.
 
@@ -83,8 +103,11 @@ orchestrator leaves the card where it is and asks again on its next tick.
 | --- | --- |
 | `ok` | — |
 | `setup-failed`, `build-failed`, `start-failed`, `not-ready`, `seed-failed`, `test-failed` | the branch |
-| `manifest-missing`, `manifest-invalid`, `secret-missing`, `port-unavailable`, `error` | the setup |
+| `manifest-missing`, `manifest-invalid`, `target-unconfigured`, `secret-missing`, `port-unavailable`, `error` | the setup |
 | `busy` | nobody; retried |
+
+`target-unconfigured` means the board reproduces against the remote target and
+the manifest has no `[app.remote]`.
 
 ## Environment
 
@@ -147,12 +170,85 @@ seed wrote, and every secret (`PREPCOOK_SECRET_<NAME>` and `<NAME>`).
   result on the card and the merge request.
 - Story, epic and subtask cards do not stand the app up.
 
-Agents have two MCP tools: `app_status` (the URL, port, seed variable names and
-start time of the app for their worktree) and `app_restart` (tear the app down
-and stand it up again in the same worktree, to test a candidate change; stands
-one up if none is running).
+Agents have two MCP tools: `app_status` (the URL, the target kind, the port
+for a local app, the seed variable names, the start time, and `health`: whether
+the app answers its ready check now) and `app_restart` (stand the app up again
+in the same worktree, to test a candidate change; stands one up if none is
+running).
 
-The preview's dev server runs `[app] start` with a port from the same range.
+The preview's dev server runs `[app] start` with a port from the same range,
+on this machine, whichever target the board uses.
+
+## Remote targets
+
+A board whose `reproduction.target` is `remote` (Settings → Reproduction; the
+default for every board is `app_runs.default_target`, itself `local` unless
+changed) stands its apps up with `[app.remote]` instead of serving them here.
+The commands still run on this machine, in the card's worktree; what differs is
+that `start` deploys and exits rather than serving in the foreground. Every
+stage is the same — the planning and executing sessions get `PREPCOOK_APP_URL`,
+the harness and the pre-merge verification run against it, and `app_status` /
+`app_restart` work as they do locally.
+
+A remote stand-up runs `[app] setup` (the scripts need the worktree's
+dependencies; `[app] build` is skipped, the deploy builds where it deploys),
+then `[app.remote] start`, the ready check against the reported URL, and
+`[app.remote] seed`. Teardown runs `[app.remote] stop`. A restart runs
+`[app.remote] restart` in place when it is set, and otherwise `stop` then a
+fresh stand-up. There is no port allocation, and `[app.remote] max_parallel`
+(default 1) caps remote apps separately from `app_runs.max_parallel`: a
+preview environment per card is expensive.
+
+### The script contract
+
+Every `[app.remote]` command receives the Prep Cook process's environment plus:
+
+| Variable | Value |
+| --- | --- |
+| `PREPCOOK_WORKTREE` | absolute path of the worktree |
+| `PREPCOOK_TICKET_KEY` | the card's key (e.g. `BUG-1234`); may be empty |
+| `PREPCOOK_RUN_ID` | the run's id (a UUID); unique per stand-up, so it can name the environment |
+| `PREPCOOK_BRANCH` | the worktree's checked-out branch; empty on a detached HEAD |
+| `PREPCOOK_ENV_OUT` | a file the scripts append `KEY=VALUE` lines to |
+| `PREPCOOK_APP_URL` | the reported URL — every command after `start` (and `restart`, which is told what it replaces) |
+| `PREPCOOK_TARGET_REF` | what `start` named the deployment, when it did — `stop` and `restart` |
+| `PREPCOOK_CHANGED_FILES` | `test` only, as for the local target |
+| `PREPCOOK_SECRET_<NAME>` and `<NAME>` | every secret in the secrets store |
+
+`start` must exit 0 once the app is deployed and say where it is:
+
+1. a `PREPCOOK_APP_URL=<url>` line appended to `$PREPCOOK_ENV_OUT`, or failing
+   that
+2. the last line of its stdout that starts with `http://` or `https://`.
+
+It may also append `PREPCOOK_TARGET_REF=<name>` (an environment name, a
+deployment id) for `stop` and `restart` to act on, and any other `KEY=VALUE`
+lines, which reach the agent session like the seed's. A `start` that exits
+non-zero is `start-failed`; one that exits 0 without a URL breaks the contract
+and is an `error` (the setup's problem). Whatever happens, once `start` has
+run, teardown runs `stop`, so a failed or abandoned deploy is still destroyed.
+
+A deploy script for a preview-environment CLI, as a sketch:
+
+```sh
+#!/bin/sh
+# scripts/deploy-preview.sh
+set -eu
+name="pc-$(printf %s "$PREPCOOK_RUN_ID" | cut -c1-8)"
+preview-cli deploy --name "$name" --branch "$PREPCOOK_BRANCH" --wait
+echo "PREPCOOK_TARGET_REF=$name" >> "$PREPCOOK_ENV_OUT"
+echo "PREPCOOK_APP_URL=$(preview-cli url --name "$name")" >> "$PREPCOOK_ENV_OUT"
+```
+
+```sh
+#!/bin/sh
+# scripts/destroy-preview.sh
+exec preview-cli destroy --name "$PREPCOOK_TARGET_REF" --yes
+```
+
+A board set to `remote` whose repository has no `[app.remote]` does not crash
+or fall back to a local run: its stand-ups stop with `target-unconfigured`,
+which is escalated like any other setup problem, and the Scripts panel says so.
 
 ## Secrets
 
@@ -185,10 +281,13 @@ any script runs, with the outcome `secret-missing`.
   error, plus `required_secrets_missing`.
 - `POST /api/repos/{id}/scripts/run` with
   `{ "step": "setup" | "build" | "start" | "ready" | "seed" | "test" | "stop" | "stand-up" }`
-  runs in the repository's checkout and returns `{ "run_id": ... }`. `start` and
-  `ready` start the app without setup, build or seed and tear it down once it
-  is ready (or once `timeouts.start` passes with the process still up, when
-  there is no ready check).
+  runs in the repository's checkout, on the target the repository's board
+  uses, and returns `{ "run_id": ... }`. `start` and `ready` start the app
+  without setup, build or seed and tear it down once it is ready (or, for a
+  local app with no ready check, once `timeouts.start` passes with the process
+  still up). On a remote target `stand-up` deploys, seeds and destroys.
+- The manifest response carries `target` (`local` or `remote`) and
+  `target_problem`, the reason that target cannot run this manifest, if any.
 - `GET /api/script-runs/{id}` — the report once the run finishes;
   `GET /api/script-runs/{id}/raw-logs/ws` streams its output.
 

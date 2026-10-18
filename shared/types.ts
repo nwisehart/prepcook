@@ -1412,7 +1412,11 @@ pattern_threshold: number | null,
  * The staging-deploy watch: records when each merged change reaches the
  * environment this job deploys. `None` turns the watch off.
  */
-deploy_watch: DeployWatch | null, };
+deploy_watch: DeployWatch | null, 
+/**
+ * Where this board's bug cards reproduce and verify.
+ */
+reproduction: ProjectReproductionOverride, };
 
 export type DeployWatch = { job_name: string, git_ref: string, };
 
@@ -1539,16 +1543,33 @@ export type AutonomyMode = "off" | "full";
 
 export type AppRunsConfig = { 
 /**
- * Ports handed to app runs, `<first>-<last>` inclusive. Each run gets one
- * as `$PREPCOOK_PORT`.
+ * Ports handed to local app runs, `<first>-<last>` inclusive. Each run
+ * gets one as `$PREPCOOK_PORT`.
  */
 port_range: string, 
 /**
- * App runs allowed at once. A stand-up past this is refused as busy and
- * retried on the orchestrator's next tick; each run is a full app stack,
- * so this is bounded by the machine's memory.
+ * Local app runs allowed at once. A stand-up past this is refused as
+ * busy and retried on the orchestrator's next tick; each run is a full
+ * app stack, so this is bounded by the machine's memory. Remote runs
+ * have their own limit, `[app.remote] max_parallel`.
  */
-max_parallel: number, };
+max_parallel: number, 
+/**
+ * The target a board reproduces against when it does not choose one
+ * (`reproduction.target` in its settings).
+ */
+default_target: ReproductionTarget, };
+
+export type ProjectReproductionOverride = { 
+/**
+ * `local` stands the app up on this machine from `[app]`; `remote`
+ * deploys it with `[app.remote]`. A board set to `remote` whose
+ * repository has no `[app.remote]` is a runner fault, reported on the
+ * card and escalated.
+ */
+target: ReproductionTarget | null, };
+
+export type ReproductionTarget = "local" | "remote";
 
 export type ApprovalsConfig = { in_app_gate: InAppGate, };
 
@@ -1581,7 +1602,12 @@ test: string | null,
 /**
  * Runs before the start process group is killed.
  */
-stop: string | null, timeouts: StepTimeouts, };
+stop: string | null, timeouts: StepTimeouts, 
+/**
+ * How the app is deployed somewhere other than this machine, for boards
+ * whose reproduction target is `remote`.
+ */
+remote: RemoteScripts | null, };
 
 export type ReadyCheck = { 
 /**
@@ -1592,6 +1618,47 @@ url: string | null,
  * Run until it exits 0.
  */
 command: string | null, timeout_secs: number, };
+
+export type RemoteScripts = { 
+/**
+ * Deploys the app and reports its base URL: a `PREPCOOK_APP_URL=<url>`
+ * line written to `$PREPCOOK_ENV_OUT`, or failing that the last line of
+ * stdout that starts with `http://` or `https://`.
+ */
+start: string, 
+/**
+ * Polled against the reported URL.
+ */
+ready: ReadyCheck | null, 
+/**
+ * Loads test data into the deployed app; writes `KEY=VALUE` lines to
+ * `$PREPCOOK_ENV_OUT`. `[app] seed` is not used for a remote app: a
+ * local seed may write to local storage the deployed app never reads.
+ */
+seed: string | null, 
+/**
+ * Tests the deployed app; the exit code is the verdict.
+ */
+test: string | null, 
+/**
+ * Destroys what `start` deployed.
+ */
+stop: string | null, 
+/**
+ * Redeploys in place. Unset, a restart is `stop` then `start`.
+ */
+restart: string | null, 
+/**
+ * Remote apps up at once, across every worktree. Each one is a deployed
+ * environment, so this is usually lower than the local limit.
+ */
+max_parallel: number, timeouts: RemoteTimeouts, };
+
+export type RemoteTimeouts = { 
+/**
+ * Time allowed for `start` (or `restart`) to deploy and exit.
+ */
+start: number, seed: number, test: number, stop: number, };
 
 export type StepTimeouts = { setup: number, build: number, 
 /**
@@ -1642,7 +1709,7 @@ exit: number | null, timed_out: boolean, duration_ms: number,
  */
 log_tail: string, };
 
-export type StandUpOutcome = { "kind": "ok" } | { "kind": "manifest-missing" } | { "kind": "manifest-invalid" } | { "kind": "setup-failed" } | { "kind": "build-failed" } | { "kind": "start-failed" } | { "kind": "not-ready" } | { "kind": "seed-failed" } | { "kind": "test-failed" } | { "kind": "port-unavailable" } | { "kind": "secret-missing", "detail": string } | { "kind": "busy" } | { "kind": "error", "detail": string };
+export type StandUpOutcome = { "kind": "ok" } | { "kind": "manifest-missing" } | { "kind": "manifest-invalid" } | { "kind": "target-unconfigured" } | { "kind": "setup-failed" } | { "kind": "build-failed" } | { "kind": "start-failed" } | { "kind": "not-ready" } | { "kind": "seed-failed" } | { "kind": "test-failed" } | { "kind": "port-unavailable" } | { "kind": "secret-missing", "detail": string } | { "kind": "busy" } | { "kind": "error", "detail": string };
 
 export type StandUpReport = { steps: Array<StepReport>, outcome: StandUpOutcome, 
 /**
@@ -1651,9 +1718,27 @@ export type StandUpReport = { steps: Array<StepReport>, outcome: StandUpOutcome,
  */
 message: string | null, };
 
-export type AppRunStatus = { run_id: string, worktree: string, url: string, port: number, seed_env_names: Array<string>, started_at: string, workspace_id: string | null, };
+export type AppRunStatus = { run_id: string, target_kind: ReproductionTarget, worktree: string, url: string, 
+/**
+ * `None` for a remote app.
+ */
+port: number | null, seed_env_names: Array<string>, started_at: string, workspace_id: string | null, 
+/**
+ * Filled in when the caller asked the target to check.
+ */
+health: RunStatus | null, };
 
-export type ScriptRunState = { run_id: string, step: RunStep, worktree: string, started_at: string, finished_at: string | null, report: StandUpReport | null, };
+export type RunStatus = { up: boolean, 
+/**
+ * What was checked and what it answered.
+ */
+message: string, };
+
+export type ScriptRunState = { run_id: string, step: RunStep, 
+/**
+ * The reproduction target the step ran on.
+ */
+target: ReproductionTarget, worktree: string, started_at: string, finished_at: string | null, report: StandUpReport | null, };
 
 export type PlaybookContextResponse = { 
 /**
@@ -1682,7 +1767,17 @@ missing: boolean,
 /**
  * Names in `[secrets] requires` with no value in the secrets store.
  */
-required_secrets_missing: Array<string>, };
+required_secrets_missing: Array<string>, 
+/**
+ * The reproduction target the repository's board uses; test runs run on
+ * it.
+ */
+target: ReproductionTarget, 
+/**
+ * Why that target cannot stand this manifest up (a board set to
+ * `remote` with no `[app.remote]`), when it cannot.
+ */
+target_problem: string | null, };
 
 export type RunScriptRequest = { step: RunStep, };
 

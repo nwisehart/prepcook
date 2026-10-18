@@ -30,7 +30,7 @@ use services::services::{
     },
     container::ContainerService,
     remote_client::RemoteClientError,
-    scripts::{RunnerSettings, ports},
+    scripts::ports,
 };
 use tokio::fs;
 use ts_rs::TS;
@@ -193,12 +193,10 @@ async fn update_config(
             let mut config = deployment.config().write().await;
             *config = new_config.clone();
             drop(config);
-            deployment
-                .script_runner()
-                .apply_settings(RunnerSettings::from_config(
-                    &new_config.app_runs.port_range,
-                    new_config.app_runs.max_parallel,
-                ));
+            deployment.script_runner().sync_settings(
+                &new_config.app_runs.port_range,
+                new_config.app_runs.max_parallel,
+            );
 
             // Track config events when fields transition from false → true and run side effects
             handle_config_events(&deployment, &old_config, &new_config).await;

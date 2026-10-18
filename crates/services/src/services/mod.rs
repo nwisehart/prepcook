@@ -31,6 +31,7 @@ pub mod remote_client;
 pub mod remote_sync;
 pub mod reopen;
 pub mod repo;
+pub mod reproduction;
 pub mod scripts;
 pub mod seat_monitor;
 pub mod secrets;

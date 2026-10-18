@@ -24,6 +24,7 @@ pub use crate::services::config::playbooks::{
 use crate::services::{
     config::versions::{superseded_playbooks, v9},
     notifications::NotifierKind,
+    reproduction::ReproductionTarget,
 };
 
 /// Shipped playbook texts that have since been replaced, byte-for-byte, as
@@ -188,18 +189,26 @@ fn slack_override_is_empty(slack: &ProjectSlackOverride) -> bool {
         && slack.enabled.is_none()
 }
 
-/// How the script runner stands target apps up (see `docs/scripts.md`).
+/// How the script runner stands target apps up (see `docs/scripts.md`):
+/// the reproduction area's global settings. The `local` target's fields are
+/// keys here; a `remote` target is described entirely by each repository's
+/// `[app.remote]`.
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, Eq)]
 pub struct AppRunsConfig {
-    /// Ports handed to app runs, `<first>-<last>` inclusive. Each run gets one
-    /// as `$PREPCOOK_PORT`.
+    /// Ports handed to local app runs, `<first>-<last>` inclusive. Each run
+    /// gets one as `$PREPCOOK_PORT`.
     #[serde(default = "default_port_range")]
     pub port_range: String,
-    /// App runs allowed at once. A stand-up past this is refused as busy and
-    /// retried on the orchestrator's next tick; each run is a full app stack,
-    /// so this is bounded by the machine's memory.
+    /// Local app runs allowed at once. A stand-up past this is refused as
+    /// busy and retried on the orchestrator's next tick; each run is a full
+    /// app stack, so this is bounded by the machine's memory. Remote runs
+    /// have their own limit, `[app.remote] max_parallel`.
     #[serde(default = "default_max_parallel")]
     pub max_parallel: u32,
+    /// The target a board reproduces against when it does not choose one
+    /// (`reproduction.target` in its settings).
+    #[serde(default)]
+    pub default_target: ReproductionTarget,
 }
 
 impl Default for AppRunsConfig {
@@ -207,8 +216,20 @@ impl Default for AppRunsConfig {
         Self {
             port_range: default_port_range(),
             max_parallel: default_max_parallel(),
+            default_target: ReproductionTarget::default(),
         }
     }
+}
+
+/// A board's reproduction settings. Unset inherits `app_runs.default_target`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct ProjectReproductionOverride {
+    /// `local` stands the app up on this machine from `[app]`; `remote`
+    /// deploys it with `[app.remote]`. A board set to `remote` whose
+    /// repository has no `[app.remote]` is a runner fault, reported on the
+    /// card and escalated.
+    #[serde(default)]
+    pub target: Option<ReproductionTarget>,
 }
 
 /// How a planning agent puts its document in front of a person
@@ -865,6 +886,9 @@ pub struct ProjectAutomationDefaults {
     /// environment this job deploys. `None` turns the watch off.
     #[serde(default)]
     pub deploy_watch: Option<DeployWatch>,
+    /// Where this board's bug cards reproduce and verify.
+    #[serde(default)]
+    pub reproduction: ProjectReproductionOverride,
 }
 
 impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
@@ -884,6 +908,7 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
             cleanup_retention: old.cleanup_retention,
             pattern_threshold: old.investigation_threshold,
             deploy_watch: None,
+            reproduction: ProjectReproductionOverride::default(),
         }
     }
 }
@@ -1043,6 +1068,9 @@ pub struct EffectiveProjectSettings {
     pub merge_requests: EffectiveMrSettings,
     /// The staging-deploy watch, with a blank job name or ref read as off.
     pub deploy_watch: Option<DeployWatch>,
+    /// Where this board's apps are stood up: the board's own target, else
+    /// `app_runs.default_target`.
+    pub reproduction_target: ReproductionTarget,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
@@ -1399,7 +1427,33 @@ impl Config {
                     git_ref: watch.git_ref.trim().to_string(),
                 })
                 .filter(|watch| !watch.job_name.is_empty() && !watch.git_ref.is_empty()),
+            reproduction_target: board
+                .reproduction
+                .target
+                .unwrap_or(self.app_runs.default_target),
         }
+    }
+
+    /// The reproduction target `board` uses (the global default for `None`
+    /// or a board with no settings).
+    pub fn reproduction_target(&self, board: Option<Uuid>) -> ReproductionTarget {
+        board
+            .and_then(|id| self.orchestrator.project_defaults.get(&id.to_string()))
+            .and_then(|defaults| defaults.reproduction.target)
+            .unwrap_or(self.app_runs.default_target)
+    }
+
+    /// The reproduction target for a checkout of one of `repo_ids`: that of
+    /// the first board (in key order) listing one of them, else the global
+    /// default. A repository shared by boards with different targets takes
+    /// the first board's.
+    pub fn reproduction_target_for_repos(&self, repo_ids: &[Uuid]) -> ReproductionTarget {
+        self.orchestrator
+            .project_defaults
+            .values()
+            .find(|defaults| defaults.repo_ids.iter().any(|id| repo_ids.contains(id)))
+            .and_then(|defaults| defaults.reproduction.target)
+            .unwrap_or(self.app_runs.default_target)
     }
 
     /// The notification targets `board` sends to (the global ones for
@@ -2516,5 +2570,56 @@ mod migration_tests {
         let reread = Config::from(serde_json::to_string(&config).unwrap());
         assert_eq!(reread.app_runs.port_range, "5000-5009");
         assert_eq!(reread.app_runs.max_parallel, 4);
+        assert_eq!(reread.app_runs.default_target, ReproductionTarget::Local);
+    }
+
+    #[test]
+    fn a_boards_reproduction_target_overrides_the_default() {
+        let (remote_board, plain_board) = (Uuid::new_v4(), Uuid::new_v4());
+        let (remote_repo, plain_repo) = (Uuid::new_v4(), Uuid::new_v4());
+        let mut config = Config::default();
+        let board = |repo| ProjectAutomationDefaults {
+            repo_ids: vec![repo],
+            ..Default::default()
+        };
+        let mut remote = board(remote_repo);
+        remote.reproduction.target = Some(ReproductionTarget::Remote);
+        config
+            .orchestrator
+            .project_defaults
+            .insert(remote_board.to_string(), remote);
+        config
+            .orchestrator
+            .project_defaults
+            .insert(plain_board.to_string(), board(plain_repo));
+        assert_eq!(
+            config.project_settings(remote_board).reproduction_target,
+            ReproductionTarget::Remote
+        );
+        assert_eq!(
+            config.project_settings(plain_board).reproduction_target,
+            ReproductionTarget::Local
+        );
+        assert_eq!(
+            config.reproduction_target_for_repos(&[remote_repo]),
+            ReproductionTarget::Remote
+        );
+        assert_eq!(
+            config.reproduction_target_for_repos(&[Uuid::new_v4()]),
+            ReproductionTarget::Local
+        );
+
+        config.app_runs.default_target = ReproductionTarget::Remote;
+        assert_eq!(
+            config.reproduction_target(Some(plain_board)),
+            ReproductionTarget::Remote,
+            "an unset board inherits the default"
+        );
+        assert_eq!(config.reproduction_target(None), ReproductionTarget::Remote);
+        let reread = Config::from(serde_json::to_string(&config).unwrap());
+        assert_eq!(
+            reread.reproduction_target(Some(remote_board)),
+            ReproductionTarget::Remote
+        );
     }
 }

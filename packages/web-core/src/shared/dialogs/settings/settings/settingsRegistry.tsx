@@ -16,6 +16,7 @@ import {
   KeyIcon,
   KanbanIcon,
   BellIcon,
+  BugIcon,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { GeneralSettingsSection } from './GeneralSettingsSection';
@@ -35,6 +36,7 @@ import { UsageSettingsSection } from './UsageSettingsSection';
 import { ConnectorsSettingsSection } from './ConnectorsSettingsSection';
 import { IntegrationsSettingsSection } from './IntegrationsSettingsSection';
 import { NotificationsSettingsSection } from './NotificationsSettingsSection';
+import { ReproductionSettingsSection } from './ReproductionSettingsSection';
 
 export type SettingsSectionType =
   | 'general'
@@ -53,7 +55,8 @@ export type SettingsSectionType =
   | 'usage'
   | 'connectors'
   | 'worktree-pool'
-  | 'notifications';
+  | 'notifications'
+  | 'reproduction';
 
 /// `integrations` holds one section per integration area, each rendered from
 /// its providers' descriptors.
@@ -79,6 +82,7 @@ export type SettingsSectionInitialState = {
   connectors: undefined;
   'worktree-pool': undefined;
   notifications: undefined;
+  reproduction: undefined;
 };
 
 export interface SettingsSectionDefinition {
@@ -102,6 +106,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'worktree-pool', icon: TreeIcon, group: 'host' },
   { id: 'ticketing', icon: TicketIcon, group: 'integrations' },
   { id: 'notifications', icon: BellIcon, group: 'integrations' },
+  { id: 'reproduction', icon: BugIcon, group: 'integrations' },
   { id: 'board', icon: KanbanIcon, group: 'universal' },
   { id: 'organizations', icon: UsersIcon, group: 'universal' },
   { id: 'remote-projects', icon: CloudIcon, group: 'universal' },
@@ -166,6 +171,8 @@ export function renderSettingsSection(
       return <WorktreePoolSettingsSection />;
     case 'notifications':
       return <NotificationsSettingsSection />;
+    case 'reproduction':
+      return <ReproductionSettingsSection />;
     default:
       return <GeneralSettingsSection />;
   }

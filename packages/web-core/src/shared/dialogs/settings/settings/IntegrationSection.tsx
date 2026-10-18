@@ -53,7 +53,8 @@ const testFields = (entry: IntegrationEntry): Record<string, unknown> => {
   return fields;
 };
 
-function FieldInput({
+/** One descriptor field as a Settings input, by the field's kind. */
+export function FieldInput({
   field,
   value,
   onChange,

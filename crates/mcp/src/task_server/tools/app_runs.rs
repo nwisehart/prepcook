@@ -28,7 +28,7 @@ impl McpServer {
 #[tool_router(router = app_runs_tools_router, vis = "pub")]
 impl McpServer {
     #[tool(
-        description = "Show the app Prep Cook stood up for this worktree from .prepcook/scripts.toml: its URL, port, the names of the variables the seed script wrote (values are in your environment), and when it started. Returns running: false when no app is up."
+        description = "Show the app Prep Cook stood up for this worktree from .prepcook/scripts.toml — served on this machine, or deployed with [app.remote] when the board reproduces against a remote target: its URL, target_kind, port (local only), the names of the variables the seed script wrote (values are in your environment), when it started, and health (whether it answers now). Returns running: false when no app is up."
     )]
     async fn app_status(&self) -> Result<CallToolResult, ErrorData> {
         let worktree = match Self::app_worktree() {
@@ -50,7 +50,7 @@ impl McpServer {
     }
 
     #[tool(
-        description = "Tear the app down and stand it up again from this worktree's .prepcook/scripts.toml (setup, build, start, ready, seed), so a candidate change can be tested against a running app. Stands one up when none is running. Returns the app's URL and each step's outcome; on failure, the failing step's output."
+        description = "Stand the app up again from this worktree's .prepcook/scripts.toml, so a candidate change can be tested against a running app: on this machine, setup, build, start, ready, seed; on a remote target, the [app.remote] redeploy (or stop then start), ready, seed. Stands one up when none is running. Returns the app's URL and each step's outcome; on failure, the failing step's output."
     )]
     async fn app_restart(&self) -> Result<CallToolResult, ErrorData> {
         let worktree = match Self::app_worktree() {

@@ -112,7 +112,11 @@ use crate::services::{
     playbook_context::{self, PlaybookContext},
     remote_client::{RemoteClient, RemoteClientError},
     remote_sync, reopen,
-    scripts::{self, AppRun, SlotReservation, StandUpOptions, StandUpOutcome, StandUpReport},
+    reproduction::{
+        self, LocalTarget, ReproError, ReproTarget, ReproTargetKind, ReproductionSource,
+        ReproductionTarget, StandUpRequest,
+    },
+    scripts::{self, AppRun, SlotReservation, StandUpOutcome, StandUpReport},
     secrets,
     tracker::{
         self, IssueFields, NewIssue, Query, RemoteLink, TicketStage, Tracker, TrackerComment,
@@ -2079,6 +2083,13 @@ struct AppLaunch {
     /// When a tick first found the stand-up finished; see
     /// [`StageOrchestratorService::sweep_app_launches`].
     finished_seen_at: Option<Instant>,
+}
+
+/// What a bug launch stands its app up with: the board's target and a slot
+/// on it, or why the board's target cannot serve the repository's manifest.
+enum AppTarget {
+    Ready(ReproTargetKind, SlotReservation),
+    Unconfigured(ReproError),
 }
 
 /// How long a finished stand-up may wait for its card's tick before it is
@@ -5090,19 +5101,22 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             Some(WorkClass::Investigation) => stage == Stage::Planning,
             _ => false,
         };
-        let app_reservation = if matches!(stage, Stage::Planning | Stage::Executing)
-            && reproduces
-            && self.board_has_manifest(settings).await
-        {
-            match self.container.script_runner().try_reserve() {
-                Some(reservation) => Some(reservation),
-                None => {
-                    debug!(
-                        "Stage orchestrator: {} waits for an app-run slot",
-                        issue.simple_id
-                    );
-                    return;
-                }
+        let app_target = if matches!(stage, Stage::Planning | Stage::Executing) && reproduces {
+            match self.board_app_target(settings).await {
+                Some(Ok(target)) => match target.try_reserve() {
+                    Some(reservation) => Some(AppTarget::Ready(target, reservation)),
+                    None => {
+                        debug!(
+                            "Stage orchestrator: {} waits for an app-run slot",
+                            issue.simple_id
+                        );
+                        return;
+                    }
+                },
+                // The board's target cannot serve its manifest: the launch
+                // goes ahead and reports it as the runner fault it is.
+                Some(Err(error)) => Some(AppTarget::Unconfigured(error)),
+                None => None,
             }
         } else {
             None
@@ -5168,22 +5182,15 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         let playbook_context = self.playbook_context(settings).await;
         let result = match stage {
-            Stage::Planning | Stage::Executing if app_reservation.is_some() => {
+            Stage::Planning | Stage::Executing if app_target.is_some() => {
                 let prompt = with_replan_feedback(
                     interpolate_playbook(&template.unwrap(), issue, &metadata, &playbook_context),
                     stage,
                     &metadata,
                 );
-                let reservation = app_reservation.expect("checked by the guard");
+                let app = app_target.expect("checked by the guard");
                 self.launch_with_app(
-                    client,
-                    settings,
-                    issue,
-                    &metadata,
-                    stage,
-                    prompt,
-                    &jira_key,
-                    reservation,
+                    client, settings, issue, &metadata, stage, prompt, &jira_key, app,
                 )
                 .await
                 .map(|workspace| {
@@ -6249,13 +6256,22 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
 
         // 3. Start one, if a slot is free; otherwise the next tick asks again.
+        // A board whose target cannot serve its manifest still records a
+        // run, which comes back as the runner fault it is.
         let runner = self.container.script_runner().clone();
-        let Some(reservation) = runner.try_reserve() else {
-            debug!(
-                "Stage orchestrator: verify {} waits for an app-run slot",
-                issue.simple_id
-            );
-            return Ok(false);
+        let target = self.verify_target(issue.project_id).await;
+        let reservation = match &target {
+            Ok(target) => match target.try_reserve() {
+                Some(reservation) => Some(reservation),
+                None => {
+                    debug!(
+                        "Stage orchestrator: verify {} waits for an app-run slot",
+                        issue.simple_id
+                    );
+                    return Ok(false);
+                }
+            },
+            Err(_) => None,
         };
         let checkout = self.implementation_checkout(workspace).await?;
         let worktree = self
@@ -6298,21 +6314,25 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             attempts + 1
         );
         tokio::spawn(async move {
-            // The agent's own app, if one is still up in this worktree, would
-            // share its build output and its database with the verification.
-            runner.tear_down_worktree(&worktree).await;
-            let report = runner
-                .verify(
-                    &worktree,
-                    StandUpOptions {
-                        ticket_key,
-                        target_branch: Some(base_ref),
-                        reservation: Some(reservation),
-                        run_id: Some(run_id),
-                        ..Default::default()
-                    },
-                )
-                .await;
+            let report = match target {
+                Ok(target) => {
+                    // The agent's own app, if one is still up in this
+                    // worktree, would share its build output and its
+                    // database (or its deployed environment) with the
+                    // verification.
+                    runner.tear_down_worktree(&worktree).await;
+                    target
+                        .verify(StandUpRequest {
+                            ticket_key,
+                            target_branch: Some(base_ref),
+                            reservation,
+                            run_id: Some(run_id),
+                            ..StandUpRequest::new(worktree)
+                        })
+                        .await
+                }
+                Err(error) => error.into_report(),
+            };
             *slot.lock().unwrap() = Some(report);
         });
         Ok(false)
@@ -7081,14 +7101,21 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             return Ok(());
         };
         let runner = self.container.script_runner().clone();
-        let Some(reservation) = runner.try_reserve() else {
-            self.post_autonomy_comment(
-                client,
-                issue,
-                "verify: every app-run slot is in use — ask again shortly",
-            )
-            .await;
-            return Ok(());
+        let target = self.verify_target(issue.project_id).await;
+        let reservation = match &target {
+            Ok(target) => match target.try_reserve() {
+                Some(reservation) => Some(reservation),
+                None => {
+                    self.post_autonomy_comment(
+                        client,
+                        issue,
+                        "verify: every app-run slot is in use — ask again shortly",
+                    )
+                    .await;
+                    return Ok(());
+                }
+            },
+            Err(_) => None,
         };
         let base_ref = self
             .implementation_checkout(&workspace)
@@ -7128,19 +7155,21 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         );
         let ticket_key = jira_key_for(issue, metadata);
         tokio::spawn(async move {
-            runner.tear_down_worktree(&worktree).await;
-            let report = runner
-                .verify(
-                    &worktree,
-                    StandUpOptions {
-                        ticket_key,
-                        target_branch: base_ref,
-                        reservation: Some(reservation),
-                        run_id: Some(run_id),
-                        ..Default::default()
-                    },
-                )
-                .await;
+            let report = match target {
+                Ok(target) => {
+                    runner.tear_down_worktree(&worktree).await;
+                    target
+                        .verify(StandUpRequest {
+                            ticket_key,
+                            target_branch: base_ref,
+                            reservation,
+                            run_id: Some(run_id),
+                            ..StandUpRequest::new(worktree)
+                        })
+                        .await
+                }
+                Err(error) => error.into_report(),
+            };
             *slot.lock().unwrap() = Some(report);
         });
         Ok(())
@@ -11561,17 +11590,43 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
     }
 
-    /// Whether any of the board's repositories carries a `.prepcook/scripts.toml`
-    /// in its main checkout — the signal that its bug sessions get an app.
-    async fn board_has_manifest(&self, settings: &EffectiveProjectSettings) -> bool {
+    /// Where the board's apps are stood up.
+    fn reproduction(&self) -> ReproductionSource {
+        ReproductionSource::new(self.config.clone(), self.container.script_runner().clone())
+    }
+
+    /// The board's reproduction target, built from the manifest in the main
+    /// checkout of the first of its repositories that carries a
+    /// `.prepcook/scripts.toml` — the signal that its bug sessions get an app.
+    /// `None` when none does; an error when the board's target is one that
+    /// manifest does not describe.
+    async fn board_app_target(
+        &self,
+        settings: &EffectiveProjectSettings,
+    ) -> Option<Result<ReproTargetKind, ReproError>> {
         for repo_id in &settings.repo_ids {
             if let Ok(Some(repo)) = Repo::find_by_id(&self.db.pool, *repo_id).await
                 && scripts::manifest::has_manifest(&repo.path)
             {
-                return true;
+                return Some(
+                    self.reproduction()
+                        .current(Some(settings.project_id), &repo.path)
+                        .await,
+                );
             }
         }
-        false
+        None
+    }
+
+    /// The target a card's verification runs on: the board's, or the local
+    /// target when no checkout carries a manifest, whose stand-up then
+    /// reports what the worktree has.
+    async fn verify_target(&self, project_id: Uuid) -> Result<ReproTargetKind, ReproError> {
+        let settings = self.config.read().await.project_settings(project_id);
+        match self.board_app_target(&settings).await {
+            Some(target) => target,
+            None => Ok(LocalTarget::new(self.container.script_runner().clone()).into()),
+        }
     }
 
     /// Starts a bug card's Planning or Executing session after its app is
@@ -11588,7 +11643,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         stage: Stage,
         prompt: String,
         jira_key: &str,
-        reservation: SlotReservation,
+        app: AppTarget,
     ) -> Result<Workspace, StageOrchestratorError> {
         let reused = if stage == Stage::Executing {
             match self.find_implementation_workspace(client, issue).await {
@@ -11629,12 +11684,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         let Some(worktree) = self.app_worktree(&workspace).await else {
             // The board's checkout has a manifest and this branch does not:
             // nothing to stand up, so the session starts as any other would.
-            drop(reservation);
+            drop(app);
             self.start_pending(&workspace, &start, &prompt).await?;
             return Ok(workspace);
         };
 
-        let runner = self.container.script_runner().clone();
         let slot: ResultSlot<Result<AppRun, StandUpReport>> = Arc::new(std::sync::Mutex::new(None));
         self.app_launches.lock().unwrap().insert(
             issue.id,
@@ -11648,23 +11702,31 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 finished_seen_at: None,
             },
         );
+        let (target, reservation) = match app {
+            AppTarget::Ready(target, reservation) => (target, reservation),
+            AppTarget::Unconfigured(error) => {
+                // Nothing to run: the next tick finds the result and routes
+                // it as a runner fault.
+                *slot.lock().unwrap() = Some(Err(error.into_report()));
+                return Ok(workspace);
+            }
+        };
         info!(
-            "Stage orchestrator: {} {jira_key} — standing the app up in {} before the agent starts",
+            "Stage orchestrator: {} {jira_key} — standing the app up ({}) in {} before the agent starts",
             stage.title(),
+            target.kind(),
             worktree.display()
         );
         let ticket_key = jira_key.to_string();
         tokio::spawn(async move {
-            let result = runner
-                .stand_up(
-                    &worktree,
-                    StandUpOptions {
-                        ticket_key,
-                        reservation: Some(reservation),
-                        ..Default::default()
-                    },
-                )
-                .await;
+            let result = target
+                .stand_up(StandUpRequest {
+                    ticket_key,
+                    reservation: Some(reservation),
+                    ..StandUpRequest::new(worktree)
+                })
+                .await
+                .map_err(ReproError::into_report);
             *slot.lock().unwrap() = Some(result);
         });
         Ok(workspace)
@@ -11728,7 +11790,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             );
             let result = launch.result.lock().unwrap().take();
             if let Some(Ok(run)) = result {
-                self.container.script_runner().tear_down(&run).await;
+                let runner = self.container.script_runner();
+                reproduction::for_run(runner, &run).tear_down(&run).await;
             }
         }
     }
@@ -11776,7 +11839,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 launch.stage.title()
             );
             if let Ok(run) = result {
-                runner.tear_down(&run).await;
+                reproduction::for_run(runner, &run).tear_down(&run).await;
             }
             return;
         }
@@ -11791,11 +11854,18 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         run.env.keys().cloned().collect::<Vec<_>>().join(", ")
                     )
                 };
-                let note = format!(
-                    "app: up at {} in this card's worktree for the {} session{seeded}",
-                    run.url,
-                    stage.title()
-                );
+                let note = match run.target_kind {
+                    ReproductionTarget::Local => format!(
+                        "app: up at {} in this card's worktree for the {} session{seeded}",
+                        run.url,
+                        stage.title()
+                    ),
+                    ReproductionTarget::Remote => format!(
+                        "app: deployed from this card's worktree with `[app.remote]`, at {} for the {} session{seeded}",
+                        run.url,
+                        stage.title()
+                    ),
+                };
                 runner.adopt(run, launch.workspace.id);
                 (launch.prompt.clone(), note)
             }

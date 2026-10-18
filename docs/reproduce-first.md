@@ -105,3 +105,11 @@ agent had. Pasting the kickoff into a session started from that shell runs
 before diagnosing. The [toolkit](../toolkit/README.md) has the rest of the loop
 (`/prepcook-rca`, `/prepcook-fix`, `/prepcook-review`, `/prepcook-mr`), generated from the same
 playbooks.
+
+A board can reproduce against a remote target instead: a preview environment,
+a dev tenant or a per-branch staging deploy, stood up by the repository's
+`[app.remote]` scripts and torn down after ([scripts.md](scripts.md#remote-targets)).
+The agent, the harness and the verification see the same `$PREPCOOK_APP_URL` and
+seeded login either way, so the RCA's kickoff works against whichever the person
+picking the ticket up has: the app on their own machine, or the branch's deploy
+with `PREPCOOK_APP_URL` pointing at it.

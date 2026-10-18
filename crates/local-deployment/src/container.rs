@@ -53,6 +53,7 @@ use services::services::{
     queued_message::QueuedMessageService,
     remote_client::RemoteClient,
     remote_sync,
+    reproduction::LocalTarget,
     scripts::ScriptRunner,
     turn_gate::TurnGate,
     turn_orphans::{self, TurnOrphans},
@@ -1625,8 +1626,10 @@ impl ContainerService for LocalContainerService {
                     Some(dir) => current_dir.join(dir),
                     None => current_dir.clone(),
                 };
+                // The preview's dev server is served from this machine
+                // whatever target the board reproduces against.
                 let vars = if request.context == ScriptContext::DevServer {
-                    self.script_runner
+                    LocalTarget::new(self.script_runner.clone())
                         .dev_server_env(execution_process.id, &worktree)
                         .map_err(|e| ContainerError::Other(anyhow!(e)))?
                 } else {

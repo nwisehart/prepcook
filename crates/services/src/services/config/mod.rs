@@ -97,6 +97,7 @@ pub type AutonomyMode = versions::v10::AutonomyMode;
 pub type EffectiveProjectSettings = versions::v10::EffectiveProjectSettings;
 pub type WatchTarget = versions::v10::WatchTarget;
 pub type AppRunsConfig = versions::v10::AppRunsConfig;
+pub type ProjectReproductionOverride = versions::v10::ProjectReproductionOverride;
 pub type DeployWatch = versions::v10::DeployWatch;
 pub type ApprovalsConfig = versions::v10::ApprovalsConfig;
 pub type InAppGate = versions::v10::InAppGate;
