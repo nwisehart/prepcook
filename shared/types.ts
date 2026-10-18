@@ -1084,9 +1084,10 @@ export type SearchMode = "taskform" | "settings";
 
 export type Config = { config_version: string, theme: ThemeMode, executor_profile: ExecutorProfileId, disclaimer_acknowledged: boolean, onboarding_acknowledged: boolean, remote_onboarding_acknowledged: boolean, notifications: NotificationConfig, editor: EditorConfig, github: GitHubConfig, analytics_enabled: boolean, workspace_dir: string | null, last_app_version: string | null, show_release_notes: boolean, language: UiLanguage, git_branch_prefix: string, showcases: ShowcaseState, pr_auto_description_enabled: boolean, pr_auto_description_prompt: string | null, commit_reminder_enabled: boolean, commit_reminder_prompt: string | null, send_message_shortcut: SendMessageShortcut, 
 /**
- * The issue tracker; see [`TrackerConfig`].
+ * Where cards come from; see [`TrackerConfig`]. Also read from the
+ * `tracker` key older configs wrote, and saved as `ticketing`.
  */
-tracker: TrackerConfig, 
+ticketing: TrackerConfig, 
 /**
  * Stage playbooks keyed by "{work_class}:{stage}"; see default_playbooks.
  */
@@ -1137,11 +1138,46 @@ export type ShowcaseState = { seen_features: Array<string>, };
 
 export type SendMessageShortcut = "ModifierEnter" | "Enter";
 
-export type TrackerConfig = { kind: TrackerKind, 
+export type TrackerConfig = { 
+/**
+ * `tickets` (Jira, GitHub Issues, Linear) or `incidents` (PagerDuty).
+ */
+mode: TicketingMode, kind: TrackerKind, 
 /**
  * Jira Cloud host, e.g. "example.atlassian.net".
  */
 site: string | null, email: string | null, api_token: string | null, project_key: string | null, 
+/**
+ * GitHub repository, `owner/name` (or `host/owner/name` on GitHub
+ * Enterprise).
+ */
+repo: string | null, 
+/**
+ * PagerDuty REST API key.
+ */
+pagerduty_api_token: string | null, 
+/**
+ * PagerDuty service ids whose incidents are picked up, comma-separated,
+ * when the pickup filter names none.
+ */
+service_ids: string | null, 
+/**
+ * PagerDuty user Prep Cook acts as: notes are written as this user, and
+ * it is the identity tracker comments are recognised by.
+ */
+user_id: string | null, 
+/**
+ * Linear API key.
+ */
+linear_api_key: string | null, 
+/**
+ * Linear team key.
+ */
+team_key: string | null, 
+/**
+ * What Prep Cook may do to an incident in `incidents` mode.
+ */
+incidents: IncidentsConfig, 
 /**
  * Query the import dialog runs when the caller does not supply one.
  * `{project_key}` is substituted at use time.
@@ -1201,7 +1237,17 @@ approvers: { [key in string]?: string },
  */
 bot_identity: string | null, };
 
-export type TrackerKind = "jira" | "github_issues" | "linear";
+export type TrackerKind = "jira" | "github_issues" | "linear" | "pagerduty";
+
+export type TicketingMode = "tickets" | "incidents";
+
+export type IncidentsConfig = { 
+/**
+ * Resolve the incident when its investigation card reaches Triaged.
+ * Off, the incident stays with the responders and only the triage
+ * report is added to it.
+ */
+resolve_on_triage: boolean, };
 
 export type StatusMapping = { planning: string | null, executing: string | null, reviewing: string | null, pushed_mr: string | null, 
 /**
@@ -1332,10 +1378,10 @@ executor_profile: ExecutorProfileId | null,
  */
 label: string | null, 
 /**
- * Also read from a `jira` key, so a config that names the override
- * that way still loads.
+ * Also read from the `tracker` and `jira` keys older configs wrote, and
+ * saved as `ticketing`.
  */
-tracker: ProjectTrackerOverride, notifications: ProjectNotificationsOverride, merge_requests: ProjectMrOverride, 
+ticketing: ProjectTrackerOverride, notifications: ProjectNotificationsOverride, merge_requests: ProjectMrOverride, 
 /**
  * Playbook texts used for this board only, keyed like
  * [`Config::playbooks`]. Absent keys inherit the global text, so a board
@@ -1373,13 +1419,13 @@ export type DeployWatch = { job_name: string, git_ref: string, };
 export type ProjectTrackerOverride = { 
 /**
  * Whether the watcher polls for this board. `None` inherits the
- * single-target behaviour (`tracker.enabled` applied to
- * `tracker.project_id`).
+ * single-target behaviour (`ticketing.enabled` applied to
+ * `ticketing.project_id`).
  */
 watcher_enabled: boolean | null, 
 /**
  * Query fragment selecting this board's issues, with `{project_key}`
- * substituted at use time. `None` inherits `tracker.pickup_filter`.
+ * substituted at use time. `None` inherits `ticketing.pickup_filter`.
  * Boards sharing a tracker project distinguish themselves here (by
  * component, label, or module).
  */
@@ -1391,7 +1437,7 @@ jql_filter: string | null,
 project_key: string | null, 
 /**
  * Assigned-pickup query for this board. Unset or blank inherits
- * `tracker.assigned_filter` — the Settings inputs cannot tell a cleared
+ * `ticketing.assigned_filter` — the Settings inputs cannot tell a cleared
  * field from an untouched one, so blank must not carry meaning.
  */
 assigned_jql: string | null, };
@@ -1432,7 +1478,12 @@ summary: string, fields: Array<Field>,
 /**
  * Names in the secrets store this provider reads, one per secret field.
  */
-secrets: Array<string>, docs_url: string, };
+secrets: Array<string>, docs_url: string, 
+/**
+ * False for a provider that is named but not implemented: Settings shows
+ * it and does not let it be chosen.
+ */
+available: boolean, };
 
 export type Field = { 
 /**

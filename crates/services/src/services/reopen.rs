@@ -40,7 +40,7 @@ pub const BLOCKED_STATUS: &str = "Blocked";
 /// because nothing else about the Jira issue says so: the summary prefix is
 /// prose a human can edit away, and the blocks link is a relationship rather
 /// than a property of the ticket. Assigned pickup reads it to dispatch the
-/// follow-up ahead of the queue (see `jira_watcher::priority_for`).
+/// follow-up ahead of the queue (see `tracker_watcher::priority_for`).
 pub const FOLLOWUP_LABEL: &str = "prepcook-followup";
 
 /// Why a follow-up is being filed. Only used for wording — both paths file the

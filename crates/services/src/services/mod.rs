@@ -15,7 +15,6 @@ pub mod file_search;
 pub mod filesystem;
 pub mod filesystem_watcher;
 pub mod integrations;
-pub mod jira_watcher;
 pub mod lavish_relay;
 pub mod mr_reviewers;
 pub mod notification;
@@ -23,6 +22,7 @@ pub mod notifications;
 pub mod playbook_context;
 pub mod pr_monitor;
 pub mod tracker;
+pub mod tracker_watcher;
 
 #[cfg(feature = "qa-mode")]
 pub mod qa_repos;

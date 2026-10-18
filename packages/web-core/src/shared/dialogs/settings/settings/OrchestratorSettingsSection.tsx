@@ -61,7 +61,7 @@ const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   repo_ids: [],
   executor_profile: null,
   label: null,
-  tracker: {
+  ticketing: {
     watcher_enabled: null,
     jql_filter: null,
     project_key: null,
@@ -95,7 +95,7 @@ const withOverrideShape = (
 ): ProjectAutomationDefaults => ({
   ...cloneDeep(EMPTY_DEFAULTS),
   ...defaults,
-  tracker: { ...EMPTY_DEFAULTS.tracker, ...defaults.tracker },
+  ticketing: { ...EMPTY_DEFAULTS.ticketing, ...defaults.ticketing },
   notifications: { ...EMPTY_DEFAULTS.notifications, ...defaults.notifications },
   merge_requests: {
     ...EMPTY_DEFAULTS.merge_requests,
@@ -151,10 +151,10 @@ const countOverrides = (defaults: ProjectAutomationDefaults): number => {
   const board = withOverrideShape(defaults);
   return [
     board.label != null,
-    board.tracker.watcher_enabled != null,
-    board.tracker.jql_filter != null,
-    board.tracker.project_key != null,
-    board.tracker.assigned_jql != null,
+    board.ticketing.watcher_enabled != null,
+    board.ticketing.jql_filter != null,
+    board.ticketing.project_key != null,
+    board.ticketing.assigned_jql != null,
     board.notifications.enabled != null,
     board.notifications.skip_global.length > 0,
     board.notifications.targets.length > 0,
@@ -718,13 +718,13 @@ export function OrchestratorSettingsSection() {
                     description={t('settings.orchestrator.board.watcherHelper')}
                   >
                     <SettingsSelect<TriState>
-                      value={toTriState(defaults.tracker.watcher_enabled)}
+                      value={toTriState(defaults.ticketing.watcher_enabled)}
                       options={triStateOptions}
                       onChange={(value) =>
                         updateProjectDefaults(projectId, (current) => ({
                           ...current,
-                          tracker: {
-                            ...current.tracker,
+                          ticketing: {
+                            ...current.ticketing,
                             watcher_enabled: fromTriState(value),
                           },
                         }))
@@ -737,12 +737,12 @@ export function OrchestratorSettingsSection() {
                     description={t('settings.orchestrator.board.jqlHelper')}
                   >
                     <SettingsInput
-                      value={defaults.tracker.jql_filter ?? ''}
+                      value={defaults.ticketing.jql_filter ?? ''}
                       onChange={(value) =>
                         updateProjectDefaults(projectId, (current) => ({
                           ...current,
-                          tracker: {
-                            ...current.tracker,
+                          ticketing: {
+                            ...current.ticketing,
                             jql_filter: orNull(value),
                           },
                         }))
@@ -758,12 +758,12 @@ export function OrchestratorSettingsSection() {
                     )}
                   >
                     <SettingsInput
-                      value={defaults.tracker.assigned_jql ?? ''}
+                      value={defaults.ticketing.assigned_jql ?? ''}
                       onChange={(value) =>
                         updateProjectDefaults(projectId, (current) => ({
                           ...current,
-                          tracker: {
-                            ...current.tracker,
+                          ticketing: {
+                            ...current.ticketing,
                             assigned_jql: orNull(value),
                           },
                         }))
@@ -781,12 +781,12 @@ export function OrchestratorSettingsSection() {
                     )}
                   >
                     <SettingsInput
-                      value={defaults.tracker.project_key ?? ''}
+                      value={defaults.ticketing.project_key ?? ''}
                       onChange={(value) =>
                         updateProjectDefaults(projectId, (current) => ({
                           ...current,
-                          tracker: {
-                            ...current.tracker,
+                          ticketing: {
+                            ...current.ticketing,
                             project_key: orNull(value),
                           },
                         }))

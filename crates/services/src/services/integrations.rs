@@ -1,8 +1,8 @@
 //! What every integration area shares: the descriptor a provider publishes
 //! about itself, and how its secret-shaped fields are resolved.
 //!
-//! An area (notifications, …) is a module under `services/<area>/` with one
-//! file per provider. Each provider describes itself with a [`Descriptor`];
+//! An area (notifications, ticketing) is a module under `services/<area>/`
+//! with one file per provider. Each provider describes itself with a [`Descriptor`];
 //! Settings renders one generic section per area from those descriptors, and
 //! `docs/configuration.md` carries a table generated from the same data, so a
 //! new provider shows up in both without touching either.
@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::services::{config::Config, notifications, secrets::Secrets};
+use crate::services::{config::Config, notifications, secrets::Secrets, tracker};
 
 /// How Settings renders one field and what the config holds for it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -66,6 +66,9 @@ pub struct Descriptor {
     /// Names in the secrets store this provider reads, one per secret field.
     pub secrets: Vec<String>,
     pub docs_url: String,
+    /// False for a provider that is named but not implemented: Settings shows
+    /// it and does not let it be chosen.
+    pub available: bool,
 }
 
 impl Descriptor {
@@ -89,7 +92,14 @@ impl Descriptor {
             fields,
             secrets,
             docs_url: docs_url.to_string(),
+            available: true,
         }
+    }
+
+    /// Marks the provider as named but not implemented.
+    pub fn unavailable(mut self) -> Self {
+        self.available = false;
+        self
     }
 }
 
@@ -102,15 +112,18 @@ pub struct TestOutcome {
 
 /// Every integration area and its providers' descriptors, keyed by area.
 pub fn descriptors() -> BTreeMap<String, Vec<Descriptor>> {
-    BTreeMap::from([(
-        notifications::AREA.to_string(),
-        notifications::descriptors(),
-    )])
+    BTreeMap::from([
+        (
+            notifications::AREA.to_string(),
+            notifications::descriptors(),
+        ),
+        (tracker::AREA.to_string(), tracker::descriptors()),
+    ])
 }
 
 /// Runs one provider's connection test. `fields` are the provider's settings
-/// as Settings holds them (possibly unsaved); `None` tests the first
-/// configured entry of that kind.
+/// as Settings holds them (possibly unsaved); `None` tests what the config
+/// holds (for notifications, the first configured entry of that kind).
 pub async fn test(
     config: &Config,
     area: &str,
@@ -119,6 +132,7 @@ pub async fn test(
 ) -> TestOutcome {
     let result = match area {
         notifications::AREA => notifications::test_target(config, kind, fields).await,
+        tracker::AREA => tracker::test_provider(config, kind, fields).await,
         other => Err(format!("unknown integration area: {other}")),
     };
     match result {
@@ -129,9 +143,18 @@ pub async fn test(
 
 /// The secrets-store name a provider's secret field is read under:
 /// `<KIND>_<FIELD>`, upper-cased (`slack` + `bot_token` → `SLACK_BOT_TOKEN`).
-/// The same name is the environment variable consulted last.
+/// A field already named after its kind is not prefixed twice
+/// (`pagerduty` + `pagerduty_api_token` → `PAGERDUTY_API_TOKEN`). The same
+/// name is the environment variable consulted last.
 pub fn secret_name(kind: &str, field: &str) -> String {
-    format!("{kind}_{field}").to_ascii_uppercase()
+    let own = field
+        .strip_prefix(kind)
+        .is_some_and(|rest| rest.starts_with('_'));
+    if own {
+        field.to_ascii_uppercase()
+    } else {
+        format!("{kind}_{field}").to_ascii_uppercase()
+    }
 }
 
 /// Which source a secret field consults first.
@@ -187,6 +210,12 @@ mod tests {
     fn secret_names_follow_kind_and_field() {
         assert_eq!(secret_name("slack", "bot_token"), "SLACK_BOT_TOKEN");
         assert_eq!(secret_name("webhook", "secret"), "WEBHOOK_SECRET");
+        assert_eq!(
+            secret_name("pagerduty", "pagerduty_api_token"),
+            "PAGERDUTY_API_TOKEN"
+        );
+        assert_eq!(secret_name("linear", "linear_api_key"), "LINEAR_API_KEY");
+        assert_eq!(secret_name("jira", "api_token"), "JIRA_API_TOKEN");
     }
 
     #[test]
@@ -247,5 +276,10 @@ mod tests {
             assert!(!descriptor.summary.is_empty(), "{}", descriptor.kind);
             assert!(!descriptor.fields.is_empty(), "{}", descriptor.kind);
         }
+        let ticketing: Vec<&str> = all["ticketing"]
+            .iter()
+            .map(|descriptor| descriptor.kind.as_str())
+            .collect();
+        assert_eq!(ticketing, ["jira", "github_issues", "linear", "pagerduty"]);
     }
 }

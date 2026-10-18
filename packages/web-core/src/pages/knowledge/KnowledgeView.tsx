@@ -395,8 +395,28 @@ export function KnowledgeView({ projectId }: { projectId: string }) {
     [counts]
   );
 
-  const jiraSite = config?.tracker?.site?.trim() || 'example.atlassian.net';
-  const jiraUrl = (key: string) => `https://${jiraSite}/browse/${key}`;
+  const ticketing = config?.ticketing;
+  const jiraSite = ticketing?.site?.trim() || 'example.atlassian.net';
+  // The ticket's page on the configured source; keys end in the issue
+  // number on GitHub Issues and are incident ids on PagerDuty.
+  const jiraUrl = (key: string) => {
+    const repo = ticketing?.repo
+      ?.trim()
+      .replace(/^https?:\/\//, '')
+      .replace(/\.git$/, '')
+      .replace(/\/$/, '');
+    if (ticketing?.kind === 'github_issues' && repo) {
+      const base =
+        repo.split('/').length === 3
+          ? `https://${repo}`
+          : `https://github.com/${repo}`;
+      return `${base}/issues/${key.split(/[-#]/).pop()}`;
+    }
+    if (ticketing?.kind === 'pagerduty') {
+      return `https://app.pagerduty.com/incidents/${key}`;
+    }
+    return `https://${jiraSite}/browse/${key}`;
+  };
   const openDocument = (documentId: string) => {
     window.open(`/api/knowledge/documents/${documentId}/html`, '_blank');
   };

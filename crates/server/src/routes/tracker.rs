@@ -87,6 +87,9 @@ impl From<TrackerError> for TrackerImportError {
                 tracker: kind.label().to_string(),
             },
             TrackerError::AuthFailed => Self::AuthFailed,
+            error @ TrackerError::Unsupported { .. } => Self::RequestFailed {
+                message: error.to_string(),
+            },
             TrackerError::Other(error) => Self::RequestFailed {
                 message: error.to_string(),
             },
@@ -102,10 +105,12 @@ async fn tracker_and_settings(
     let tracker = deployment.tracker().current().await;
     if !tracker.is_configured() {
         return Err(match tracker.kind() {
-            services::services::config::TrackerKind::Jira => TrackerImportError::NotConfigured,
-            kind => TrackerImportError::NotSupported {
-                tracker: kind.label().to_string(),
-            },
+            kind @ services::services::config::TrackerKind::Linear => {
+                TrackerImportError::NotSupported {
+                    tracker: kind.label().to_string(),
+                }
+            }
+            _ => TrackerImportError::NotConfigured,
         });
     }
     Ok((tracker, deployment.tracker().settings().await))
@@ -130,16 +135,11 @@ struct Importable {
     epic_key: Option<String>,
 }
 
-/// Runs a query and keeps the To Do tickets. Work already in progress,
-/// blocked or done does not belong on the To Do column, even if a custom
-/// query matches it.
-async fn importable(
-    tracker: &dyn Tracker,
-    settings: &TrackerConfig,
-    query: &str,
-) -> Result<Vec<Importable>, TrackerImportError> {
-    let issues = tracker.search(query).await?;
-    Ok(issues
+/// Keeps the To Do tickets of a query's or a lookup's answer. Work already
+/// in progress, blocked or done does not belong on the To Do column, even if
+/// a custom query matches it.
+fn importable(settings: &TrackerConfig, issues: Vec<FetchedIssue>) -> Vec<Importable> {
+    issues
         .into_iter()
         .filter(|issue| issue.status_category.as_deref().is_none_or(|c| c == "new"))
         .map(|issue| {
@@ -152,21 +152,7 @@ async fn importable(
                 .and(issue.parent_key.clone());
             Importable { issue, epic_key }
         })
-        .collect())
-}
-
-/// True for well-formed keys like "BUG-1234". Keeps caller-supplied keys safe
-/// to interpolate into a `key in (...)` query.
-fn is_valid_key(key: &str) -> bool {
-    let Some((project, number)) = key.split_once('-') else {
-        return false;
-    };
-    !project.is_empty()
-        && project
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        && !number.is_empty()
-        && number.chars().all(|c| c.is_ascii_digit())
+        .collect()
 }
 
 // ── Remote-side helpers ──────────────────────────────────────────────────
@@ -265,9 +251,9 @@ pub async fn preview_tracker_issues(
         Some(query) => query.replace("{project_key}", settings.project_key()),
         None => settings.resolved_import_filter(),
     };
-    let issues = match importable(tracker.as_ref(), &settings, &query).await {
-        Ok(issues) => issues,
-        Err(e) => return Ok(ResponseJson(ApiResponse::error_with_data(e))),
+    let issues = match tracker.search(&query).await {
+        Ok(issues) => importable(&settings, issues),
+        Err(e) => return Ok(ResponseJson(ApiResponse::error_with_data(e.into()))),
     };
 
     let existing = existing_keys(&client, payload.project_id).await?;
@@ -305,12 +291,13 @@ pub async fn import_tracker_issues(
 
     // Fetch exactly the requested keys instead of re-running the configured
     // query: import must work for tickets outside it too (e.g. sub-tasks
-    // just created by an epic breakdown).
-    let valid_keys: Vec<&str> = payload
+    // just created by an epic breakdown). Keys are checked for the tracker's
+    // own shape before they reach a query or a URL.
+    let valid_keys: Vec<String> = payload
         .keys
         .iter()
-        .map(String::as_str)
-        .filter(|key| is_valid_key(key))
+        .filter(|key| tracker.is_valid_key(key))
+        .cloned()
         .collect();
     if valid_keys.is_empty() {
         return Ok(ResponseJson(ApiResponse::success(TrackerImportResponse {
@@ -318,10 +305,9 @@ pub async fn import_tracker_issues(
             skipped: payload.keys.len() as u32,
         })));
     }
-    let keys_query = format!("key in ({})", valid_keys.join(","));
-    let fetched = match importable(tracker.as_ref(), &settings, &keys_query).await {
-        Ok(issues) => issues,
-        Err(e) => return Ok(ResponseJson(ApiResponse::error_with_data(e))),
+    let fetched = match tracker.fetch(&valid_keys).await {
+        Ok(issues) => importable(&settings, issues),
+        Err(e) => return Ok(ResponseJson(ApiResponse::error_with_data(e.into()))),
     };
     let by_key: HashMap<String, Importable> = fetched
         .into_iter()
@@ -370,6 +356,7 @@ pub async fn import_tracker_issues(
                 url: Some(url.clone()),
             }),
             epic_key: epic_key.clone(),
+            origin: tracker::origin_for(tracker.kind(), &url),
             ..Default::default()
         };
 
@@ -420,21 +407,24 @@ pub async fn import_tracker_issues(
             tracing::warn!("Failed to assign imported issue {key}: {e}");
         }
 
-        // Best-effort: mirror the work class as a visible tag when the
-        // project already has one with that name.
-        let tag_name = work_class.as_str();
-        if let Some(tag) = project_tags
-            .iter()
-            .find(|tag| tag.name.eq_ignore_ascii_case(tag_name))
-            && let Err(e) = client
-                .create_issue_tag(&CreateIssueTagRequest {
-                    id: None,
-                    issue_id: created.data.id,
-                    tag_id: tag.id,
-                })
-                .await
-        {
-            tracing::warn!("Failed to link '{}' tag to imported issue: {}", tag_name, e);
+        // Best-effort: mirror the work class (and the ticket's area, when the
+        // tracker names one) as visible tags when the project already has
+        // ones with those names.
+        let tag_names = std::iter::once(work_class.as_str()).chain(issue.area.as_deref());
+        for tag_name in tag_names {
+            if let Some(tag) = project_tags
+                .iter()
+                .find(|tag| tag.name.eq_ignore_ascii_case(tag_name))
+                && let Err(e) = client
+                    .create_issue_tag(&CreateIssueTagRequest {
+                        id: None,
+                        issue_id: created.data.id,
+                        tag_id: tag.id,
+                    })
+                    .await
+            {
+                tracing::warn!("Failed to link '{}' tag to imported issue: {}", tag_name, e);
+            }
         }
 
         imported += 1;
@@ -489,7 +479,7 @@ pub async fn create_tracker_subtasks(
         Err(e) => return Ok(ResponseJson(ApiResponse::error_with_data(e))),
     };
 
-    if !is_valid_key(&payload.epic_key) {
+    if !tracker.is_valid_key(&payload.epic_key) {
         return Ok(ResponseJson(ApiResponse::error_with_data(
             TrackerImportError::RequestFailed {
                 message: format!("'{}' is not a valid issue key", payload.epic_key),

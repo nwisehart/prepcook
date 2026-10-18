@@ -50,7 +50,7 @@ user. The body:
 | `title` | yes | The card's title, up to 255 characters. |
 | `description` | no | Markdown. |
 | `work_class` | yes | `investigation`, `bug` or `story`. |
-| `origin` | yes | `{ "kind": "tammy" \| "incident" \| "api", "ref": string, "reporter"?: string }` — who filed it, and the filer's own reference (a thread URL, an incident id). Stored on the card and shown on it: "Filed by Tammy from *thread*". |
+| `origin` | yes | `{ "kind": "tammy" \| "incident" \| "api", "ref": string, "reporter"?: string }` — who filed it, and the filer's own reference (a thread URL, an incident id). Stored on the card and shown on it: "Filed by Tammy from *thread*". Cards PagerDuty incidents become in incidents mode carry `incident` and the incident's page ([incidents.md](incidents.md)). |
 | `attachments` | no | `[{ "name": string, "url": string }]`, each an `http(s)` URL. Listed as links in the description, where the planning agent sees them. |
 | `metadata` | no | An object kept on the card under `external`; it never stands in for a workflow key. |
 | `start` | no | `true` places the card in Plan, where the orchestrator starts on it within a poll; `false` (the default) leaves it in To Do. |

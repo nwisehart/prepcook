@@ -30,8 +30,8 @@
         "agentsDesc": "Coding agent configurations",
         "mcp": "MCP Servers",
         "mcpDesc": "Model Context Protocol servers",
-        "tracker": "Tracker",
-        "trackerDesc": "Issue tracker connection, ticket pickup and approvers",
+        "ticketing": "Ticketing",
+        "ticketingDesc": "Where cards come from: a ticket tracker or an incident tool",
         "playbooks": "Playbooks",
         "playbooksDesc": "Stage prompt templates for bug and story work",
         "orchestrator": "Orchestrator",
@@ -423,67 +423,33 @@
         "unsavedChanges": "• You have unsaved changes"
       }
     },
-    "tracker": {
-      "kind": {
-        "title": "Tracker",
-        "description": "Where tickets come from. Prep Cook reads tickets, posts updates and takes plan decisions through this tracker.",
-        "options": {
-          "jira": "Jira",
-          "github_issues": "GitHub Issues",
-          "linear": "Linear"
+    "ticketing": {
+      "source": {
+        "title": "Source",
+        "description": "Where cards come from. Prep Cook reads tickets, posts updates and takes plan decisions through this service. Remove it to make every card on the board."
+      },
+      "mode": {
+        "tickets": {
+          "label": "Tickets",
+          "helper": "Jira or GitHub Issues: tickets are fixed, planned or investigated by their type."
         },
-        "notSupported": "Not yet supported"
+        "incidents": {
+          "label": "Incidents",
+          "helper": "PagerDuty: open incidents become investigation cards, and the triage report goes back as a note."
+        }
       },
-      "connection": {
-        "title": "Connection",
-        "description": "The account Prep Cook uses to read and write tickets."
-      },
-      "site": {
-        "label": "Site",
-        "helper": "Your Atlassian site hostname."
-      },
-      "email": {
-        "label": "Email",
-        "placeholder": "you@example.com",
-        "helper": "The account email the API token belongs to."
-      },
-      "apiToken": {
-        "label": "API token",
-        "placeholder": "API token",
-        "helper": "Stored locally and used to authenticate with the tracker.",
-        "helpLink": "Create an API token"
-      },
-      "botIdentity": {
-        "label": "Agent account id",
-        "placeholder": "Leave blank to use the token's account",
-        "helper": "The account the agent's own tracker comments are recognised by. Blank uses the account the API token belongs to."
-      },
-      "import": {
-        "title": "Import",
-        "description": "Defaults used when previewing tickets to import."
-      },
-      "projectKey": {
-        "label": "Project key",
-        "placeholder": "e.g. BUG",
-        "helper": "The tracker project tickets are imported from and filed into."
-      },
-      "importFilter": {
-        "label": "Import filter",
-        "placeholder": "e.g. sprint in openSprints() AND assignee = currentUser()",
-        "helper": "Optional query (JQL for Jira) applied when previewing tickets to import. {project_key} is substituted."
+      "incidents": {
+        "resolveLabel": "Resolve the incident when it is triaged",
+        "resolveHelper": "Off, the incident stays with its responders and only gets the triage report as a note. Prep Cook never pages anyone either way."
       },
       "watcher": {
         "title": "Ticket pickup",
-        "description": "Polls the tracker for newly created high-priority bugs and imports them straight into Plan, assigned to you, so the orchestrator starts the RCA immediately. Meant for an always-on machine.",
+        "description": "Polls the source for new tickets (or open incidents) and imports them straight into Plan, assigned to you, so the orchestrator starts on them immediately. Meant for an always-on machine. The pickup filters are part of the source above.",
         "enabledLabel": "Pick up new tickets automatically",
         "enabledHelper": "Only tickets created while the watcher is running (24h lookback) are picked up; already-imported keys are skipped.",
         "projectLabel": "Import into project",
         "projectHelper": "The board that receives the imported tickets.",
         "projectPlaceholder": "Select a project…",
-        "pickupLabel": "Pickup filter",
-        "pickupHelper": "Which new tickets to pick up. {project_key} is substituted; a created-recently window is added automatically. Leave empty for the default P0/P1 bug filter.",
-        "assignedLabel": "Assigned pickup filter",
-        "assignedHelper": "Tickets assigned to the orchestrator's tracker account start automatically, whatever their priority: new keys import straight into Plan, already-imported tickets sitting in To Do advance to Plan. Watches the updated timestamp, so assigning an existing ticket works. Empty disables it globally; only boards with pickup enabled are polled. Leave the status out of this filter — the watcher decides on status itself. Suggested: project = {project_key} AND assignee = currentUser()",
         "pollLabel": "Poll interval (seconds)",
         "pollHelper": "How often the tracker is checked for new tickets.",
         "boardsHint": "Defaults for the board selected here. Other boards are watched with their own filter — see Board overrides under Orchestrator."
@@ -492,7 +458,7 @@
         "title": "Workflow",
         "description": "How the board's stages show on the ticket, which statuses mean the work shipped, and which priorities are blockers.",
         "statusLabel": "Stage statuses",
-        "statusHelper": "The tracker status a ticket moves to when Prep Cook starts each stage. Blank leaves the ticket where it is (Planning falls back to In Progress).",
+        "statusHelper": "The status (a label on GitHub Issues) a ticket moves to when Prep Cook starts each stage. Blank leaves the ticket where it is (Planning falls back to In Progress).",
         "stageColumn": "Stage",
         "statusColumn": "Tracker status",
         "stages": {
@@ -507,7 +473,8 @@
         "shippedLabel": "Shipped statuses",
         "shippedHelper": "Comma-separated status names that mean the work shipped. Comments on these tickets get an automatic reply, and a ticket that leaves them can file a follow-up.",
         "blockerLabel": "Blocker priorities",
-        "blockerHelper": "Comma-separated priorities whose merge requests are labelled Blocker and announced in Slack."
+        "blockerHelper": "Comma-separated priorities whose merge requests are labelled Blocker and announced to the notification targets.",
+        "incidentsDescription": "An incident moves on its own terms: Plan acknowledges it, Clean-up resolves it, and Triaged resolves it only when the source says to. Blocker priorities still apply."
       },
       "approvers": {
         "title": "Plan approvers",
@@ -517,13 +484,13 @@
         "import": "Import from tracker",
         "refresh": "Refresh from tracker",
         "loading": "Loading…",
-        "error": "Could not load users from the tracker. Check the connection settings above.",
+        "error": "Could not load users from the tracker. Check the source settings above.",
         "selected": "{{count}} selected",
         "empty": "No one imported yet — import from the tracker to choose approvers."
       },
       "save": {
-        "success": "Tracker settings saved.",
-        "error": "Failed to save tracker settings."
+        "success": "Ticketing settings saved.",
+        "error": "Failed to save ticketing settings."
       }
     },
     "playbooks": {
@@ -1027,7 +994,8 @@
         "test": "Test connection",
         "testing": "Testing…",
         "addLabel": "Add",
-        "add": "Add"
+        "add": "Add",
+        "unavailable": "{{name}} (not implemented)"
       }
     },
     "notifications": {

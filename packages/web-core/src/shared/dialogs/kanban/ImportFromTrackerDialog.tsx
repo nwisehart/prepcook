@@ -161,7 +161,7 @@ const ImportFromTrackerDialogImpl = create<ImportFromTrackerDialogProps>(
 
     const handleOpenTrackerSettings = useCallback(() => {
       closeDialog(null);
-      void SettingsDialog.show({ initialSection: 'tracker' });
+      void SettingsDialog.show({ initialSection: 'ticketing' });
     }, [closeDialog]);
 
     const handleImport = useCallback(async () => {

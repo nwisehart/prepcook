@@ -25,7 +25,20 @@ BEGIN = "<!-- BEGIN GENERATED: integrations (scripts/gen-config-docs.py) -->"
 END = "<!-- END GENERATED: integrations -->"
 
 # Section titles for areas whose name does not read well capitalised.
-AREA_TITLES = {"notifications": "Notification providers"}
+AREA_TITLES = {
+    "notifications": "Notification providers",
+    "ticketing": "Ticketing providers",
+}
+
+# How each area's secret fields are resolved, under its table.
+SECRET_NOTE = (
+    "A secret field is read from the secrets store under the name shown, then "
+    "from the config, then from the environment variable of that name"
+)
+AREA_NOTES = {
+    "notifications": f"{SECRET_NOTE}; a board's own target reads its config value first.",
+    "ticketing": f"{SECRET_NOTE}. Each field is a key of the `ticketing` section.",
+}
 
 
 def describe() -> dict:
@@ -62,16 +75,16 @@ def render(descriptors: dict) -> str:
             "",
             f"### {title}",
             "",
-            "Generated from the providers' descriptors. A secret field is read from "
-            "the secrets store under the name shown, then from the config, then from "
-            "the environment variable of that name; a board's own target reads its "
-            "config value first.",
+            "Generated from the providers' descriptors. "
+            + AREA_NOTES.get(area, f"{SECRET_NOTE}."),
             "",
             "| `kind` | Field | Required | Secret name | What it is |",
             "| --- | --- | --- | --- | --- |",
         ]
         for provider in descriptors[area]:
             kind = f"`{provider['kind']}` ({cell(provider['display_name'])})"
+            if not provider.get("available", True):
+                kind += " — not implemented"
             lines.append(f"| {kind} | | | | {cell(provider['summary'])} |")
             # `secrets` lists one store name per secret field, in field order.
             secret_names = iter(provider["secrets"])

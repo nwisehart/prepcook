@@ -64,7 +64,9 @@ which then translates the answer for the customer.
   report on the card, sends `investigation_completed` to the board's
   notification targets ([notifications.md](notifications.md)), copies the
   report onto the tracker ticket (moving it to `status_mapping.triaged` when
-  that is set), and moves the card to the **Triaged** column. There is no
+  that is set; on an incident, as a note, resolving it only with
+  `incidents.resolve_on_triage`), and moves the card to the **Triaged**
+  column. There is no
   approval gate, in Chef mode or Prep mode. Triaged is terminal: nothing runs
   there.
 - **Convert.** An engineer who wants it fixed converts the card — the class
@@ -125,11 +127,31 @@ plan decisions come from Lavish, the card or the API, and the pull request is
 still opened. A card made on the board while a tracker is configured is treated
 the same way. The [quickstart](../README.md#quickstart) uses this path.
 
+## Tickets or incidents
+
+Where cards come from is the ticketing mode (**Settings → Integrations →
+Ticketing**, `ticketing.mode`).
+
+**Tickets** (the default). The source is a ticket tracker — Jira, or GitHub
+Issues through the `gh` CLI — and each ticket's type picks its work class.
+Stages show on the ticket as the statuses (on GitHub, the labels) that
+`status_mapping` names.
+
+**Incidents.** The source is an incident tool — PagerDuty. Every open incident
+on the configured services becomes an **investigation** card in Plan: Prep
+Cook acknowledges it, reproduces and explains the problem, and adds the
+triage report to the incident as a note. It never pages anyone and resolves
+the incident only when configured to ([incidents.md](incidents.md)).
+
+The two modes above (Chef and Prep) apply in either.
+
 ## More
 
 - [scripts.md](scripts.md): how Prep Cook installs, starts, seeds and tests the app.
 - [playbooks.md](playbooks.md): the prompt each stage's agent starts from.
 - [approvals.md](approvals.md): every way a plan is decided.
+- [incidents.md](incidents.md): Prep Cook as a first responder on PagerDuty
+  incidents.
 - [api.md](api.md): filing, reading and converting cards, and the other HTTP
   endpoints scripts use.
 - [configuration.md](configuration.md): every setting and its default.

@@ -35,33 +35,39 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.seat_monitor` | `false` | *File only.* Probe the Claude subscription seat with a headless `claude -p` every six hours and notify the global [notification targets](#notifications) when its login has expired, for a shared runner. Off, Prep Cook never runs `claude` on its own; **Settings → Claude → Re-check now** still probes on demand. |
 | `executor_profile` | Claude Code, default variant | **Settings → General → Default Coding Agent**: the agent every stage runs. |
 
-## Tracker
+## Ticketing
 
-**Settings → Tracker.** Without credentials no tracker is configured: every
+**Settings → Integrations → Ticketing.** Where cards come from: a ticket
+tracker, or an incident tool whose open incidents become investigation cards
+([incidents.md](incidents.md)). Without one no tracker is configured: every
 card is made on the board, the ticket pickup does not poll, and nothing is
 written to a ticket ([method.md](method.md#without-a-tracker)).
 
+The section is `ticketing`. A config that still calls it `tracker` (and a
+board override called `tracker` or `jira`) is read the same way and saved as
+`ticketing`. One section serves every kind: each kind reads the fields its
+provider names ([below](#ticketing-providers)), and fields that only one kind
+reads carry its name, so switching kinds never hands one service another's
+credentials.
+
 | Key | Default | What it does |
 | --- | --- | --- |
-| `tracker.kind` | `jira` | **Tracker**. `github_issues` and `linear` can be named but are not implemented yet; every call to them says so. |
-| `tracker.site` | unset (`example.atlassian.net`) | **Site**: the Jira Cloud host. |
-| `tracker.email` | unset | **Email** of the agent's tracker account. With the token, what makes the tracker configured. |
-| `tracker.api_token` | unset | **API token** for that account. |
-| `tracker.bot_identity` | unset (the token's account) | **Agent account id** the agent's own comments are recognised by. |
-| `tracker.project_key` | unset (`BUG`) | **Project key**. |
-| `tracker.import_filter` | unset (open-sprint `To Do` tickets assigned to you, by priority) | **Import filter**: the query the import dialog runs. `{project_key}` is substituted. |
-| `tracker.enabled` | `false` | **Pick up new tickets automatically** for the board below. |
-| `tracker.project_id` | unset | **Import into project**: the board picked-up tickets land on. |
-| `tracker.pickup_filter` | unset (`project = {project_key} AND priority in (P0, P1) AND issuetype = Bug`) | **Pickup filter**: which new tickets are picked up. |
-| `tracker.assigned_filter` | unset (off) | **Assigned pickup filter**: tickets assigned to the agent's account, imported and started whatever their priority. |
-| `tracker.poll_secs` | `45` | **Poll interval** of the ticket pickup. |
-| `tracker.status_mapping.planning` | unset (`In Progress`) | **Stage statuses**: where a ticket moves when Plan starts. Plan also assigns the ticket to the agent. |
-| `tracker.status_mapping.executing`, `.reviewing`, `.pushed_mr`, `.done` | unset (no move) | Where a ticket moves when that stage starts; `done` is Clean up. |
-| `tracker.status_mapping.triaged` | unset (no move) | **Triaged**: where an investigation's ticket moves when its card reaches Triaged ([method.md](method.md#investigations)). |
-| `tracker.status_mapping.shipped` | `Merged`, `Deployed to Production`, `Done` | **Shipped statuses**: names that mean the work shipped, for reopen detection and the clean-up sweeps. |
-| `tracker.blocker_priorities` | `P0`, `P1` | **Blocker priorities**: their merge requests are labelled `Blocker` and announced to the notification targets. |
-| `tracker.approvers` | empty (nobody) | **Plan approvers**: who may decide a plan from a ticket comment. |
-| `tracker.type_mapping` | `Bug`→bug, `Story`→story, `Task`→story, `Small Enhancement Request`→story, `Epic`→epic, `Sub-task`→subtask | *File only.* Issue type to work class (`bug`, `investigation`, `story`, `epic`, `subtask`); unmapped types are stories. Map a type such as `Support Question` to `investigation` to have its tickets reproduced and triaged rather than fixed. |
+| `ticketing.mode` | `tickets` | **Source**. `tickets` takes tickets from a tracker (`jira`, `github_issues`); `incidents` takes open incidents from an incident tool (`pagerduty`) as investigation cards. A kind that does not serve the mode leaves no tracker configured, and Prep Cook logs why. |
+| `ticketing.kind` | `jira` | The provider: `jira`, `github_issues`, `pagerduty`, or `linear` (named, not implemented: every call to it says so). Its own fields are in [Ticketing providers](#ticketing-providers). |
+| `ticketing.import_filter` | unset (by kind: Jira's open-sprint `To Do` tickets assigned to you, by priority; GitHub's `state:open assignee:@me`; PagerDuty's open incidents) | **Import filter**: the query the import dialog runs, in the provider's syntax. `{project_key}` is substituted. |
+| `ticketing.enabled` | `false` | **Pick up new tickets automatically** for the board below. |
+| `ticketing.project_id` | unset | **Import into project**: the board picked-up tickets land on. |
+| `ticketing.pickup_filter` | unset (by kind: `project = {project_key} AND priority in (P0, P1) AND issuetype = Bug`; `state:open label:bug`; `status:triggered,acknowledged`) | **Pickup filter**: which new tickets are picked up. |
+| `ticketing.assigned_filter` | unset (off) | **Assigned pickup filter**: tickets assigned to the agent's account, imported and started whatever their priority. |
+| `ticketing.poll_secs` | `45` | **Poll interval** of the ticket pickup. |
+| `ticketing.incidents.resolve_on_triage` | `false` | **Resolve the incident when it is triaged** (incidents mode). Off, the incident only gets the triage report as a note. |
+| `ticketing.status_mapping.planning` | unset (`In Progress`) | **Stage statuses**: where a ticket moves when Plan starts (a label on GitHub Issues). Plan also assigns the ticket to the agent. Not used in incidents mode, where Plan acknowledges the incident. |
+| `ticketing.status_mapping.executing`, `.reviewing`, `.pushed_mr`, `.done` | unset (no move) | Where a ticket moves when that stage starts; `done` is Clean up, and on GitHub Issues it also closes the issue. |
+| `ticketing.status_mapping.triaged` | unset (no move) | **Triaged**: where an investigation's ticket moves when its card reaches Triaged ([method.md](method.md#investigations)). |
+| `ticketing.status_mapping.shipped` | `Merged`, `Deployed to Production`, `Done` | **Shipped statuses**: names that mean the work shipped, for reopen detection and the clean-up sweeps. On GitHub Issues a closed issue's status is its `done` label, else `Closed`. |
+| `ticketing.blocker_priorities` | `P0`, `P1` | **Blocker priorities**: their merge requests are labelled `Blocker` and announced to the notification targets. |
+| `ticketing.approvers` | empty (nobody) | **Plan approvers**: who may decide a plan from a ticket comment (account ids; GitHub logins, lower-cased; PagerDuty user ids). |
+| `ticketing.type_mapping` | `Bug`→bug, `Story`→story, `Task`→story, `Small Enhancement Request`→story, `Epic`→epic, `Sub-task`→subtask | *File only.* Issue type to work class (`bug`, `investigation`, `story`, `epic`, `subtask`). Unmapped types are stories in tickets mode and investigations in incidents mode, where every incident's type is `Incident`. On GitHub Issues the type is the first label that names an entry here. Map a type such as `Support Question` to `investigation` to have its tickets reproduced and triaged rather than fixed. |
 
 ## Git host and integrations
 
@@ -123,6 +129,37 @@ Generated from the providers' descriptors. A secret field is read from the secre
 | `teams` (Microsoft Teams) | | | | Posts each event as an Adaptive Card to a Teams channel through an incoming webhook. |
 | | `webhook_url` | yes | `TEAMS_WEBHOOK_URL` | **Webhook URL**. The URL of a Teams workflow that posts webhook requests to a channel, or of a channel's Incoming Webhook connector. |
 
+### Ticketing providers
+
+Generated from the providers' descriptors. A secret field is read from the secrets store under the name shown, then from the config, then from the environment variable of that name. Each field is a key of the `ticketing` section.
+
+| `kind` | Field | Required | Secret name | What it is |
+| --- | --- | --- | --- | --- |
+| `jira` (Jira) | | | | Jira Cloud: tickets come from a project, filters are JQL, and each stage moves the ticket to the status the workflow mapping names. |
+| | `site` | yes |  | **Site**. Your Atlassian site's host name, e.g. example.atlassian.net. |
+| | `email` | yes |  | **Email**. The email of the agent's Jira account, the one the API token belongs to. |
+| | `api_token` | yes | `JIRA_API_TOKEN` | **API token**. An API token for that account (https://id.atlassian.com/manage-profile/security/api-tokens). |
+| | `bot_identity` | no |  | **Agent account id**. The account id the agent's own comments are recognised by. Blank uses the account the token belongs to. |
+| | `project_key` | no |  | **Project key**. The project tickets are imported from and filed into (default BUG). |
+| | `import_filter` | no |  | **Import filter**. JQL the import dialog runs; {project_key} is substituted. Default: To Do tickets in open sprints assigned to you, by priority. |
+| | `pickup_filter` | no |  | **Pickup filter**. JQL selecting new tickets to pick up; a created-recently window is added. Default: project = {project_key} AND priority in (P0, P1) AND issuetype = Bug. |
+| | `assigned_filter` | no |  | **Assigned pickup filter**. JQL for tickets assigned to the agent, started whatever their priority, e.g. project = {project_key} AND assignee = currentUser(). Blank turns it off. |
+| `github_issues` (GitHub Issues) | | | | Issues in one repository, read and written through the gh CLI: it uses the account `gh auth login` signed in on this machine, so there is no token to enter. Stages are labels; done closes the issue. |
+| | `repo` | yes |  | **Repository**. owner/name, or host/owner/name on GitHub Enterprise. Issue keys are the repository name and number, e.g. WIDGETS-42. |
+| | `bot_identity` | no |  | **Agent login**. The login the agent's own comments are recognised by. Blank uses the account gh is signed in as. |
+| | `import_filter` | no |  | **Import filter**. Terms the import dialog lists: state:open\|closed\|all, label:bug (repeatable; quote names with spaces), -label:wontfix, assignee:@me\|login\|none. Default: state:open assignee:@me. |
+| | `pickup_filter` | no |  | **Pickup filter**. Which new issues are picked up, in the same terms; a created-recently window is added. Default: state:open label:bug. |
+| | `assigned_filter` | no |  | **Assigned pickup filter**. Issues assigned to the agent, started whatever their labels, e.g. state:open assignee:@me. Blank turns it off. |
+| `linear` (Linear) — not implemented | | | | Linear is not implemented — contributions welcome. It can be named, and every call to it says it is not supported. |
+| | `linear_api_key` | yes | `LINEAR_API_KEY` | **API key**. A Linear personal API key. |
+| | `team_key` | yes |  | **Team key**. The team issues come from, e.g. ENG. |
+| `pagerduty` (PagerDuty) | | | | Incidents mode: open incidents become investigation cards, and the triage report goes back to the incident as a note. Prep Cook never pages anyone and resolves an incident only when configured to. |
+| | `pagerduty_api_token` | yes | `PAGERDUTY_API_TOKEN` | **API key**. A REST API key (Integrations → API Access Keys) that can read incidents and write notes. |
+| | `user_id` | yes |  | **User id**. The PagerDuty user Prep Cook writes as, e.g. PABC123: a dedicated user, not on any schedule, so nothing pages it. |
+| | `service_ids` | no |  | **Service ids**. Comma-separated services whose incidents are picked up, e.g. PSVC123. Blank picks up every service the key can see. |
+| | `pickup_filter` | no |  | **Pickup filter**. Which incidents are picked up: service:PSVC123, urgency:high\|low, status:triggered,acknowledged, assigned:@me, team:PTEAM12. Default: status:triggered,acknowledged. |
+| | `import_filter` | no |  | **Import filter**. Incidents the import dialog lists, in the same terms. Default: status:triggered,acknowledged. |
+
 <!-- END GENERATED: integrations -->
 
 ## Agent MCP servers and skills
@@ -183,7 +220,7 @@ The board reads no sign-in or OAuth settings: `SELF_HOST_LOCAL_AUTH_EMAIL`,
 | Key | Default | What it does |
 | --- | --- | --- |
 | `approvals.in_app_gate` | `lavish` | **Settings → Orchestrator → Plan approvals**. `lavish` puts Approve and Request changes buttons in the plan document; `none` leaves them out and the decision comes from the card, the ticket or the API ([approvals.md](approvals.md)). |
-| `tracker.approvers` | empty | See [Tracker](#tracker). |
+| `ticketing.approvers` | empty | See [Ticketing](#ticketing). |
 | `PREPCOOK_API_TOKEN` (secret) | unset (bearer access off) | The bearer token the approvals and card APIs accept from scripts and other services ([api.md](api.md)). Filing a card needs it. |
 
 ## Secrets
@@ -217,10 +254,10 @@ empty inherits the global value.
 | `pattern_threshold` | unset (inherit) | Pattern-review threshold for this board (`investigation_threshold` in older configs). |
 | `deployed_retention` | `inherit` | `off`, or `{ "days": n }`: days in Close before Clean up. |
 | `cleanup_retention` | `inherit` | `off`, or `{ "days": n }`: days in Clean up before deletion. |
-| `tracker.watcher_enabled` | unset (on only for `tracker.project_id`) | **Ticket pickup** for this board. |
-| `tracker.jql_filter` | unset (inherit) | **Pickup filter** for this board. |
-| `tracker.assigned_jql` | unset (inherit) | **Assigned pickup filter** for this board; blank inherits. |
-| `tracker.project_key` | unset (inherit) | **Tracker project key**, when this board's tickets live elsewhere. |
+| `ticketing.watcher_enabled` | unset (on only for `ticketing.project_id`) | **Ticket pickup** for this board. Older configs call the override `tracker` or `jira`; both are read. |
+| `ticketing.jql_filter` | unset (inherit) | **Pickup filter** for this board, in the provider's syntax. |
+| `ticketing.assigned_jql` | unset (inherit) | **Assigned pickup filter** for this board; blank inherits. |
+| `ticketing.project_key` | unset (inherit) | **Tracker project key**, when this board's tickets live elsewhere. |
 | `notifications.enabled` | unset (on) | **Notifications**: `false` silences every target for this board. |
 | `notifications.skip_global` | empty | Kinds of global target (`slack`, `webhook`, …) this board does not send to. |
 | `notifications.targets` | empty | Targets only this board sends to, on top of the global ones it keeps; same shape as `notifications.targets`. |

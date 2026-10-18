@@ -2,6 +2,10 @@
 //! `email:api_token`) against `https://{site}`; every Jira-specific shape —
 //! Atlassian Document Format, `[~accountid:…]` mentions, transition lookup,
 //! JQL — stays in this module.
+//!
+//! Filters (import, pickup, assigned) are JQL. Stages move the ticket to the
+//! status `status_mapping` names for them; Planning also assigns the ticket
+//! to the agent's account.
 
 use std::path::Path;
 
@@ -11,10 +15,14 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::Value;
 
 use super::{
-    CreatedSubtask, FetchedIssue, IssueFields, NewIssue, NewSubtask, RemoteLink, Tracker,
-    TrackerAttachment, TrackerComment, TrackerError, TrackerIdentity, TrackerResult, TrackerUser,
+    CreatedSubtask, FetchedIssue, IssueFields, NewIssue, NewSubtask, Query, RemoteLink,
+    TicketStage, Tracker, TrackerAttachment, TrackerComment, TrackerError, TrackerIdentity,
+    TrackerResult, TrackerUser, is_project_key,
 };
-use crate::services::config::{TrackerConfig, TrackerKind};
+use crate::services::{
+    config::{TrackerConfig, TrackerKind},
+    integrations::{Descriptor, Field, FieldKind},
+};
 
 /// Accepts "example.atlassian.net", "https://example.atlassian.net/", etc. and
 /// reduces to a bare hostname, since callers prepend the scheme themselves.
@@ -58,9 +66,70 @@ async fn rejected(response: reqwest::Response, what: &str) -> TrackerError {
 
 const MAX_SEARCH_PAGES: usize = 5;
 const MAX_COMMENT_PAGES: usize = 10;
+/// Keys per `key in (...)` search: the JQL travels as a query parameter, so
+/// a batch has to stay well inside URL limits.
+const KEY_BATCH: usize = 100;
+
+/// A JQL relative date for a window back from now: hours under two days,
+/// whole days beyond (`-24h`, `-3d`).
+fn jql_window(within: chrono::Duration) -> String {
+    let hours = within.num_hours().max(1);
+    if hours >= 48 && hours % 24 == 0 {
+        format!("-{}d", hours / 24)
+    } else {
+        format!("-{hours}h")
+    }
+}
+
+/// The JQL one of the watcher's or orchestrator's questions becomes. `None`
+/// when the question cannot match anything (no statuses to look for).
+pub(crate) fn jql_for(query: Query<'_>) -> Option<String> {
+    Some(match query {
+        Query::Created { filter, within } => format!(
+            "({filter}) AND created >= {} ORDER BY created ASC",
+            jql_window(within)
+        ),
+        Query::Updated { filter, within } => format!(
+            "({filter}) AND updated >= {} ORDER BY updated ASC",
+            jql_window(within)
+        ),
+        // `statusCategory = "To Do"`, not `!= Done`: a reopen puts the ticket
+        // back at the start, while `!= Done` also matches every forward move
+        // between working statuses.
+        Query::Reopened { project, within } => format!(
+            "project = {project} AND statusCategory = \"To Do\" AND status CHANGED AFTER {} \
+             ORDER BY updated ASC",
+            jql_window(within)
+        ),
+        Query::Active { project, within } => format!(
+            "project = {project} AND updated >= {} ORDER BY updated ASC",
+            jql_window(within)
+        ),
+        Query::InStatuses {
+            project,
+            statuses,
+            within,
+        } => {
+            if statuses.is_empty() {
+                return None;
+            }
+            let clause = statuses
+                .iter()
+                .map(|name| format!("\"{name}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "project = \"{project}\" AND status IN ({clause}) AND updated >= {}",
+                jql_window(within)
+            )
+        }
+    })
+}
 
 pub struct JiraTracker {
     config: TrackerConfig,
+    /// `https://{site}`; a test points it at a mock server.
+    base: String,
     http: reqwest::Client,
     /// The account the API token belongs to, resolved once per tracker. The
     /// tracker is rebuilt when its config changes, so new credentials get a
@@ -70,11 +139,90 @@ pub struct JiraTracker {
 
 impl JiraTracker {
     pub fn new(config: TrackerConfig) -> Self {
+        let base = format!("https://{}", normalize_site(config.site()));
+        Self::with_base(config, base)
+    }
+
+    pub(crate) fn with_base(config: TrackerConfig, base: String) -> Self {
         Self {
             config,
+            base,
             http: reqwest::Client::new(),
             identity: tokio::sync::OnceCell::new(),
         }
+    }
+
+    pub fn descriptor() -> Descriptor {
+        Descriptor::new(
+            TrackerKind::Jira.as_str(),
+            "Jira",
+            "Jira Cloud: tickets come from a project, filters are JQL, and each stage moves \
+             the ticket to the status the workflow mapping names.",
+            vec![
+                Field::new(
+                    "site",
+                    "Site",
+                    FieldKind::Text,
+                    true,
+                    "Your Atlassian site's host name, e.g. example.atlassian.net.",
+                ),
+                Field::new(
+                    "email",
+                    "Email",
+                    FieldKind::Text,
+                    true,
+                    "The email of the agent's Jira account, the one the API token belongs to.",
+                ),
+                Field::new(
+                    "api_token",
+                    "API token",
+                    FieldKind::Secret,
+                    true,
+                    "An API token for that account \
+                     (https://id.atlassian.com/manage-profile/security/api-tokens).",
+                ),
+                Field::new(
+                    "bot_identity",
+                    "Agent account id",
+                    FieldKind::Text,
+                    false,
+                    "The account id the agent's own comments are recognised by. Blank uses the \
+                     account the token belongs to.",
+                ),
+                Field::new(
+                    "project_key",
+                    "Project key",
+                    FieldKind::Text,
+                    false,
+                    "The project tickets are imported from and filed into (default BUG).",
+                ),
+                Field::new(
+                    "import_filter",
+                    "Import filter",
+                    FieldKind::Text,
+                    false,
+                    "JQL the import dialog runs; {project_key} is substituted. Default: To Do \
+                     tickets in open sprints assigned to you, by priority.",
+                ),
+                Field::new(
+                    "pickup_filter",
+                    "Pickup filter",
+                    FieldKind::Text,
+                    false,
+                    "JQL selecting new tickets to pick up; a created-recently window is added. \
+                     Default: project = {project_key} AND priority in (P0, P1) AND issuetype = Bug.",
+                ),
+                Field::new(
+                    "assigned_filter",
+                    "Assigned pickup filter",
+                    FieldKind::Text,
+                    false,
+                    "JQL for tickets assigned to the agent, started whatever their priority, \
+                     e.g. project = {project_key} AND assignee = currentUser(). Blank turns it off.",
+                ),
+            ],
+            "https://developer.atlassian.com/cloud/jira/platform/rest/v3/",
+        )
     }
 
     fn site(&self) -> String {
@@ -82,7 +230,7 @@ impl JiraTracker {
     }
 
     fn api(&self, path: &str) -> String {
-        format!("https://{}/rest/api/3/{path}", self.site())
+        format!("{}/rest/api/3/{path}", self.base)
     }
 
     fn auth(&self) -> TrackerResult<String> {
@@ -211,11 +359,66 @@ impl Tracker for JiraTracker {
     }
 
     fn is_configured(&self) -> bool {
-        self.config.has_credentials()
+        self.config.has_credentials() && self.config.mode_mismatch().is_none()
     }
 
     fn issue_url(&self, key: &str) -> String {
         format!("https://{}/browse/{key}", self.site())
+    }
+
+    fn is_valid_key(&self, key: &str) -> bool {
+        is_project_key(key)
+    }
+
+    /// `/myself`: proves the site, email and token in one read.
+    async fn test(&self) -> TrackerResult<String> {
+        let myself = self.get_json(&self.api("myself"), "/myself").await?;
+        Ok(format!(
+            "Signed in to {} as {}.",
+            self.site(),
+            myself["displayName"]
+                .as_str()
+                .or(myself["emailAddress"].as_str())
+                .unwrap_or("the token's account")
+        ))
+    }
+
+    async fn find(&self, query: Query<'_>) -> TrackerResult<Vec<FetchedIssue>> {
+        match jql_for(query) {
+            Some(jql) => self.search(&jql).await,
+            None => Ok(Vec::new()),
+        }
+    }
+
+    async fn fetch(&self, keys: &[String]) -> TrackerResult<Vec<FetchedIssue>> {
+        let keys: Vec<&str> = keys
+            .iter()
+            .map(String::as_str)
+            .filter(|key| is_project_key(key))
+            .collect();
+        let mut out = Vec::new();
+        for batch in keys.chunks(KEY_BATCH) {
+            out.extend(
+                self.search(&format!("key in ({})", batch.join(",")))
+                    .await?,
+            );
+        }
+        Ok(out)
+    }
+
+    /// Planning moves the ticket to the planning status and assigns it to the
+    /// agent, so a picked-up ticket does not sit unassigned; the other stages
+    /// move it only when the mapping names a status.
+    async fn enter_stage(&self, key: &str, stage: TicketStage) -> TrackerResult<()> {
+        if stage == TicketStage::Planning {
+            let moved = self.transition_to_in_progress(key).await;
+            let assigned = self.assign_to_self(key).await;
+            return moved.and(assigned);
+        }
+        match stage.mapped(&self.config.status_mapping) {
+            Some(status) => self.transition(key, &status).await,
+            None => Ok(()),
+        }
     }
 
     /// Runs a JQL search and returns the matching issues (up to
@@ -285,6 +488,7 @@ impl Tracker for JiraTracker {
                         .map(str::to_string),
                     status_name: fields["status"]["name"].as_str().map(str::to_string),
                     labels: labels_of(fields),
+                    area: None,
                 });
             }
 
@@ -1024,6 +1228,62 @@ mod tests {
     }
 
     #[test]
+    fn the_watcher_questions_become_the_jql_it_has_always_run() {
+        let filter = "project = BUG AND priority in (P0, P1)";
+        assert_eq!(
+            jql_for(Query::Created {
+                filter,
+                within: chrono::Duration::hours(24)
+            })
+            .unwrap(),
+            "(project = BUG AND priority in (P0, P1)) AND created >= -24h ORDER BY created ASC"
+        );
+        assert_eq!(
+            jql_for(Query::Updated {
+                filter: "assignee = currentUser()",
+                within: chrono::Duration::hours(24)
+            })
+            .unwrap(),
+            "(assignee = currentUser()) AND updated >= -24h ORDER BY updated ASC"
+        );
+        assert_eq!(
+            jql_for(Query::Reopened {
+                project: "BUG",
+                within: chrono::Duration::days(3)
+            })
+            .unwrap(),
+            "project = BUG AND statusCategory = \"To Do\" AND status CHANGED AFTER -3d ORDER BY \
+             updated ASC"
+        );
+        assert_eq!(
+            jql_for(Query::Active {
+                project: "BUG",
+                within: chrono::Duration::days(3)
+            })
+            .unwrap(),
+            "project = BUG AND updated >= -3d ORDER BY updated ASC"
+        );
+        let shipped = vec!["Merged".to_string(), "Done".to_string()];
+        assert_eq!(
+            jql_for(Query::InStatuses {
+                project: "BUG",
+                statuses: &shipped,
+                within: chrono::Duration::days(30)
+            })
+            .unwrap(),
+            "project = \"BUG\" AND status IN (\"Merged\", \"Done\") AND updated >= -30d"
+        );
+        assert!(
+            jql_for(Query::InStatuses {
+                project: "BUG",
+                statuses: &[],
+                within: chrono::Duration::days(30)
+            })
+            .is_none()
+        );
+    }
+
+    #[test]
     fn text_within_the_limit_is_untouched() {
         let text = "Linked RCAs:\n- BUG-1: a summary\n\nInvestigate.";
         assert_eq!(clip_for_jira(text), text);
@@ -1068,5 +1328,140 @@ mod tests {
         let clipped = clip_for_jira(&text);
         assert!(utf16_len(&clipped) <= JIRA_TEXT_BUDGET);
         assert!(clipped.starts_with('🚀'));
+    }
+}
+
+#[cfg(test)]
+mod fixture_tests {
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{body_json, method, path, query_param},
+    };
+
+    use super::*;
+
+    fn tracker(server: &MockServer) -> JiraTracker {
+        JiraTracker::with_base(
+            TrackerConfig {
+                site: Some("acme.atlassian.net".to_string()),
+                email: Some("agent@acme.test".to_string()),
+                api_token: Some("token".to_string()),
+                ..Default::default()
+            },
+            server.uri(),
+        )
+    }
+
+    fn myself() -> serde_json::Value {
+        serde_json::json!({
+            "accountId": "agent-1",
+            "displayName": "Prep Cook",
+            "emailAddress": "agent@acme.test"
+        })
+    }
+
+    #[tokio::test]
+    async fn test_reads_myself() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/myself"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(myself()))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let message = tracker(&server).test().await.unwrap();
+        assert_eq!(message, "Signed in to acme.atlassian.net as Prep Cook.");
+    }
+
+    #[tokio::test]
+    async fn a_rejected_token_is_an_auth_failure() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/myself"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        assert!(matches!(
+            tracker(&server).test().await,
+            Err(TrackerError::AuthFailed)
+        ));
+    }
+
+    #[tokio::test]
+    async fn planning_moves_the_ticket_and_assigns_the_agent() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/issue/BUG-7/transitions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "transitions": [
+                    {"id": "11", "to": {"name": "To Do", "statusCategory": {"key": "new"}}},
+                    {"id": "21", "to": {"name": "In Progress",
+                                        "statusCategory": {"key": "indeterminate"}}}
+                ]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/rest/api/3/issue/BUG-7/transitions"))
+            .and(body_json(serde_json::json!({"transition": {"id": "21"}})))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/myself"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(myself()))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/api/3/issue/BUG-7/assignee"))
+            .and(body_json(serde_json::json!({"accountId": "agent-1"})))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let jira = tracker(&server);
+        jira.enter_stage("BUG-7", TicketStage::Planning)
+            .await
+            .unwrap();
+        // Unmapped stages leave the ticket alone (no further mocks match).
+        jira.enter_stage("BUG-7", TicketStage::Triaged)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetch_searches_valid_keys_only() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/api/3/search/jql"))
+            .and(query_param("jql", "key in (BUG-1,BUG-2)"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "issues": [{
+                    "key": "BUG-1",
+                    "fields": {
+                        "summary": "Export drops a row",
+                        "issuetype": {"name": "Bug"},
+                        "status": {"name": "Done", "statusCategory": {"key": "done"}},
+                        "priority": {"name": "P1"},
+                        "labels": ["customer"]
+                    }
+                }]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let fetched = tracker(&server)
+            .fetch(&[
+                "BUG-1".to_string(),
+                "not a key".to_string(),
+                "BUG-2".to_string(),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(fetched.len(), 1);
+        assert_eq!(fetched[0].key, "BUG-1");
+        assert_eq!(fetched[0].status_category.as_deref(), Some("done"));
+        assert_eq!(fetched[0].priority_name.as_deref(), Some("P1"));
     }
 }

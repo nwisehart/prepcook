@@ -100,10 +100,10 @@ use crate::services::{
         AutonomyMode, COMMENT_REPLY_PLAYBOOK_KEY, Config, DEFAULT_PR_DESCRIPTION_PROMPT,
         EffectiveProjectSettings, INVESTIGATION_PLAYBOOK_KEY, OrchestratorMode,
         PATTERN_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY, StatusMapping,
-        TrackerConfig,
+        TicketingMode, TrackerConfig,
     },
     container::{ContainerError, ContainerService},
-    daily, jira_watcher,
+    daily,
     notifications::{
         self, Confidence, Digest, DigestItem, DigestSectionId, Event, HarnessRef,
         InvestigationCompleted, IssueRef, Mention, NotificationSource, PlanKind,
@@ -114,7 +114,11 @@ use crate::services::{
     remote_sync, reopen,
     scripts::{self, AppRun, SlotReservation, StandUpOptions, StandUpOutcome, StandUpReport},
     secrets,
-    tracker::{self, IssueFields, NewIssue, RemoteLink, Tracker, TrackerComment, TrackerSource},
+    tracker::{
+        self, IssueFields, NewIssue, Query, RemoteLink, TicketStage, Tracker, TrackerComment,
+        TrackerSource,
+    },
+    tracker_watcher,
 };
 
 /// Minimum gap between sessions sent back in after a seat pause lifts.
@@ -885,41 +889,58 @@ fn retires_on_jira_done(status_name: &str) -> bool {
     !is_cleanup_column(status_name)
 }
 
-/// How many Jira keys go into one `key in (...)` search. The endpoint takes
-/// the JQL as a query parameter, so the batch has to stay well inside URL
-/// limits; a hundred keys is ~1.3 KB.
+/// How many tracker keys go into one [`Tracker::fetch`]. Jira's lookup is a
+/// `key in (...)` search whose JQL travels as a query parameter, so a batch
+/// has to stay well inside URL limits; a hundred keys is ~1.3 KB.
 const JIRA_KEY_BATCH: usize = 100;
 
-/// Which of these Jira tickets are in a done status category, in batches of
+/// Which of these tickets are in a done status category, in batches of
 /// [`JIRA_KEY_BATCH`]. A failed lookup is logged and its batch is treated as
-/// not done, so a Jira outage never retires or silences a card by mistake.
+/// not done, so a tracker outage never retires or silences a card by mistake.
 async fn jira_done_keys(tracker: &dyn Tracker, keys: &[String]) -> HashSet<String> {
     let mut done = HashSet::new();
     for batch in keys.chunks(JIRA_KEY_BATCH) {
-        let jql = format!("key in ({}) AND statusCategory = Done", batch.join(","));
-        match tracker.search(&jql).await {
-            Ok(fetched) => done.extend(fetched.into_iter().map(|issue| issue.key)),
-            Err(e) => warn!("Stage orchestrator: Jira-done lookup failed: {e}"),
+        match tracker.fetch(batch).await {
+            Ok(fetched) => done.extend(
+                fetched
+                    .into_iter()
+                    .filter(|issue| issue.status_category.as_deref() == Some("done"))
+                    .map(|issue| issue.key),
+            ),
+            Err(e) => warn!("Stage orchestrator: tracker-done lookup failed: {e}"),
         }
     }
     done
 }
 
-/// Which of these Jira tickets a person holds: assigned to someone other than
-/// the agent. The search runs as the agent's API token, so `currentUser()` is
-/// the agent and no account id is needed. Like [`jira_done_keys`], a failed
-/// batch counts as not held — the lookup errs toward the same behaviour as
-/// before it existed, never toward silencing a card on a Jira hiccup.
+/// Which of these tickets a person holds: assigned to someone other than the
+/// agent. Like [`jira_done_keys`], a failed lookup counts as not held — the
+/// lookup errs toward the same behaviour as before it existed, never toward
+/// silencing a card on a tracker hiccup — and so does an agent identity that
+/// cannot be read.
 async fn jira_human_assigned_keys(tracker: &dyn Tracker, keys: &[String]) -> HashSet<String> {
     let mut held = HashSet::new();
+    let agent = match tracker.identity().await {
+        Ok(identity) => identity.account_id,
+        Err(e) => {
+            warn!("Stage orchestrator: tracker-assignee lookup skipped, no agent identity: {e}");
+            return held;
+        }
+    };
     for batch in keys.chunks(JIRA_KEY_BATCH) {
-        let jql = format!(
-            "key in ({}) AND assignee is not EMPTY AND assignee != currentUser()",
-            batch.join(",")
-        );
-        match tracker.search(&jql).await {
-            Ok(fetched) => held.extend(fetched.into_iter().map(|issue| issue.key)),
-            Err(e) => warn!("Stage orchestrator: Jira-assignee lookup failed: {e}"),
+        match tracker.fetch(batch).await {
+            Ok(fetched) => held.extend(
+                fetched
+                    .into_iter()
+                    .filter(|issue| {
+                        issue
+                            .assignee_account_id
+                            .as_deref()
+                            .is_some_and(|assignee| assignee != agent)
+                    })
+                    .map(|issue| issue.key),
+            ),
+            Err(e) => warn!("Stage orchestrator: tracker-assignee lookup failed: {e}"),
         }
     }
     held
@@ -2552,6 +2573,12 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         let Some(tracker) = self.configured_tracker("tracker-done sweep").await else {
             return Ok(());
         };
+        // A resolved incident says the pager is quiet, not that the
+        // investigation is finished: responders resolve once they have
+        // mitigated, usually before anyone knows why it happened.
+        if tracker.kind().mode() == TicketingMode::Incidents {
+            return Ok(());
+        }
 
         let live_ids: Vec<Uuid> = statuses
             .iter()
@@ -4408,8 +4435,12 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
             // Boards can live in different tracker projects; file the
             // pattern-review story where this board's tickets live. Without a
-            // tracker the board card is the review's only record.
-            let tracker = self.configured_tracker("pattern-review story").await;
+            // ticket tracker the board card is the review's only record: an
+            // incident tool takes incidents, not stories.
+            let tracker = self
+                .configured_tracker("pattern-review story")
+                .await
+                .filter(|tracker| tracker.kind().mode() == TicketingMode::Tickets);
             // One node's failure must not abandon the others: `?` here meant a
             // single story the tracker kept rejecting aborted the whole scan on
             // every tick, so no node got its pattern review filed.
@@ -5542,39 +5573,26 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     /// Mirrors a stage the orchestrator has just started onto the tracker
     /// ticket. Best effort: a tracker hiccup must not fail the launch.
     ///
-    /// Planning moves the ticket to the planning status and assigns it to the
-    /// agent's account, so a picked-up ticket does not sit unassigned. The
-    /// other stages move it only when the status mapping names a status for
-    /// them (Clean-up uses `done`).
+    /// What a stage does to the ticket is the provider's
+    /// ([`Tracker::enter_stage`]): a ticket tracker moves it to the status the
+    /// mapping names (Planning also assigns it to the agent, so a picked-up
+    /// ticket does not sit unassigned; Clean-up uses `done`), an incident tool
+    /// acknowledges and resolves.
     async fn mirror_stage_to_tracker(&self, stage: Stage, ticket: &TrackedTicket) {
         let (tracker, key) = (&ticket.tracker, ticket.key.as_str());
-        if stage == Stage::Planning {
-            if let Err(e) = tracker.transition_to_in_progress(key).await {
-                warn!("Stage orchestrator: could not move {key} to its planning status: {e}");
-            }
-            if let Err(e) = tracker.assign_to_self(key).await {
-                warn!("Stage orchestrator: could not assign {key} to the agent: {e}");
-            }
-            return;
-        }
-        let mapping = self.tracker.settings().await.status_mapping;
-        let target = match stage {
-            Stage::Triaged => mapping.triaged,
-            Stage::Executing => mapping.executing,
-            Stage::Reviewing => mapping.reviewing,
-            Stage::PushedMr => mapping.pushed_mr,
-            Stage::Cleanup => mapping.done,
-            Stage::Planning => None,
+        let ticket_stage = match stage {
+            Stage::Planning => TicketStage::Planning,
+            Stage::Executing => TicketStage::Executing,
+            Stage::Reviewing => TicketStage::Reviewing,
+            Stage::PushedMr => TicketStage::PushedMr,
+            Stage::Triaged => TicketStage::Triaged,
+            Stage::Cleanup => TicketStage::Done,
         };
-        let Some(target) = target
-            .as_deref()
-            .map(str::trim)
-            .filter(|status| !status.is_empty())
-        else {
-            return;
-        };
-        if let Err(e) = tracker.transition(key, target).await {
-            warn!("Stage orchestrator: could not move {key} to {target}: {e}");
+        if let Err(e) = tracker.enter_stage(key, ticket_stage).await {
+            warn!(
+                "Stage orchestrator: could not mirror {} onto {key}: {e}",
+                stage.title()
+            );
         }
     }
 
@@ -11201,17 +11219,12 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         if shipped.shipped.is_empty() {
             return HashSet::new();
         }
-        let clause = shipped
-            .shipped
-            .iter()
-            .map(|name| format!("\"{name}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let jql = format!(
-            "project = \"{}\" AND status IN ({clause}) AND updated >= -{SHIPPED_LOOKBACK_DAYS}d",
-            settings.project_key()
-        );
-        match tracker.search(&jql).await {
+        let query = Query::InStatuses {
+            project: settings.project_key(),
+            statuses: &shipped.shipped,
+            within: chrono::Duration::days(i64::from(SHIPPED_LOOKBACK_DAYS)),
+        };
+        match tracker.find(query).await {
             Ok(issues) => issues
                 .into_iter()
                 .filter(|issue| {
@@ -11273,14 +11286,15 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         let shipped = self.shipped_jira_keys(tracker.as_ref()).await;
         let terminal_ids: HashSet<Uuid> = statuses
             .iter()
-            .filter(|status| jira_watcher::is_terminal_status(&status.name))
+            .filter(|status| tracker_watcher::is_terminal_status(&status.name))
             .map(|status| status.id)
             .collect();
         if terminal_ids.is_empty() && shipped.is_empty() {
             return Ok(());
         }
 
-        let Some(cards) = jira_watcher::existing_issues_by_key(client, settings.project_id).await
+        let Some(cards) =
+            tracker_watcher::existing_issues_by_key(client, settings.project_id).await
         else {
             return Ok(());
         };

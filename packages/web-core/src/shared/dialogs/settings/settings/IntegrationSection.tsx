@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { PlusIcon, TrashIcon } from '@phosphor-icons/react';
@@ -36,6 +36,10 @@ interface IntegrationSectionProps<E extends IntegrationEntry> {
   /** Area-specific controls rendered under an entry's own fields. */
   renderExtra?: (entry: E, update: (entry: E) => void) => ReactNode;
 }
+
+/** The first provider that can be chosen. */
+const firstAvailable = (descriptors: Descriptor[]): string | undefined =>
+  descriptors.find((descriptor) => descriptor.available)?.kind;
 
 const fieldText = (value: unknown): string =>
   value == null ? '' : typeof value === 'string' ? value : String(value);
@@ -133,9 +137,18 @@ export function IntegrationSection<E extends IntegrationEntry>({
   renderExtra,
 }: IntegrationSectionProps<E>) {
   const { t } = useTranslation('settings');
-  const [newKind, setNewKind] = useState<string | undefined>(
-    descriptors[0]?.kind
+  const [newKind, setNewKind] = useState<string | undefined>(() =>
+    firstAvailable(descriptors)
   );
+  // The offered providers can change under the picker (another mode).
+  useEffect(() => {
+    setNewKind((current) =>
+      descriptors.some((d) => d.kind === current && d.available)
+        ? current
+        : firstAvailable(descriptors)
+    );
+  }, [descriptors]);
+  const newDescriptor = descriptors.find((d) => d.kind === newKind);
   const [tests, setTests] = useState<
     Record<number, TestOutcome | 'running' | undefined>
   >({});
@@ -151,7 +164,7 @@ export function IntegrationSection<E extends IntegrationEntry>({
   };
 
   const add = () => {
-    if (!newKind) return;
+    if (!newKind || !newDescriptor?.available) return;
     onChange([...entries, { kind: newKind } as E]);
   };
 
@@ -264,7 +277,12 @@ export function IntegrationSection<E extends IntegrationEntry>({
                 value={newKind}
                 options={descriptors.map((d) => ({
                   value: d.kind,
-                  label: d.display_name,
+                  label: d.available
+                    ? d.display_name
+                    : t('settings.integrations.section.unavailable', {
+                        name: d.display_name,
+                      }),
+                  disabled: !d.available,
                 }))}
                 onChange={setNewKind}
               />
@@ -274,6 +292,7 @@ export function IntegrationSection<E extends IntegrationEntry>({
             variant="secondary"
             value={t('settings.integrations.section.add')}
             actionIcon={PlusIcon}
+            disabled={!newDescriptor?.available}
             onClick={add}
           />
         </div>

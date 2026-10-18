@@ -232,10 +232,28 @@ pub struct ApprovalsConfig {
     pub in_app_gate: InAppGate,
 }
 
-/// Which issue tracker tickets come from. Only Jira is implemented; the
-/// others are named so a config can say what it wants and get a clear
-/// "not yet supported" from every tracker operation rather than a silent
-/// fallback to Jira.
+/// Where cards come from: a ticket tracker, or an incident tool whose open
+/// incidents become investigation cards (see `docs/incidents.md`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum TicketingMode {
+    #[default]
+    Tickets,
+    Incidents,
+}
+
+impl TicketingMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Tickets => "tickets",
+            Self::Incidents => "incidents",
+        }
+    }
+}
+
+/// Which service tickets (or incidents) come from. Linear is named so a
+/// config can say what it wants and get a clear "not yet supported" from
+/// every operation rather than a silent fallback to Jira.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum TrackerKind {
@@ -243,14 +261,47 @@ pub enum TrackerKind {
     Jira,
     GithubIssues,
     Linear,
+    #[serde(rename = "pagerduty")]
+    PagerDuty,
 }
 
 impl TrackerKind {
+    pub const ALL: [TrackerKind; 4] = [
+        Self::Jira,
+        Self::GithubIssues,
+        Self::Linear,
+        Self::PagerDuty,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Jira => "Jira",
             Self::GithubIssues => "GitHub Issues",
             Self::Linear => "Linear",
+            Self::PagerDuty => "PagerDuty",
+        }
+    }
+
+    /// The config string (`ticketing.kind`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Jira => "jira",
+            Self::GithubIssues => "github_issues",
+            Self::Linear => "linear",
+            Self::PagerDuty => "pagerduty",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == raw)
+    }
+
+    /// The mode this kind serves: PagerDuty is an incident tool, the rest are
+    /// ticket trackers.
+    pub fn mode(self) -> TicketingMode {
+        match self {
+            Self::PagerDuty => TicketingMode::Incidents,
+            Self::Jira | Self::GithubIssues | Self::Linear => TicketingMode::Tickets,
         }
     }
 }
@@ -259,6 +310,17 @@ impl std::fmt::Display for TrackerKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.label())
     }
+}
+
+/// What Prep Cook may do to an incident on its own, beyond the notes it
+/// posts (see `docs/incidents.md`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct IncidentsConfig {
+    /// Resolve the incident when its investigation card reaches Triaged.
+    /// Off, the incident stays with the responders and only the triage
+    /// report is added to it.
+    #[serde(default)]
+    pub resolve_on_triage: bool,
 }
 
 /// Tracker status names the board's stages correspond to. A stage with a
@@ -343,14 +405,22 @@ fn default_blocker_priorities() -> Vec<String> {
     vec!["P0".to_string(), "P1".to_string()]
 }
 
-/// Where tickets come from, how the watcher picks them up, and who may
-/// decide on a plan from the tracker.
+/// The `ticketing` section: where tickets (or incidents) come from, how the
+/// watcher picks them up, and who may decide on a plan from the tracker.
+///
+/// One section serves every kind. Each kind reads the fields its descriptor
+/// names (`services::tracker`), and those that are not shared carry the
+/// kind in their name (`pagerduty_api_token`), so switching kinds never
+/// hands one service another's credentials.
 ///
 /// The string fields are nullable on the wire (the settings UI persists
 /// cleared inputs as `null`); defaults are applied at use time through the
 /// accessor methods.
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct TrackerConfig {
+    /// `tickets` (Jira, GitHub Issues, Linear) or `incidents` (PagerDuty).
+    #[serde(default)]
+    pub mode: TicketingMode,
     #[serde(default)]
     pub kind: TrackerKind,
     /// Jira Cloud host, e.g. "example.atlassian.net".
@@ -362,6 +432,30 @@ pub struct TrackerConfig {
     pub api_token: Option<String>,
     #[serde(default)]
     pub project_key: Option<String>,
+    /// GitHub repository, `owner/name` (or `host/owner/name` on GitHub
+    /// Enterprise).
+    #[serde(default)]
+    pub repo: Option<String>,
+    /// PagerDuty REST API key.
+    #[serde(default)]
+    pub pagerduty_api_token: Option<String>,
+    /// PagerDuty service ids whose incidents are picked up, comma-separated,
+    /// when the pickup filter names none.
+    #[serde(default)]
+    pub service_ids: Option<String>,
+    /// PagerDuty user Prep Cook acts as: notes are written as this user, and
+    /// it is the identity tracker comments are recognised by.
+    #[serde(default)]
+    pub user_id: Option<String>,
+    /// Linear API key.
+    #[serde(default)]
+    pub linear_api_key: Option<String>,
+    /// Linear team key.
+    #[serde(default)]
+    pub team_key: Option<String>,
+    /// What Prep Cook may do to an incident in `incidents` mode.
+    #[serde(default)]
+    pub incidents: IncidentsConfig,
     /// Query the import dialog runs when the caller does not supply one.
     /// `{project_key}` is substituted at use time.
     #[serde(default)]
@@ -426,6 +520,69 @@ impl TrackerConfig {
     pub const DEFAULT_IMPORT_FILTER: &'static str = "project = {project_key} AND sprint in openSprints() AND assignee = currentUser() AND statusCategory = \"To Do\" ORDER BY priority DESC";
     pub const DEFAULT_PICKUP_FILTER: &'static str =
         "project = {project_key} AND priority in (P0, P1) AND issuetype = Bug";
+    /// GitHub Issues: open issues labelled `bug`.
+    pub const DEFAULT_GITHUB_PICKUP_FILTER: &'static str = "state:open label:bug";
+    /// GitHub Issues: open issues assigned to the `gh` account.
+    pub const DEFAULT_GITHUB_IMPORT_FILTER: &'static str = "state:open assignee:@me";
+    /// PagerDuty: every open incident on the configured services.
+    pub const DEFAULT_INCIDENT_FILTER: &'static str = "status:triggered,acknowledged";
+
+    /// The pickup filter used when neither the board nor `pickup_filter`
+    /// names one, in the configured kind's own syntax.
+    pub fn default_pickup_filter(&self) -> &'static str {
+        match self.kind {
+            TrackerKind::Jira | TrackerKind::Linear => Self::DEFAULT_PICKUP_FILTER,
+            TrackerKind::GithubIssues => Self::DEFAULT_GITHUB_PICKUP_FILTER,
+            TrackerKind::PagerDuty => Self::DEFAULT_INCIDENT_FILTER,
+        }
+    }
+
+    /// The import filter used when `import_filter` is unset.
+    pub fn default_import_filter(&self) -> &'static str {
+        match self.kind {
+            TrackerKind::Jira | TrackerKind::Linear => Self::DEFAULT_IMPORT_FILTER,
+            TrackerKind::GithubIssues => Self::DEFAULT_GITHUB_IMPORT_FILTER,
+            TrackerKind::PagerDuty => Self::DEFAULT_INCIDENT_FILTER,
+        }
+    }
+
+    pub fn repo(&self) -> Option<&str> {
+        non_blank(&self.repo)
+    }
+
+    pub fn pagerduty_api_token(&self) -> Option<&str> {
+        non_blank(&self.pagerduty_api_token)
+    }
+
+    pub fn user_id(&self) -> Option<&str> {
+        non_blank(&self.user_id)
+    }
+
+    /// The configured PagerDuty service ids, in order, blanks dropped.
+    pub fn service_ids(&self) -> Vec<String> {
+        non_blank(&self.service_ids)
+            .map(|ids| {
+                ids.split(',')
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Why the configured kind cannot serve the configured mode, if it
+    /// cannot: a ticket tracker in `incidents` mode, or the reverse.
+    pub fn mode_mismatch(&self) -> Option<String> {
+        (self.kind.mode() != self.mode).then(|| {
+            format!(
+                "{} serves ticketing.mode = \"{}\", but the mode is \"{}\"",
+                self.kind.label(),
+                self.kind.mode().as_str(),
+                self.mode.as_str()
+            )
+        })
+    }
 
     pub fn site(&self) -> &str {
         non_blank(&self.site).unwrap_or(Self::DEFAULT_SITE)
@@ -455,7 +612,7 @@ impl TrackerConfig {
     /// The import query with `{project_key}` substituted.
     pub fn resolved_import_filter(&self) -> String {
         non_blank(&self.import_filter)
-            .unwrap_or(Self::DEFAULT_IMPORT_FILTER)
+            .unwrap_or(self.default_import_filter())
             .replace("{project_key}", self.project_key())
     }
 
@@ -470,7 +627,9 @@ impl TrackerConfig {
     }
 
     /// The work class a tracker issue type maps to (exact name first, then
-    /// case-insensitively; `Story` when unmapped).
+    /// case-insensitively). Unmapped types are stories in `tickets` mode and
+    /// investigations in `incidents` mode: an incident is reproduced and
+    /// explained, and fixing it is a person's call.
     pub fn work_class_for(&self, issue_type: &str) -> WorkClass {
         self.type_mapping
             .get(issue_type)
@@ -481,16 +640,27 @@ impl TrackerConfig {
                     .find(|(name, _)| name.eq_ignore_ascii_case(issue_type))
                     .map(|(_, work_class)| *work_class)
             })
-            .unwrap_or(WorkClass::Story)
+            .unwrap_or(match self.mode {
+                TicketingMode::Tickets => WorkClass::Story,
+                TicketingMode::Incidents => WorkClass::Investigation,
+            })
     }
 
     fn from_v9(jira: v9::JiraConfig, watcher: v9::JiraWatcherConfig) -> Self {
         Self {
+            mode: TicketingMode::Tickets,
             kind: TrackerKind::Jira,
             site: jira.site,
             email: jira.email,
             api_token: jira.api_token,
             project_key: jira.project_key,
+            repo: None,
+            pagerduty_api_token: None,
+            service_ids: None,
+            user_id: None,
+            linear_api_key: None,
+            team_key: None,
+            incidents: IncidentsConfig::default(),
             import_filter: jira.default_jql,
             pickup_filter: watcher.jql_filter,
             assigned_filter: watcher.assigned_jql,
@@ -509,11 +679,19 @@ impl TrackerConfig {
 impl Default for TrackerConfig {
     fn default() -> Self {
         Self {
+            mode: TicketingMode::default(),
             kind: TrackerKind::default(),
             site: None,
             email: None,
             api_token: None,
             project_key: None,
+            repo: None,
+            pagerduty_api_token: None,
+            service_ids: None,
+            user_id: None,
+            linear_api_key: None,
+            team_key: None,
+            incidents: IncidentsConfig::default(),
             import_filter: None,
             pickup_filter: None,
             assigned_filter: None,
@@ -535,12 +713,12 @@ impl Default for TrackerConfig {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS)]
 pub struct ProjectTrackerOverride {
     /// Whether the watcher polls for this board. `None` inherits the
-    /// single-target behaviour (`tracker.enabled` applied to
-    /// `tracker.project_id`).
+    /// single-target behaviour (`ticketing.enabled` applied to
+    /// `ticketing.project_id`).
     #[serde(default)]
     pub watcher_enabled: Option<bool>,
     /// Query fragment selecting this board's issues, with `{project_key}`
-    /// substituted at use time. `None` inherits `tracker.pickup_filter`.
+    /// substituted at use time. `None` inherits `ticketing.pickup_filter`.
     /// Boards sharing a tracker project distinguish themselves here (by
     /// component, label, or module).
     #[serde(default)]
@@ -550,7 +728,7 @@ pub struct ProjectTrackerOverride {
     #[serde(default)]
     pub project_key: Option<String>,
     /// Assigned-pickup query for this board. Unset or blank inherits
-    /// `tracker.assigned_filter` — the Settings inputs cannot tell a cleared
+    /// `ticketing.assigned_filter` — the Settings inputs cannot tell a cleared
     /// field from an untouched one, so blank must not carry meaning.
     #[serde(default)]
     pub assigned_jql: Option<String>,
@@ -647,10 +825,10 @@ pub struct ProjectAutomationDefaults {
     /// Unset leaves it unlabelled.
     #[serde(default)]
     pub label: Option<String>,
-    /// Also read from a `jira` key, so a config that names the override
-    /// that way still loads.
-    #[serde(default, alias = "jira")]
-    pub tracker: ProjectTrackerOverride,
+    /// Also read from the `tracker` and `jira` keys older configs wrote, and
+    /// saved as `ticketing`.
+    #[serde(default, alias = "tracker", alias = "jira")]
+    pub ticketing: ProjectTrackerOverride,
     #[serde(default)]
     pub notifications: ProjectNotificationsOverride,
     /// Board Slack routing as older configs wrote it; read once on load and
@@ -695,7 +873,7 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
             repo_ids: old.repo_ids,
             executor_profile: old.executor_profile,
             label: old.label,
-            tracker: old.jira.into(),
+            ticketing: old.jira.into(),
             notifications: ProjectNotificationsOverride::default(),
             slack: old.slack,
             merge_requests: old.merge_requests,
@@ -899,9 +1077,10 @@ pub struct Config {
     pub commit_reminder_prompt: Option<String>,
     #[serde(default)]
     pub send_message_shortcut: SendMessageShortcut,
-    /// The issue tracker; see [`TrackerConfig`].
-    #[serde(default)]
-    pub tracker: TrackerConfig,
+    /// Where cards come from; see [`TrackerConfig`]. Also read from the
+    /// `tracker` key older configs wrote, and saved as `ticketing`.
+    #[serde(default, alias = "tracker")]
+    pub ticketing: TrackerConfig,
     /// Slack settings as older configs wrote them. Read once on load and
     /// converted into a Slack entry in `notifications.targets` (see
     /// [`Config::adopt_legacy_slack`]); nothing else reads them.
@@ -973,7 +1152,7 @@ impl Config {
             commit_reminder_enabled: old_config.commit_reminder_enabled,
             commit_reminder_prompt: old_config.commit_reminder_prompt,
             send_message_shortcut: old_config.send_message_shortcut,
-            tracker: TrackerConfig::from_v9(old_config.jira, old_config.jira_watcher),
+            ticketing: TrackerConfig::from_v9(old_config.jira, old_config.jira_watcher),
             slack_webhook_url: old_config.slack_webhook_url,
             slack_bot_token: old_config.slack_bot_token,
             slack_channel: old_config.slack_channel,
@@ -1020,15 +1199,16 @@ impl From<String> for Config {
 }
 
 /// A v10 config that carries its tracker settings as the `jira` and
-/// `jira_watcher` pair rather than `tracker`: moves them into `tracker` so
-/// they are not dropped as unknown keys. A config that has a `tracker` key is
-/// left alone.
+/// `jira_watcher` pair rather than a `ticketing` (or older `tracker`)
+/// section: moves them into `ticketing` so they are not dropped as unknown
+/// keys. A config that has either section is left alone.
 fn adopt_legacy_tracker_fields(config: &mut Config, raw_config: &str) {
     let Ok(serde_json::Value::Object(raw)) = serde_json::from_str::<serde_json::Value>(raw_config)
     else {
         return;
     };
-    if raw.contains_key("tracker")
+    if raw.contains_key("ticketing")
+        || raw.contains_key("tracker")
         || !(raw.contains_key("jira") || raw.contains_key("jira_watcher"))
     {
         return;
@@ -1041,7 +1221,7 @@ fn adopt_legacy_tracker_fields(config: &mut Config, raw_config: &str) {
         .get("jira_watcher")
         .and_then(|value| serde_json::from_value::<v9::JiraWatcherConfig>(value.clone()).ok())
         .unwrap_or_default();
-    config.tracker = TrackerConfig::from_v9(jira, watcher);
+    config.ticketing = TrackerConfig::from_v9(jira, watcher);
 }
 
 impl Default for Config {
@@ -1068,7 +1248,7 @@ impl Default for Config {
             commit_reminder_enabled: true,
             commit_reminder_prompt: None,
             send_message_shortcut: SendMessageShortcut::default(),
-            tracker: TrackerConfig::default(),
+            ticketing: TrackerConfig::default(),
             slack_webhook_url: None,
             slack_bot_token: None,
             slack_channel: None,
@@ -1128,28 +1308,27 @@ impl Config {
                 .map(str::to_string)
         }
 
-        let jira_project_key = non_empty(&board.tracker.project_key)
-            .unwrap_or_else(|| self.tracker.project_key().to_string());
+        let jira_project_key = non_empty(&board.ticketing.project_key)
+            .unwrap_or_else(|| self.ticketing.project_key().to_string());
 
         // Board filter, else the global pickup filter, else the shipped
         // default — then substitute this board's key.
-        let watcher_jql = non_empty(&board.tracker.jql_filter)
-            .or_else(|| non_empty(&self.tracker.pickup_filter))
-            .unwrap_or_else(|| TrackerConfig::DEFAULT_PICKUP_FILTER.to_string())
+        let watcher_jql = non_empty(&board.ticketing.jql_filter)
+            .or_else(|| non_empty(&self.ticketing.pickup_filter))
+            .unwrap_or_else(|| self.ticketing.default_pickup_filter().to_string())
             .replace("{project_key}", &jira_project_key);
 
         // Unset means "inherit", which for the watcher is the single-target
         // behaviour: on only for the globally configured board.
-        let watcher_enabled = board
-            .tracker
-            .watcher_enabled
-            .unwrap_or_else(|| self.tracker.enabled && self.tracker.project_id == Some(project_id));
+        let watcher_enabled = board.ticketing.watcher_enabled.unwrap_or_else(|| {
+            self.ticketing.enabled && self.ticketing.project_id == Some(project_id)
+        });
 
         // Assigned pickup: a non-blank board override wins, else the global
         // value. Blank inherits — the UI cannot distinguish cleared from
         // untouched, so blank must never mean "off".
-        let assigned_jql = non_empty(&board.tracker.assigned_jql)
-            .or_else(|| non_empty(&self.tracker.assigned_filter))
+        let assigned_jql = non_empty(&board.ticketing.assigned_jql)
+            .or_else(|| non_empty(&self.ticketing.assigned_filter))
             .map(|jql| jql.replace("{project_key}", &jira_project_key));
 
         let mut playbooks = self.playbooks.clone();
@@ -1359,7 +1538,7 @@ impl Config {
 
     /// Boards the Jira watcher should poll, each with its own filter.
     ///
-    /// Boards opt in through `tracker.watcher_enabled`; those that leave it
+    /// Boards opt in through `ticketing.watcher_enabled`; those that leave it
     /// unset inherit the legacy single-target behaviour, so a config written
     /// before multi-board support keeps working unchanged. The globally
     /// configured board is included even when it has no `project_defaults`
@@ -1387,7 +1566,7 @@ impl Config {
                 push(self.project_settings(project_id));
             }
         }
-        if let Some(project_id) = self.tracker.project_id {
+        if let Some(project_id) = self.ticketing.project_id {
             push(self.project_settings(project_id));
         }
         targets
@@ -1412,7 +1591,7 @@ mod project_settings_tests {
     /// Single-repository board: repos only, everything else inherited.
     fn config_with_board(project_id: Uuid, board: ProjectAutomationDefaults) -> Config {
         let mut config = Config::default();
-        config.tracker.project_key = Some("BUG".to_string());
+        config.ticketing.project_key = Some("BUG".to_string());
         config
             .notifications
             .targets
@@ -1598,7 +1777,7 @@ mod project_settings_tests {
             deployed_retention: RetentionOverride::Off,
             ..Default::default()
         };
-        board.tracker.jql_filter =
+        board.ticketing.jql_filter =
             Some("project = {project_key} AND component = Extension".to_string());
         board.notifications.targets.push(NotificationTarget {
             kind: NotifierKind::Webhook,
@@ -1708,9 +1887,9 @@ mod project_settings_tests {
     fn legacy_single_target_still_watched() {
         let project_id = Uuid::new_v4();
         let mut config = config_with_board(project_id, ProjectAutomationDefaults::default());
-        config.tracker.enabled = true;
-        config.tracker.project_id = Some(project_id);
-        config.tracker.pickup_filter =
+        config.ticketing.enabled = true;
+        config.ticketing.project_id = Some(project_id);
+        config.ticketing.pickup_filter =
             Some("project = {project_key} AND priority = P0".to_string());
 
         let targets = config.watch_targets();
@@ -1724,12 +1903,12 @@ mod project_settings_tests {
         let legacy = Uuid::new_v4();
         let extensions = Uuid::new_v4();
         let mut config = config_with_board(legacy, ProjectAutomationDefaults::default());
-        config.tracker.enabled = true;
-        config.tracker.project_id = Some(legacy);
+        config.ticketing.enabled = true;
+        config.ticketing.project_id = Some(legacy);
 
         let mut board = ProjectAutomationDefaults::default();
-        board.tracker.watcher_enabled = Some(true);
-        board.tracker.jql_filter =
+        board.ticketing.watcher_enabled = Some(true);
+        board.ticketing.jql_filter =
             Some("project = {project_key} AND labels = extension".to_string());
         config
             .orchestrator
@@ -1755,10 +1934,10 @@ mod project_settings_tests {
     fn board_can_opt_out_while_global_watcher_is_on() {
         let project_id = Uuid::new_v4();
         let mut board = ProjectAutomationDefaults::default();
-        board.tracker.watcher_enabled = Some(false);
+        board.ticketing.watcher_enabled = Some(false);
         let mut config = config_with_board(project_id, board);
-        config.tracker.enabled = true;
-        config.tracker.project_id = Some(project_id);
+        config.ticketing.enabled = true;
+        config.ticketing.project_id = Some(project_id);
 
         assert!(config.watch_targets().is_empty());
     }
@@ -1771,7 +1950,7 @@ mod project_settings_tests {
         assert!(config.project_settings(project_id).assigned_jql.is_none());
 
         // Global value inherits, with this board's key substituted.
-        config.tracker.assigned_filter =
+        config.ticketing.assigned_filter =
             Some("project = {project_key} AND assignee = currentUser()".to_string());
         assert_eq!(
             config.project_settings(project_id).assigned_jql.as_deref(),
@@ -1784,7 +1963,7 @@ mod project_settings_tests {
             .project_defaults
             .get_mut(&project_id.to_string())
             .unwrap();
-        board.tracker.assigned_jql =
+        board.ticketing.assigned_jql =
             Some("project = {project_key} AND component = Extension".to_string());
         assert_eq!(
             config.project_settings(project_id).assigned_jql.as_deref(),
@@ -1798,7 +1977,7 @@ mod project_settings_tests {
             .project_defaults
             .get_mut(&project_id.to_string())
             .unwrap();
-        board.tracker.assigned_jql = Some("  ".to_string());
+        board.ticketing.assigned_jql = Some("  ".to_string());
         assert_eq!(
             config.project_settings(project_id).assigned_jql.as_deref(),
             Some("project = BUG AND assignee = currentUser()")
@@ -2089,7 +2268,7 @@ mod migration_tests {
             .insert(project_id.to_string(), board);
 
         let config = Config::from(serde_json::to_string(&old).unwrap());
-        let tracker = &config.tracker;
+        let tracker = &config.ticketing;
         assert_eq!(tracker.kind, TrackerKind::Jira);
         assert_eq!(tracker.site(), "acme.atlassian.net");
         assert_eq!(tracker.email(), Some("bot@acme.test"));
@@ -2122,10 +2301,10 @@ mod migration_tests {
 
         let board = &config.orchestrator.project_defaults[&project_id.to_string()];
         assert_eq!(
-            board.tracker.jql_filter.as_deref(),
+            board.ticketing.jql_filter.as_deref(),
             Some("component = Extension")
         );
-        assert_eq!(board.tracker.watcher_enabled, Some(true));
+        assert_eq!(board.ticketing.watcher_enabled, Some(true));
         let targets = config.watch_targets();
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].jql, "component = Extension");
@@ -2136,7 +2315,7 @@ mod migration_tests {
         let project_id = Uuid::new_v4();
         let mut raw = serde_json::to_value(Config::default()).unwrap();
         let map = raw.as_object_mut().unwrap();
-        map.remove("tracker");
+        map.remove("ticketing");
         map.insert(
             "jira".to_string(),
             serde_json::json!({ "email": "bot@acme.test", "api_token": "token",
@@ -2151,21 +2330,122 @@ mod migration_tests {
         });
 
         let config = Config::from(raw.to_string());
-        assert!(config.tracker.has_credentials());
-        assert!(config.tracker.enabled);
-        assert_eq!(config.tracker.project_id, Some(project_id));
-        assert_eq!(config.tracker.approvers.len(), 1);
+        assert!(config.ticketing.has_credentials());
+        assert!(config.ticketing.enabled);
+        assert_eq!(config.ticketing.project_id, Some(project_id));
+        assert_eq!(config.ticketing.approvers.len(), 1);
         assert_eq!(
             config.orchestrator.project_defaults[&project_id.to_string()]
-                .tracker
+                .ticketing
                 .project_key
                 .as_deref(),
             Some("EXT")
         );
 
-        // Once saved with a `tracker` key, that key is what counts.
+        // Once saved with a `ticketing` key, that key is what counts.
         let resaved = Config::from(serde_json::to_string(&config).unwrap());
-        assert_eq!(resaved.tracker, config.tracker);
+        assert_eq!(resaved.ticketing, config.ticketing);
+    }
+
+    /// A config saved while the section was called `tracker` (and a board's
+    /// override with it) loads into `ticketing`, and is saved under the new
+    /// name from then on.
+    #[test]
+    fn the_tracker_section_is_read_as_ticketing_and_saved_under_the_new_name() {
+        let project_id = Uuid::new_v4();
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        let map = raw.as_object_mut().unwrap();
+        map.remove("ticketing");
+        map.insert(
+            "tracker".to_string(),
+            serde_json::json!({
+                "kind": "jira",
+                "email": "bot@acme.test",
+                "api_token": "token",
+                "project_key": "OPS",
+                "enabled": true,
+                "project_id": project_id,
+            }),
+        );
+        map["orchestrator"]["project_defaults"] = serde_json::json!({
+            project_id.to_string(): { "tracker": { "jql_filter": "component = Ext" } }
+        });
+
+        let config = Config::from(raw.to_string());
+        assert_eq!(config.ticketing.mode, TicketingMode::Tickets);
+        assert_eq!(config.ticketing.kind, TrackerKind::Jira);
+        assert_eq!(config.ticketing.project_key(), "OPS");
+        assert!(config.ticketing.has_credentials());
+        assert_eq!(
+            config.orchestrator.project_defaults[&project_id.to_string()]
+                .ticketing
+                .jql_filter
+                .as_deref(),
+            Some("component = Ext")
+        );
+
+        let saved = serde_json::to_value(&config).unwrap();
+        assert!(saved.get("tracker").is_none());
+        assert_eq!(saved["ticketing"]["project_key"], "OPS");
+        assert_eq!(saved["ticketing"]["mode"], "tickets");
+        let board = &saved["orchestrator"]["project_defaults"][project_id.to_string()];
+        assert!(board.get("tracker").is_none());
+        assert_eq!(board["ticketing"]["jql_filter"], "component = Ext");
+        assert_eq!(
+            Config::from(saved.to_string()).ticketing,
+            config.ticketing,
+            "the saved shape reads back unchanged"
+        );
+    }
+
+    #[test]
+    fn incidents_mode_reads_pagerduty_and_defaults_unmapped_types_to_investigation() {
+        let raw = serde_json::json!({
+            "mode": "incidents",
+            "kind": "pagerduty",
+            "pagerduty_api_token": "pd-token",
+            "service_ids": " PSVC1, ,PSVC2 ",
+            "user_id": "PUSER1",
+            "incidents": { "resolve_on_triage": true },
+        });
+        let mut ticketing: TrackerConfig = serde_json::from_value(raw).unwrap();
+        assert_eq!(ticketing.kind, TrackerKind::PagerDuty);
+        assert_eq!(ticketing.mode_mismatch(), None);
+        assert!(ticketing.incidents.resolve_on_triage);
+        assert_eq!(ticketing.service_ids(), ["PSVC1", "PSVC2"]);
+        assert_eq!(
+            ticketing.default_pickup_filter(),
+            "status:triggered,acknowledged"
+        );
+        // Incidents are investigated unless the type mapping says otherwise.
+        assert_eq!(
+            ticketing.work_class_for("Incident"),
+            WorkClass::Investigation
+        );
+        ticketing
+            .type_mapping
+            .insert("Incident".to_string(), WorkClass::Bug);
+        assert_eq!(ticketing.work_class_for("incident"), WorkClass::Bug);
+        // Tickets mode keeps stories as the fallback.
+        assert_eq!(
+            TrackerConfig::default().work_class_for("Incident"),
+            WorkClass::Story
+        );
+
+        ticketing.mode = TicketingMode::Tickets;
+        assert!(
+            ticketing
+                .mode_mismatch()
+                .is_some_and(|why| why.contains("PagerDuty"))
+        );
+        assert_eq!(
+            TrackerKind::parse("pagerduty"),
+            Some(TrackerKind::PagerDuty)
+        );
+        assert_eq!(
+            serde_json::to_value(TrackerKind::GithubIssues).unwrap(),
+            "github_issues"
+        );
     }
 
     #[test]

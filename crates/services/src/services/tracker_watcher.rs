@@ -1,25 +1,31 @@
-//! Jira watcher: polls Jira for newly created high-priority bugs and
-//! imports them straight into the **Plan** column, assigned to the current
-//! user, so the stage orchestrator fires the RCA playbook on its next tick.
+//! Tracker watcher: polls the configured tracker for newly created
+//! high-priority tickets (or, in incidents mode, open incidents) and imports
+//! them straight into the **Plan** column, assigned to the current user, so
+//! the stage orchestrator fires the planning playbook on its next tick.
 //!
-//! Designed for the always-on teammate runner (see
-//! docs/plans/hosting-and-teammate-plan.md, Phase T1). Polling was chosen
-//! over webhooks: Jira Cloud cannot POST into a VPN, and a 30-60s trigger
+//! Tracker-agnostic: every question it asks is a [`Query`] the provider turns
+//! into its own language (JQL for Jira, label terms for GitHub Issues,
+//! incident filters for PagerDuty), and a provider without the notion — an
+//! incident does not reopen — answers with nothing.
+//!
+//! Designed for the always-on teammate runner. Polling was chosen over
+//! webhooks: a hosted tracker cannot POST into a VPN, and a 30-60s trigger
 //! latency is noise against a 10-30 minute RCA.
 //!
 //! Several boards can be watched at once (see `Config::watch_targets`), each
-//! with its own JQL — boards sharing a Jira project separate by component,
-//! label or module — and each importing into its own kanban project.
+//! with its own filter — boards sharing a tracker project separate by
+//! component, label or module — and each importing into its own kanban
+//! project.
 //!
-//! Dedup is two-layered: a per-board high-water mark on Jira's `created`
-//! timestamp (survives restarts), plus the jira-key dedup against issues
+//! Dedup is two-layered: a per-board high-water mark on the ticket's
+//! `created` timestamp (survives restarts), plus the key dedup against issues
 //! already imported into that board.
 //!
-//! The reopen sweep (`reopened_tick`) watches for tickets whose Jira status
-//! went back to the To Do category: a board card parked in a terminal column
-//! comes back to To Do (or straight to Plan when the ticket is assigned to the
-//! agent's Jira account), with the stale claim marker stripped so automation
-//! can fire again. The To Do category is the whole test — a ticket moving
+//! The reopen sweep (`reopened_tick`) watches for tickets whose status went
+//! back to the To Do category: a board card parked in a terminal column comes
+//! back to To Do (or straight to Plan when the ticket is assigned to the
+//! agent's tracker account), with the stale claim marker stripped so
+//! automation can fire again. The To Do category is the whole test — a ticket moving
 //! forward through working statuses (In Progress → Merged) is not a reopen,
 //! however finished its card looks. Cards mid-pipeline are left alone, as are
 //! cards with a session still running (the claim marker this strips is what
@@ -33,7 +39,7 @@
 //! the agent working the ticket.
 //!
 //! Assigned pickup is a sibling poll (`assigned_tick`): tickets assigned to
-//! the orchestrator's own Jira account start automatically, whatever their
+//! the orchestrator's own tracker account start automatically, whatever their
 //! priority — assignment is explicit human intent. It watermarks on
 //! `updated`, because assigning bumps `updated` and never `created`, so it
 //! cannot ride the main poll. Tickets already on the board that are still
@@ -45,7 +51,7 @@
 //! to the agent, so "assigned to the agent" and "in a working status" are the
 //! resting state of everything the agent has ever shipped and neither can carry
 //! a human's intent (see `assigned_action`). A post-merge follow-up therefore
-//! needs the Jira status moved back to To Do as well; when only half that
+//! needs the tracker status moved back to To Do as well; when only half that
 //! gesture arrives, `stuck_followup_hint` says which half is missing rather
 //! than leaving the ticket silently parked.
 
@@ -71,7 +77,7 @@ use crate::services::{
     daily,
     remote_client::RemoteClient,
     reopen,
-    tracker::{self, FetchedIssue, Tracker, TrackerSource},
+    tracker::{self, FetchedIssue, Query, Tracker, TrackerSource},
 };
 
 /// The tracker and its settings as one pass of the watcher reads them.
@@ -83,12 +89,16 @@ struct Tracking {
 /// Only issues created within this window are considered, regardless of the
 /// high-water mark — a long-stopped watcher must not import week-old bugs
 /// nobody expects to be picked up automatically.
-const LOOKBACK: &str = "-24h";
+fn lookback() -> chrono::Duration {
+    chrono::Duration::hours(24)
+}
 
-/// Window for the reopen sweep. Wider than [`LOOKBACK`]: a reopen over a
+/// Window for the reopen sweep. Wider than [`lookback`]: a reopen over a
 /// weekend should still be caught on Monday, and the sweep is idempotent
 /// (an already-restored card is skipped), so a wide window costs nothing.
-const REOPEN_LOOKBACK: &str = "-3d";
+fn reopen_lookback() -> chrono::Duration {
+    chrono::Duration::days(3)
+}
 
 /// Persisted watcher state (config asset dir, survives restarts).
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -103,7 +113,7 @@ struct WatcherState {
     /// suppress an older ticket another board hasn't seen.
     #[serde(default)]
     boards: BTreeMap<String, DateTime<FixedOffset>>,
-    /// Assigned-pickup marks, on Jira's `updated` timestamp (see module
+    /// Assigned-pickup marks, on the ticket's `updated` timestamp (see module
     /// docs). Separate from `boards`: the two polls advance independently.
     #[serde(default)]
     assigned: BTreeMap<String, DateTime<FixedOffset>>,
@@ -179,11 +189,18 @@ impl WatcherState {
 }
 
 fn state_path() -> PathBuf {
+    utils::assets::asset_dir().join("tracker_watcher_state.json")
+}
+
+/// The name older installs keep the marks under; read while the current
+/// file does not exist yet, so an upgrade keeps them.
+fn legacy_state_path() -> PathBuf {
     utils::assets::asset_dir().join("jira_watcher_state.json")
 }
 
 fn load_state() -> WatcherState {
     std::fs::read_to_string(state_path())
+        .or_else(|_| std::fs::read_to_string(legacy_state_path()))
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default()
@@ -193,7 +210,7 @@ fn save_state(state: &WatcherState) {
     if let Ok(raw) = serde_json::to_string_pretty(state)
         && let Err(error) = std::fs::write(state_path(), raw)
     {
-        warn!(?error, "jira watcher: failed to persist state");
+        warn!(?error, "tracker watcher: failed to persist state");
     }
 }
 
@@ -380,7 +397,7 @@ fn watcher_idle_reason(
 ) -> Option<String> {
     if !tracker.is_configured() {
         Some(format!(
-            "{} is not configured (Settings > Tracker); cards are made on the board",
+            "{} is not configured (Settings > Ticketing); cards are made on the board",
             tracker.kind()
         ))
     } else if no_board_enabled {
@@ -392,8 +409,8 @@ fn watcher_idle_reason(
     }
 }
 
-/// Jira keys already recorded in `extension_metadata` across the project's
-/// issues (same dedup the importer route uses). `None` when the search
+/// Tracker keys already recorded in `extension_metadata` across the
+/// project's issues (same dedup the importer route uses). `None` when the search
 /// failed part-way: a partial answer here is what turns one hiccup into a
 /// duplicate import, so callers skip the cycle instead.
 async fn existing_jira_keys(client: &RemoteClient, project_id: Uuid) -> Option<HashSet<String>> {
@@ -434,7 +451,7 @@ pub(crate) async fn existing_issues_by_key(
         {
             Ok(response) => response,
             Err(error) => {
-                warn!(?error, "jira watcher: issue search failed during dedup");
+                warn!(?error, "tracker watcher: issue search failed during dedup");
                 return None;
             }
         };
@@ -465,10 +482,10 @@ fn first_time(kind: &str, key: &str) -> bool {
 }
 
 /// Records, for the morning digest, that a ticket assigned to the agent will
-/// never start: its card has finished and the Jira status is still a working
-/// one, so nothing picks it up.
+/// never start: its card has finished and the tracker status is still a
+/// working one, so nothing picks it up.
 ///
-/// Recorded only when a human spoke last on the thread. The trigger is a Jira
+/// Recorded only when a human spoke last on the thread. The trigger is an
 /// `updated` bump, and the triage agent's own answers bump it too — reporting
 /// "nothing will start" right after the agent answered a "thanks" would train
 /// people to ignore the line. Once per ticket per process for the same reason,
@@ -485,7 +502,7 @@ async fn stuck_followup_hint(tracking: &Tracking, issue: &FetchedIssue, agent_id
         // Unread thread: say it rather than swallow it. A missing hint is the
         // failure this exists to prevent.
         Err(error) => {
-            debug!(?error, "jira watcher: hint could not read {}", issue.key);
+            debug!(?error, "tracker watcher: hint could not read {}", issue.key);
             true
         }
     };
@@ -493,21 +510,21 @@ async fn stuck_followup_hint(tracking: &Tracking, issue: &FetchedIssue, agent_id
         return;
     }
     info!(
-        "Jira watcher: {} is assigned to the agent and its card has finished, but the ticket is \
-         still in a working status — move it to To Do to restart it",
+        "Tracker watcher: {} is assigned to the agent and its card has finished, but the ticket \
+         is still in a working status — move it to To Do to restart it",
         issue.key
     );
     daily::update(|state| state.record_stuck_hint(&issue.key, &issue.summary));
 }
 
-/// Service that watches Jira for new high-priority bugs (see module docs).
-pub struct JiraWatcherService {
+/// Service that watches the tracker for new work (see module docs).
+pub struct TrackerWatcherService {
     config: Arc<RwLock<Config>>,
     remote_client: Option<RemoteClient>,
     tracker: TrackerSource,
 }
 
-impl JiraWatcherService {
+impl TrackerWatcherService {
     pub async fn spawn(
         config: Arc<RwLock<Config>>,
         remote_client: Option<RemoteClient>,
@@ -524,7 +541,7 @@ impl JiraWatcherService {
     }
 
     async fn start(&self) {
-        info!("Starting jira watcher service");
+        info!("Starting tracker watcher service");
         let mut state = load_state();
         // Idle reasons are logged once per state change, not every tick.
         let mut last_idle_reason: Option<String> = Some("(startup)".to_string());
@@ -535,7 +552,7 @@ impl JiraWatcherService {
             // the morning digest carries, or bookkeeping, which is a log line.
             let (targets, settings, poll_secs) = {
                 let config = self.config.read().await;
-                // First board per Jira project is "primary": boards sharing a
+                // First board per tracker project is "primary": boards sharing a
                 // project would otherwise each announce the same retired
                 // reopen (they cannot tell whose card it was).
                 let mut seen_projects: HashSet<String> = HashSet::new();
@@ -547,7 +564,11 @@ impl JiraWatcherService {
                         (target, primary)
                     })
                     .collect();
-                (targets, config.tracker.clone(), config.tracker.poll_secs)
+                (
+                    targets,
+                    config.ticketing.clone(),
+                    config.ticketing.poll_secs,
+                )
             };
             let tracking = Tracking {
                 tracker: self.tracker.current().await,
@@ -563,14 +584,14 @@ impl JiraWatcherService {
             match idle_reason {
                 Some(reason) => {
                     if last_idle_reason.as_deref() != Some(reason.as_str()) {
-                        info!("Jira watcher idle: {reason}");
+                        info!("Tracker watcher idle: {reason}");
                         last_idle_reason = Some(reason);
                     }
                 }
                 None => {
                     if last_idle_reason.take().is_some() {
                         info!(
-                            "Jira watcher active: polling {} board(s) every {}s",
+                            "Tracker watcher active: polling {} board(s) every {}s",
                             targets.len(),
                             poll_secs.max(1)
                         );
@@ -580,10 +601,10 @@ impl JiraWatcherService {
                         for (target, _) in &targets {
                             debug!(
                                 project_id = %target.project_id,
-                                jira_project = %target.jira_project_key,
-                                jql = %target.jql,
-                                assigned_jql = ?target.assigned_jql,
-                                "Jira watcher board"
+                                tracker_project = %target.jira_project_key,
+                                filter = %target.jql,
+                                assigned_filter = ?target.assigned_jql,
+                                "Tracker watcher board"
                             );
                         }
                     }
@@ -595,7 +616,8 @@ impl JiraWatcherService {
                             // advances it, and pickup can do that in the same
                             // pass. The other order advances pickup's mark past
                             // the ticket first, and moving a card does not bump
-                            // Jira's `updated`, so nothing would ever advance it.
+                            // the ticket's `updated`, so nothing would ever
+                            // advance it.
                             self.reopened_tick(client, target, &tracking, &mut state)
                                 .await;
                             self.assigned_tick(client, target, &tracking, &mut state)
@@ -619,15 +641,15 @@ impl JiraWatcherService {
         state: &mut WatcherState,
     ) {
         let project_id = target.project_id;
-        let jql = format!(
-            "({}) AND created >= {LOOKBACK} ORDER BY created ASC",
-            target.jql
-        );
+        let query = Query::Created {
+            filter: &target.jql,
+            within: lookback(),
+        };
 
-        let fetched = match tracking.tracker.search(&jql).await {
+        let fetched = match tracking.tracker.find(query).await {
             Ok(fetched) => fetched,
             Err(error) => {
-                warn!(?error, "jira watcher: search failed");
+                warn!(?error, "tracker watcher: search failed");
                 return;
             }
         };
@@ -665,7 +687,7 @@ impl JiraWatcherService {
         let statuses = match client.list_project_statuses(project_id).await {
             Ok(response) => response.project_statuses,
             Err(error) => {
-                warn!(?error, "jira watcher: could not list project statuses");
+                warn!(?error, "tracker watcher: could not list project statuses");
                 return;
             }
         };
@@ -673,7 +695,7 @@ impl JiraWatcherService {
             let name = status.name.trim();
             name.eq_ignore_ascii_case("plan") || name.eq_ignore_ascii_case("planning")
         }) else {
-            warn!("jira watcher: project {project_id} has no Plan column; skipping tick");
+            warn!("tracker watcher: project {project_id} has no Plan column; skipping tick");
             return;
         };
 
@@ -716,7 +738,7 @@ impl JiraWatcherService {
             }
 
             info!(
-                "Jira watcher: imported {} ({}) into Plan",
+                "Tracker watcher: imported {} ({}) into Plan",
                 issue.key,
                 issue.priority_name.as_deref().unwrap_or("?")
             );
@@ -724,11 +746,13 @@ impl JiraWatcherService {
         }
     }
 
-    /// Imports one Jira issue into the Plan column: metadata, comment thread,
-    /// create, self-assign, work-class tag. Logging of the outcome and any
-    /// notification stay with the caller — the two polls announce differently.
-    /// `Err` means the create itself failed (already logged); assignee/tag
-    /// failures only warn, matching the importer route.
+    /// Imports one ticket into the Plan column: metadata, comment thread,
+    /// create, self-assign, work-class and area tags. An incident tool's
+    /// ticket also records the incident as the card's origin. Logging of the
+    /// outcome and any notification stay with the caller — the two polls
+    /// announce differently. `Err` means the create itself failed (already
+    /// logged); assignee/tag failures only warn, matching the importer
+    /// route.
     #[allow(clippy::too_many_arguments)]
     async fn import_one(
         &self,
@@ -756,6 +780,7 @@ impl JiraWatcherService {
                 url: Some(url.clone()),
             }),
             epic_key,
+            origin: tracker::origin_for(tracking.tracker.kind(), &url),
             ..Default::default()
         };
 
@@ -769,10 +794,14 @@ impl JiraWatcherService {
             .await
             .unwrap_or_default();
         let comments_block = tracker::format_comments(&comments);
+        let kind = tracking.tracker.kind();
         let description = if issue.description_text.is_empty() {
-            format!("Jira: {url}{comments_block}")
+            format!("{kind}: {url}{comments_block}")
         } else {
-            format!("{}\n\nJira: {url}{comments_block}", issue.description_text)
+            format!(
+                "{}\n\n{kind}: {url}{comments_block}",
+                issue.description_text
+            )
         };
 
         let created = match client
@@ -796,7 +825,7 @@ impl JiraWatcherService {
         {
             Ok(created) => created,
             Err(error) => {
-                warn!(?error, "jira watcher: failed to import {}", issue.key);
+                warn!(?error, "tracker watcher: failed to import {}", issue.key);
                 return Err(());
             }
         };
@@ -810,30 +839,33 @@ impl JiraWatcherService {
                 })
                 .await
         {
-            warn!(?error, "jira watcher: failed to assign {}", issue.key);
+            warn!(?error, "tracker watcher: failed to assign {}", issue.key);
         }
 
-        // Best-effort work-class tag, find-or-skip like the importer.
-        let tag_name = work_class.as_str();
-        if let Some(tag) = project_tags
-            .iter()
-            .find(|tag| tag.name.eq_ignore_ascii_case(tag_name))
-            && let Err(error) = client
-                .create_issue_tag(&CreateIssueTagRequest {
-                    id: None,
-                    issue_id: created.data.id,
-                    tag_id: tag.id,
-                })
-                .await
-        {
-            warn!(?error, "jira watcher: failed to tag {}", issue.key);
+        // Best-effort work-class and area tags, find-or-skip like the
+        // importer: the board's tags are its owner's to create.
+        let tag_names = std::iter::once(work_class.as_str()).chain(issue.area.as_deref());
+        for tag_name in tag_names {
+            if let Some(tag) = project_tags
+                .iter()
+                .find(|tag| tag.name.eq_ignore_ascii_case(tag_name))
+                && let Err(error) = client
+                    .create_issue_tag(&CreateIssueTagRequest {
+                        id: None,
+                        issue_id: created.data.id,
+                        tag_id: tag.id,
+                    })
+                    .await
+            {
+                warn!(?error, "tracker watcher: failed to tag {}", issue.key);
+            }
         }
 
         Ok(created.data.id)
     }
 
-    /// Assigned pickup: tickets assigned to the orchestrator's Jira account
-    /// (the board's `assigned_jql`) are started — imported into Plan when new
+    /// Assigned pickup: tickets assigned to the orchestrator's tracker
+    /// account (the board's assigned filter) are started — imported into Plan when new
     /// to the board, advanced To Do → Plan when already imported. See module
     /// docs for why this polls `updated` with its own watermark.
     async fn assigned_tick(
@@ -847,12 +879,15 @@ impl JiraWatcherService {
             return;
         };
         let project_id = target.project_id;
-        let jql = format!("({assigned_jql}) AND updated >= {LOOKBACK} ORDER BY updated ASC");
+        let query = Query::Updated {
+            filter: assigned_jql,
+            within: lookback(),
+        };
 
-        let fetched = match tracking.tracker.search(&jql).await {
+        let fetched = match tracking.tracker.find(query).await {
             Ok(fetched) => fetched,
             Err(error) => {
-                warn!(?error, "jira watcher: assigned search failed");
+                warn!(?error, "tracker watcher: assigned search failed");
                 return;
             }
         };
@@ -881,7 +916,7 @@ impl JiraWatcherService {
         let statuses = match client.list_project_statuses(project_id).await {
             Ok(response) => response.project_statuses,
             Err(error) => {
-                warn!(?error, "jira watcher: could not list project statuses");
+                warn!(?error, "tracker watcher: could not list project statuses");
                 return;
             }
         };
@@ -889,7 +924,9 @@ impl JiraWatcherService {
             let name = status.name.trim();
             name.eq_ignore_ascii_case("plan") || name.eq_ignore_ascii_case("planning")
         }) else {
-            warn!("jira watcher: project {project_id} has no Plan column; skipping assigned tick");
+            warn!(
+                "tracker watcher: project {project_id} has no Plan column; skipping assigned tick"
+            );
             return;
         };
 
@@ -949,7 +986,7 @@ impl JiraWatcherService {
                     stuck_followup_hint(tracking, &issue, agent_id.as_deref()).await;
                 } else {
                     debug!(
-                        "jira watcher: {} assigned, no action ({:?}, column {:?}, takeover {})",
+                        "tracker watcher: {} assigned, no action ({:?}, column {:?}, takeover {})",
                         issue.key, action, column, taken_over
                     );
                 }
@@ -970,14 +1007,14 @@ impl JiraWatcherService {
                     {
                         Ok(_) => {
                             info!(
-                                "Jira watcher: {} assigned to the agent — moved to Plan",
+                                "Tracker watcher: {} assigned to the agent — moved to Plan",
                                 issue.key
                             );
                             advance_mark(state);
                         }
                         Err(error) => {
                             // No mark advance: the next tick retries the move.
-                            warn!(?error, "jira watcher: failed to advance {}", issue.key);
+                            warn!(?error, "tracker watcher: failed to advance {}", issue.key);
                             return;
                         }
                     }
@@ -999,7 +1036,7 @@ impl JiraWatcherService {
                         return;
                     }
                     info!(
-                        "Jira watcher: {} assigned to the agent — imported into Plan",
+                        "Tracker watcher: {} assigned to the agent — imported into Plan",
                         issue.key
                     );
                     advance_mark(state);
@@ -1008,7 +1045,7 @@ impl JiraWatcherService {
         }
     }
 
-    /// Reopen sweep: tickets whose Jira status left the done category come
+    /// Reopen sweep: tickets whose status left the done category come
     /// back onto the board (see module docs). Restores are one PATCH: the
     /// new column plus extension metadata with the stale claim marker
     /// removed — the move is backward, so the route would keep the claim and
@@ -1021,21 +1058,19 @@ impl JiraWatcherService {
         state: &mut WatcherState,
     ) {
         let project_id = target.project_id;
-        // `statusCategory = "To Do"`, not `!= Done`: a reopen puts the ticket
-        // back at the start, while `!= Done` also matches every forward move
-        // between working statuses. A ticket going In Progress → Merged reads
-        // as "not done and just changed", and with its card already parked in a
-        // terminal column that was enough to drag merged work back to Plan.
-        let jql = format!(
-            "project = {} AND statusCategory = \"To Do\" AND status CHANGED AFTER \
-             {REOPEN_LOOKBACK} ORDER BY updated ASC",
-            target.jira_project_key
-        );
+        // Back at the start, not merely "not done": a ticket going In
+        // Progress → Merged reads as "not done and just changed", and with its
+        // card already parked in a terminal column that was enough to drag
+        // merged work back to Plan. Each provider asks for the start.
+        let query = Query::Reopened {
+            project: &target.jira_project_key,
+            within: reopen_lookback(),
+        };
 
-        let fetched = match tracking.tracker.search(&jql).await {
+        let fetched = match tracking.tracker.find(query).await {
             Ok(fetched) => fetched,
             Err(error) => {
-                warn!(?error, "jira watcher: reopen search failed");
+                warn!(?error, "tracker watcher: reopen search failed");
                 return;
             }
         };
@@ -1047,7 +1082,7 @@ impl JiraWatcherService {
                 (Some(updated), Some(mark)) => updated > mark,
                 _ => true,
             })
-            // Same guard as the JQL, enforced on the response: the filter is
+            // Same guard as the query, enforced on the response: the filter is
             // the difference between restarting a reopened ticket and
             // restarting one that merely moved forward, and it must not depend
             // on a query string alone.
@@ -1065,7 +1100,7 @@ impl JiraWatcherService {
         let statuses = match client.list_project_statuses(project_id).await {
             Ok(response) => response.project_statuses,
             Err(error) => {
-                warn!(?error, "jira watcher: could not list project statuses");
+                warn!(?error, "tracker watcher: could not list project statuses");
                 return;
             }
         };
@@ -1073,7 +1108,7 @@ impl JiraWatcherService {
         // Set to a deferred candidate's `updated`: the mark is one timestamp per
         // board, so advancing it for any ticket at or past that instant would
         // carry it over the deferred one and lose the reopen for good. Candidates
-        // arrive oldest-first, and Jira hands several tickets the same
+        // arrive oldest-first, and a tracker hands several tickets the same
         // millisecond on a bulk transition, so the bound has to be inclusive.
         // Held back, the next sweep re-sees the tail, which is harmless: the
         // recorded follow-up key is what stops a second filing for one report.
@@ -1090,14 +1125,14 @@ impl JiraWatcherService {
             };
 
             let Some(card) = existing.get(&issue.key) else {
-                // No card. This sweep's JQL matches every ticket in the Jira
+                // No card. This sweep matches every ticket in the tracker
                 // project whose status left the done category, and the vast
                 // majority were never imported at all — so "the card was
                 // retired" cannot be distinguished from "the agent never
                 // touched this" and announcing it was wrong far more often
                 // than it was right. Assigned pickup already covers the real
                 // case: assign the agent and the ticket is imported.
-                debug!("jira watcher: {} reopened, not on the board", issue.key);
+                debug!("tracker watcher: {} reopened, not on the board", issue.key);
                 advance_mark(state, hold_from);
                 continue;
             };
@@ -1115,7 +1150,7 @@ impl JiraWatcherService {
             let metadata = IssueExtMetadata::from_value(&card.extension_metadata);
             if metadata.human_takeover.is_some() {
                 debug!(
-                    "jira watcher: {} reopened but taken over — a human decides",
+                    "tracker watcher: {} reopened but taken over — a human decides",
                     issue.key
                 );
                 advance_mark(state, hold_from);
@@ -1143,7 +1178,7 @@ impl JiraWatcherService {
                 // there is no news here, only a mark to move past it.
                 Ok(reopen::Outcome::AlreadyOpen(followup)) => {
                     debug!(
-                        "jira watcher: {} already depends on the open follow-up {followup}",
+                        "tracker watcher: {} already depends on the open follow-up {followup}",
                         issue.key
                     );
                     advance_mark(state, hold_from);
@@ -1153,7 +1188,7 @@ impl JiraWatcherService {
                 // holds so the report is seen again once one is configured.
                 Ok(reopen::Outcome::NoTracker) => {
                     debug!(
-                        "jira watcher: no tracker is configured — no follow-up for {}",
+                        "tracker watcher: no tracker is configured — no follow-up for {}",
                         issue.key
                     );
                     hold_from = hold_from.or(issue.updated);
@@ -1168,7 +1203,10 @@ impl JiraWatcherService {
                         reopen::Outcome::AlreadyOpen(key) => (key.as_str(), "already on"),
                         reopen::Outcome::NoTracker => ("nothing", "no tracker for"),
                     };
-                    info!("Jira watcher: {} reopened — {verb} {followup}", issue.key);
+                    info!(
+                        "Tracker watcher: {} reopened — {verb} {followup}",
+                        issue.key
+                    );
                     advance_mark(state, hold_from);
                 }
                 Err(error) => {
@@ -1176,7 +1214,7 @@ impl JiraWatcherService {
                     // one unfileable ticket must not strand the ones behind it.
                     warn!(
                         ?error,
-                        "jira watcher: could not file a follow-up for {}", issue.key
+                        "tracker watcher: could not file a follow-up for {}", issue.key
                     );
                     hold_from = hold_from.or(issue.updated);
                 }
@@ -1192,7 +1230,7 @@ impl JiraWatcherService {
     ///
     /// Comment bodies are fetched per candidate, so the number of candidates
     /// per sweep is capped: a bulk edit must not turn one poll into hundreds
-    /// of Jira requests.
+    /// of tracker requests.
     async fn mentions_tick(
         &self,
         client: &RemoteClient,
@@ -1205,20 +1243,20 @@ impl JiraWatcherService {
         const MAX_CANDIDATES: usize = 25;
 
         if !primary {
-            // One board per Jira project owns the un-imported case; otherwise
+            // One board per tracker project owns the un-imported case; otherwise
             // boards sharing a project would each import the same ticket.
             return;
         }
         let project_id = target.project_id;
-        let jql = format!(
-            "project = {} AND updated >= {REOPEN_LOOKBACK} ORDER BY updated ASC",
-            target.jira_project_key
-        );
+        let query = Query::Active {
+            project: &target.jira_project_key,
+            within: reopen_lookback(),
+        };
 
-        let fetched = match tracking.tracker.search(&jql).await {
+        let fetched = match tracking.tracker.find(query).await {
             Ok(fetched) => fetched,
             Err(error) => {
-                warn!(?error, "jira watcher: mention search failed");
+                warn!(?error, "tracker watcher: mention search failed");
                 return;
             }
         };
@@ -1249,19 +1287,19 @@ impl JiraWatcherService {
         {
             Ok(id) => id,
             Err(error) => {
-                debug!(?error, "jira watcher: no Jira agent identity for mentions");
+                debug!(?error, "tracker watcher: no agent identity for mentions");
                 return;
             }
         };
         let statuses = match client.list_project_statuses(project_id).await {
             Ok(response) => response.project_statuses,
             Err(error) => {
-                warn!(?error, "jira watcher: could not list project statuses");
+                warn!(?error, "tracker watcher: could not list project statuses");
                 return;
             }
         };
         let Some(todo_status) = statuses.iter().find(|status| is_todo_status(&status.name)) else {
-            warn!("jira watcher: project {project_id} has no To Do column; skipping mentions");
+            warn!("tracker watcher: project {project_id} has no To Do column; skipping mentions");
             return;
         };
         let me = client.profile().await.ok().map(|profile| profile.user_id);
@@ -1285,7 +1323,7 @@ impl JiraWatcherService {
                 Err(error) => {
                     debug!(
                         ?error,
-                        "jira watcher: mention fetch for {} failed", issue.key
+                        "tracker watcher: mention fetch for {} failed", issue.key
                     );
                     continue;
                 }
@@ -1315,7 +1353,7 @@ impl JiraWatcherService {
                 return;
             }
             info!(
-                "Jira watcher: {} mentions the agent — imported into To Do",
+                "Tracker watcher: {} mentions the agent — imported into To Do",
                 issue.key
             );
             advance_mark(state);
@@ -1329,19 +1367,20 @@ mod tests {
 
     #[test]
     fn without_a_tracker_the_watcher_idles_whatever_the_boards_say() {
-        let unconfigured = tracker::build(&crate::services::config::TrackerConfig::default());
-        let reason = watcher_idle_reason(unconfigured.as_ref(), false, true)
-            .expect("no tracker, no polling");
+        let unconfigured =
+            tracker::build_provider(&crate::services::config::TrackerConfig::default());
+        let reason =
+            watcher_idle_reason(&unconfigured, false, true).expect("no tracker, no polling");
         assert!(reason.contains("not configured"), "{reason}");
 
-        let configured = tracker::build(&crate::services::config::TrackerConfig {
+        let configured = tracker::build_provider(&crate::services::config::TrackerConfig {
             email: Some("agent@example.com".to_string()),
             api_token: Some("token".to_string()),
             ..Default::default()
         });
-        assert_eq!(watcher_idle_reason(configured.as_ref(), false, true), None);
+        assert_eq!(watcher_idle_reason(&configured, false, true), None);
         assert!(
-            watcher_idle_reason(configured.as_ref(), true, true)
+            watcher_idle_reason(&configured, true, true)
                 .is_some_and(|reason| reason.contains("no board"))
         );
     }

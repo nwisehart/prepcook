@@ -370,7 +370,7 @@ fn integrations_describe(json: bool) -> i32 {
         for (area, providers) in &descriptors {
             println!("{area}");
             for provider in providers {
-                println!("  {:<10} {}", provider.kind, provider.summary);
+                println!("  {:<14} {}", provider.kind, provider.summary);
                 for field in &provider.fields {
                     let required = if field.required { " (required)" } else { "" };
                     println!("    {}{required}: {}", field.key, field.label);

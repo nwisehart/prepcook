@@ -207,6 +207,8 @@ fn generate_types_content() -> String {
         services::services::config::SendMessageShortcut::decl(),
         services::services::config::TrackerConfig::decl(),
         services::services::config::TrackerKind::decl(),
+        services::services::config::TicketingMode::decl(),
+        services::services::config::IncidentsConfig::decl(),
         services::services::config::StatusMapping::decl(),
         services::services::config::WorktreePoolConfig::decl(),
         services::services::config::OrchestratorConfig::decl(),

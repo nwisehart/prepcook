@@ -84,7 +84,7 @@ A plan is decided from a comment as well as from Lavish or the API
 
 - On the **ticket**, `RCA: APPROVED`, `RCA: CHANGES — <reasons>` or
   `REPLAN: <reasons>` as the first line, from someone listed under
-  **Settings → Tracker → Plan approvers**. Anyone else gets a reply saying the
+  **Settings → Ticketing → Plan approvers**. Anyone else gets a reply saying the
   comment was not acted on. Every decision is answered on the ticket.
 - On the **card**, `APPROVE`, `REQUEST CHANGES: <reasons>` or `REPLAN: <reasons>`
   as the first line, from a member of the board's organization who is not an

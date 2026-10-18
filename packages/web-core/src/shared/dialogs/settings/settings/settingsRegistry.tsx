@@ -26,7 +26,7 @@ import { OrganizationsSettingsSection } from './OrganizationsSettingsSection';
 import { RemoteProjectsSettingsSection } from './RemoteProjectsSettingsSection';
 import { AgentsSettingsSection } from './AgentsSettingsSection';
 import { McpSettingsSection } from './McpSettingsSection';
-import { TrackerSettingsSection } from './TrackerSettingsSection';
+import { TicketingSettingsSection } from './TicketingSettingsSection';
 import { PlaybooksSettingsSection } from './PlaybooksSettingsSection';
 import { WorktreePoolSettingsSection } from './WorktreePoolSettingsSection';
 import { OrchestratorSettingsSection } from './OrchestratorSettingsSection';
@@ -45,7 +45,7 @@ export type SettingsSectionType =
   | 'remote-projects'
   | 'agents'
   | 'mcp'
-  | 'tracker'
+  | 'ticketing'
   | 'playbooks'
   | 'orchestrator'
   | 'integrations'
@@ -70,7 +70,7 @@ export type SettingsSectionInitialState = {
     | undefined;
   agents: { executor?: string; variant?: string } | undefined;
   mcp: undefined;
-  tracker: undefined;
+  ticketing: undefined;
   playbooks: undefined;
   orchestrator: undefined;
   integrations: undefined;
@@ -93,7 +93,6 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'secrets', icon: KeyIcon, group: 'host' },
   { id: 'agents', icon: CpuIcon, group: 'host' },
   { id: 'mcp', icon: PlugIcon, group: 'host' },
-  { id: 'tracker', icon: TicketIcon, group: 'host' },
   { id: 'playbooks', icon: BookOpenIcon, group: 'host' },
   { id: 'orchestrator', icon: RobotIcon, group: 'host' },
   { id: 'integrations', icon: BinocularsIcon, group: 'host' },
@@ -101,6 +100,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'usage', icon: ChartBarIcon, group: 'host' },
   { id: 'connectors', icon: PlugsConnectedIcon, group: 'host' },
   { id: 'worktree-pool', icon: TreeIcon, group: 'host' },
+  { id: 'ticketing', icon: TicketIcon, group: 'integrations' },
   { id: 'notifications', icon: BellIcon, group: 'integrations' },
   { id: 'board', icon: KanbanIcon, group: 'universal' },
   { id: 'organizations', icon: UsersIcon, group: 'universal' },
@@ -148,8 +148,8 @@ export function renderSettingsSection(
       return <AgentsSettingsSection />;
     case 'mcp':
       return <McpSettingsSection />;
-    case 'tracker':
-      return <TrackerSettingsSection />;
+    case 'ticketing':
+      return <TicketingSettingsSection />;
     case 'playbooks':
       return <PlaybooksSettingsSection />;
     case 'orchestrator':

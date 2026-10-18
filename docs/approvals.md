@@ -44,7 +44,8 @@ one of the surfaces below (see [playbooks.md](playbooks.md#the-review-gate)).
 
 ### The tracker ticket
 
-A comment on the Jira ticket whose **first line** is one of:
+A comment on the tracker ticket — a Jira comment, a GitHub issue comment, a
+PagerDuty note — whose **first line** is one of:
 
 ```
 RCA: APPROVED
@@ -57,7 +58,7 @@ board, or any card when no tracker is configured, is decided in Lavish, on the
 card or through the API, which work the same with or without one.
 
 Case does not matter; reasons can continue on the lines below. Only the people
-ticked under **Settings → Tracker → Plan approvers** can decide this way, and
+ticked under **Settings → Ticketing → Plan approvers** can decide this way, and
 the orchestrator's own account never can. Anyone else gets a reply on the
 ticket saying the comment was not acted on. Prep Cook answers every decision on the
 ticket, so the person who made it sees what happened without opening the

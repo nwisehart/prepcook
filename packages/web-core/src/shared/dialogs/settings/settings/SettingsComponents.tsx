@@ -250,7 +250,8 @@ export function SettingsSelect<T extends string>({
   className,
 }: {
   value: T | undefined;
-  options: { value: T; label: string }[];
+  /** A disabled option is listed but cannot be chosen. */
+  options: { value: T; label: string; disabled?: boolean }[];
   actions?: { label: string; icon?: Icon; onClick: () => void }[];
   onChange: (value: T) => void;
   placeholder?: string;
@@ -272,6 +273,7 @@ export function SettingsSelect<T extends string>({
         {options.map((option) => (
           <DropdownMenuItem
             key={option.value}
+            disabled={option.disabled}
             onClick={() => onChange(option.value)}
           >
             {option.label}

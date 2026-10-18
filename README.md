@@ -166,10 +166,13 @@ mode, where the cards move themselves.
 
 ### 5. Then
 
-- **Connect a tracker.** **Settings → Tracker** (Jira today) imports tickets,
-  picks new ones up on its own, and lets approvers decide plans from the
-  ticket. Every setting is in [docs/configuration.md](docs/configuration.md),
-  and how Prep Cook behaves on a shared ticket in
+- **Connect a tracker.** **Settings → Integrations → Ticketing** (Jira or
+  GitHub Issues) imports tickets, picks new ones up on its own, and lets
+  approvers decide plans from the ticket. In incidents mode the source is
+  PagerDuty, and open incidents become investigations
+  ([docs/incidents.md](docs/incidents.md)). Every setting is in
+  [docs/configuration.md](docs/configuration.md), and how Prep Cook behaves on
+  a shared ticket in
   [docs/working-alongside-people.md](docs/working-alongside-people.md).
 - **Use the toolkit.** The same loop at your terminal, without the board:
   [toolkit/README.md](toolkit/README.md).

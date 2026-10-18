@@ -20,7 +20,6 @@ use services::services::{
     file::FileService,
     file_search::FileSearchCache,
     filesystem::FilesystemService,
-    jira_watcher::JiraWatcherService,
     lavish_relay::LavishRelayService,
     notifications::NotificationSource,
     pr_monitor::PrMonitorService,
@@ -31,6 +30,7 @@ use services::services::{
     seat_monitor::SeatMonitorService,
     stage_orchestrator::StageOrchestratorService,
     tracker::TrackerSource,
+    tracker_watcher::TrackerWatcherService,
 };
 use tokio::sync::{Notify, RwLock};
 use tokio_util::sync::CancellationToken;
@@ -302,7 +302,7 @@ impl Deployment for LocalDeployment {
         {
             let config = config.clone();
             let rc = remote_client.clone().ok();
-            JiraWatcherService::spawn(config, rc, tracker.clone()).await;
+            TrackerWatcherService::spawn(config, rc, tracker.clone()).await;
         }
         {
             // Claude subscription-seat health probe, when
