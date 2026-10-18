@@ -1,7 +1,8 @@
 //! Slack read access for investigating agents. Backs the `slack_read_thread`
 //! MCP tool: RCAs kept stalling with "couldn't pull the Slack thread" because
-//! agents had no authenticated path to it — this reuses the app's configured
-//! bot token (Settings › Orchestrator), no per-agent OAuth.
+//! agents had no authenticated path to it — this reuses the conversational
+//! notification target (a Slack target with a bot token and channel, Settings
+//! › Integrations › Notifications), no per-agent OAuth.
 
 use axum::{
     Router,
@@ -11,6 +12,7 @@ use axum::{
 };
 use deployment::Deployment;
 use serde::{Deserialize, Serialize};
+use services::services::notifications::{NotificationSource, ThreadRef};
 use utils::response::ApiResponse;
 
 use crate::DeploymentImpl;
@@ -36,44 +38,42 @@ async fn get_slack_thread(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<SlackThreadQuery>,
 ) -> ResponseJson<ApiResponse<Vec<SlackThreadMessage>>> {
-    let (bot_token, default_channel) = {
-        let config = deployment.config().read().await;
-        (config.slack_bot_token.clone(), config.slack_channel.clone())
-    };
-    let Some(bot_token) = bot_token
-        .as_deref()
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-    else {
-        return ResponseJson(ApiResponse::error(
-            "Slack bot token is not configured (Settings > Orchestrator)",
-        ));
-    };
+    let notifications = NotificationSource::new(deployment.config().clone());
     let Some(channel) = query
         .channel
         .as_deref()
         .map(str::trim)
         .filter(|c| !c.is_empty())
         .map(str::to_string)
-        .or(default_channel)
+        .or(notifications.conversation_channel(None).await)
     else {
         return ResponseJson(ApiResponse::error(
-            "No channel given and no default Slack channel configured",
+            "No channel given and no Slack bot target configured \
+             (Settings > Integrations > Notifications)",
         ));
     };
-
-    let replies =
-        services::services::slack::thread_replies(bot_token, &channel, &query.thread_ts).await;
-    if replies.is_empty() {
-        return ResponseJson(ApiResponse::error(
-            "No messages found (bad channel/ts, missing scopes, or the bot is not in the channel)",
-        ));
-    }
+    let thread = ThreadRef {
+        channel,
+        ts: query.thread_ts,
+    };
+    let replies = match notifications.replies(None, &thread, None).await {
+        None => {
+            return ResponseJson(ApiResponse::error(
+                "No Slack bot target is configured (Settings > Integrations > Notifications)",
+            ));
+        }
+        Some(Ok(replies)) if !replies.is_empty() => replies,
+        Some(Ok(_)) | Some(Err(_)) => {
+            return ResponseJson(ApiResponse::error(
+                "No messages found (bad channel/ts, missing scopes, or the bot is not in the channel)",
+            ));
+        }
+    };
     ResponseJson(ApiResponse::success(
         replies
             .into_iter()
             .map(|reply| SlackThreadMessage {
-                ts: reply.ts,
+                ts: reply.id,
                 text: reply.text,
                 is_bot: reply.is_bot,
                 user: reply.user,

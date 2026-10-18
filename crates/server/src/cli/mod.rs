@@ -1,6 +1,7 @@
 //! Command-line parsing for the `prepcook` binary. With no command it starts the
 //! server; `up`, `down` and `status` manage the board stack in Docker
-//! ([`up`]); `secret` manages the secrets store.
+//! ([`up`]); `secret` manages the secrets store; `integrations` describes the
+//! integration providers.
 
 pub mod up;
 
@@ -20,6 +21,8 @@ commands:
   status         say whether the board answers, which port the server is on
                  and whether the board accepts this machine's board secret
   secret         manage the secrets store (prepcook secret, for its usage)
+  integrations describe [--json]
+                 list every integration provider and its settings
   help           print this message";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +32,10 @@ pub enum Command {
     Down(DownOptions),
     Status,
     Secret(Vec<String>),
+    /// `integrations describe`; `true` prints JSON.
+    IntegrationsDescribe {
+        json: bool,
+    },
     Help,
 }
 
@@ -54,6 +61,11 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
     };
     match command.as_str() {
         "secret" => Ok(Command::Secret(rest.to_vec())),
+        "integrations" => match rest.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+            ["describe"] => Ok(Command::IntegrationsDescribe { json: false }),
+            ["describe", "--json"] => Ok(Command::IntegrationsDescribe { json: true }),
+            _ => Err("usage: prepcook integrations describe [--json]".to_string()),
+        },
         "help" | "--help" | "-h" => Ok(Command::Help),
         "status" => match rest.first() {
             None => Ok(Command::Status),
@@ -126,6 +138,20 @@ mod tests {
             parse_strs(&["secret", "set", "X"]),
             Ok(Command::Secret(vec!["set".into(), "X".into()]))
         );
+    }
+
+    #[test]
+    fn integrations_describe_takes_an_optional_json_flag() {
+        assert_eq!(
+            parse_strs(&["integrations", "describe"]),
+            Ok(Command::IntegrationsDescribe { json: false })
+        );
+        assert_eq!(
+            parse_strs(&["integrations", "describe", "--json"]),
+            Ok(Command::IntegrationsDescribe { json: true })
+        );
+        assert!(parse_strs(&["integrations"]).is_err());
+        assert!(parse_strs(&["integrations", "describe", "--yaml"]).is_err());
     }
 
     #[test]

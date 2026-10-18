@@ -21,6 +21,7 @@ use services::services::{
     filesystem::FilesystemService,
     jira_watcher::JiraWatcherService,
     lavish_relay::LavishRelayService,
+    notifications::NotificationSource,
     pr_monitor::PrMonitorService,
     queued_message::QueuedMessageService,
     remote_client::RemoteClient,
@@ -269,6 +270,7 @@ impl Deployment for LocalDeployment {
             PrMonitorService::spawn(db, analytics, container, rc, pr_sync_notify.clone()).await;
         }
         let tracker = TrackerSource::new(config.clone());
+        let notifications = NotificationSource::new(config.clone());
         let decisions = {
             let config = config.clone();
             let db = db.clone();
@@ -282,6 +284,7 @@ impl Deployment for LocalDeployment {
                 workspace_manager,
                 rc,
                 tracker.clone(),
+                notifications.clone(),
             )
             .await;
             Decisions::new(orchestrator)
@@ -298,10 +301,10 @@ impl Deployment for LocalDeployment {
         }
         {
             // Claude subscription-seat health probe, when
-            // `orchestrator.seat_monitor` is on: alerts to Slack and raises a
-            // UI banner when the seat's OAuth login expires.
+            // `orchestrator.seat_monitor` is on: notifies and raises a UI
+            // banner when the seat's OAuth login expires.
             let config = config.clone();
-            SeatMonitorService::spawn(config).await;
+            SeatMonitorService::spawn(config, notifications).await;
         }
 
         let deployment = Self {

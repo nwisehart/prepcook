@@ -27,14 +27,11 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.deployed_retention_days` | unset (off) | **Auto clean-up after**: days a card may sit in Close before it moves to Clean up. |
 | `orchestrator.cleanup_retention_days` | unset (keep) | **Delete after**: days a card may sit in Clean up before it is deleted. Cards with a pinned workspace or a takeover are kept. |
 | `orchestrator.workspace_retention_days` | `30` | **Workspace retention**: days after clean-up before a workspace's records, sessions and logs are deleted. Unset keeps them. |
-| `orchestrator.digest_at_local` | unset (off) | *File only.* Local `HH:MM` at which the engineers' digest is posted to each board's Slack route. |
+| `orchestrator.digest_at_local` | unset (off) | *File only.* Local `HH:MM` at which the engineers' digest is sent to each board's [notification targets](#notifications). |
 | `orchestrator.eob_at_local` | unset (off) | *File only.* Local `HH:MM` at which each in-flight ticket gets its daily update on the tracker ([working-alongside-people.md](working-alongside-people.md#the-daily-update)). |
 | `orchestrator.daily_timezone` | unset (`America/Los_Angeles`) | *File only.* IANA zone the two times above are read in. |
 | `orchestrator.project_defaults` | empty | **Automated projects**: the boards the orchestrator scans, keyed by board id, each with its repositories and overrides. A board needs at least one repository. |
-| `orchestrator.seat_monitor` | `false` | *File only.* Probe the Claude subscription seat with a headless `claude -p` every six hours and post to Slack when its login has expired, for a shared runner. Off, Prep Cook never runs `claude` on its own; **Settings → Claude → Re-check now** still probes on demand. |
-| `slack_webhook_url` | unset (off) | **Slack notifications → Incoming webhook URL**: escalations, review-loop caps, repeated launch failures. |
-| `slack_bot_token` | unset | **Bot token**: with a channel, escalations post through the Slack API and replies in the thread reach the blocked agent. |
-| `slack_channel` | unset | **Channel ID** the bot posts to. |
+| `orchestrator.seat_monitor` | `false` | *File only.* Probe the Claude subscription seat with a headless `claude -p` every six hours and notify the global [notification targets](#notifications) when its login has expired, for a shared runner. Off, Prep Cook never runs `claude` on its own; **Settings → Claude → Re-check now** still probes on demand. |
 | `executor_profile` | Claude Code, default variant | **Settings → General → Default Coding Agent**: the agent every stage runs. |
 
 ## Tracker
@@ -60,7 +57,7 @@ written to a ticket ([method.md](method.md#without-a-tracker)).
 | `tracker.status_mapping.planning` | unset (`In Progress`) | **Stage statuses**: where a ticket moves when Plan starts. Plan also assigns the ticket to the agent. |
 | `tracker.status_mapping.executing`, `.reviewing`, `.pushed_mr`, `.done` | unset (no move) | Where a ticket moves when that stage starts; `done` is Clean up. |
 | `tracker.status_mapping.shipped` | `Merged`, `Deployed to Production`, `Done` | **Shipped statuses**: names that mean the work shipped, for reopen detection and the clean-up sweeps. |
-| `tracker.blocker_priorities` | `P0`, `P1` | **Blocker priorities**: their merge requests are labelled `Blocker` and announced on Slack. |
+| `tracker.blocker_priorities` | `P0`, `P1` | **Blocker priorities**: their merge requests are labelled `Blocker` and announced to the notification targets. |
 | `tracker.approvers` | empty (nobody) | **Plan approvers**: who may decide a plan from a ticket comment. |
 | `tracker.type_mapping` | `Bug`→bug, `Story`→story, `Task`→story, `Small Enhancement Request`→story, `Epic`→epic, `Sub-task`→subtask | *File only.* Issue type to work class; unmapped types are stories. |
 
@@ -87,6 +84,44 @@ written to a ticket ([method.md](method.md#without-a-tracker)).
 | `worktree_pool.enabled` | `false` | **Enable worktree pool**: reuse warm worktrees instead of creating one per workspace. |
 | `worktree_pool.max_trees` | `8` | **Max worktrees per repository**. |
 | `worktree_pool.root` | unset (the default location) | **Pool root directory**. |
+
+## Notifications
+
+**Settings → Integrations → Notifications.** Where orchestrator events go:
+escalations, the daily digest, seat alerts, blocker merge requests and the
+rest ([notifications.md](notifications.md) lists every event). Any number of
+targets at once; each gets every event unless it names some.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `notifications.targets` | empty (none) | The targets, each `{ "kind": …, "events": […], …fields }`. `kind` is one of the providers below; the fields are that provider's. |
+| `notifications.targets[].events` | unset (every event) | Event kinds this target receives; `["*"]` is every event too. |
+
+A config written with the older `slack_webhook_url`, `slack_bot_token` and
+`slack_channel` keys, or a board's `slack` override, is converted into Slack
+targets the first time it is read.
+
+<!-- BEGIN GENERATED: integrations (scripts/gen-config-docs.py) -->
+
+### Notification providers
+
+Generated from the providers' descriptors. A secret field is read from the secrets store under the name shown, then from the config, then from the environment variable of that name; a board's own target reads its config value first.
+
+| `kind` | Field | Required | Secret name | What it is |
+| --- | --- | --- | --- | --- |
+| `slack` (Slack) | | | | Posts to a channel through an incoming webhook, a bot, or both; with a bot, escalation threads carry replies back to the agent and the digest keeps a channel canvas. |
+| | `webhook_url` | no | `SLACK_WEBHOOK_URL` | **Incoming webhook URL**. A Slack incoming-webhook URL (https://hooks.slack.com/services/…). Needed unless a bot token and channel are set. |
+| | `bot_token` | no | `SLACK_BOT_TOKEN` | **Bot token**. A bot token (xoxb-…) with chat:write, channels:history (or groups:history) and canvases:write; the bot must be in the channel. With a channel, escalations open a thread whose replies reach the blocked agent. |
+| | `channel` | no |  | **Channel ID**. The channel the bot posts to, e.g. C0123456. |
+| `webhook` (Webhook) | | | | POSTs every event as signed JSON to a URL you run, for wiring Prep Cook into anything else. |
+| | `url` | yes |  | **URL**. Where events are POSTed. A 5xx or timeout is retried three times. |
+| | `secret` | no | `WEBHOOK_SECRET` | **Signing secret**. Signs each body with HMAC-SHA256 in the X-PrepCook-Signature header. Unset sends unsigned requests. |
+| `discord` (Discord) | | | | Posts each event as an embed to a Discord channel through its webhook. |
+| | `webhook_url` | yes | `DISCORD_WEBHOOK_URL` | **Webhook URL**. The channel's webhook (Channel settings → Integrations → Webhooks), https://discord.com/api/webhooks/…. |
+| `teams` (Microsoft Teams) | | | | Posts each event as an Adaptive Card to a Teams channel through an incoming webhook. |
+| | `webhook_url` | yes | `TEAMS_WEBHOOK_URL` | **Webhook URL**. The URL of a Teams workflow that posts webhook requests to a channel, or of a channel's Incoming Webhook connector. |
+
+<!-- END GENERATED: integrations -->
 
 ## Agent MCP servers and skills
 
@@ -183,8 +218,9 @@ empty inherits the global value.
 | `tracker.jql_filter` | unset (inherit) | **Pickup filter** for this board. |
 | `tracker.assigned_jql` | unset (inherit) | **Assigned pickup filter** for this board; blank inherits. |
 | `tracker.project_key` | unset (inherit) | **Tracker project key**, when this board's tickets live elsewhere. |
-| `slack.enabled` | unset (on) | **Slack notifications**: `false` silences this board. |
-| `slack.webhook_url`, `slack.bot_token`, `slack.channel` | unset (inherit) | This board's Slack route. |
+| `notifications.enabled` | unset (on) | **Notifications**: `false` silences every target for this board. |
+| `notifications.skip_global` | empty | Kinds of global target (`slack`, `webhook`, …) this board does not send to. |
+| `notifications.targets` | empty | Targets only this board sends to, on top of the global ones it keeps; same shape as `notifications.targets`. |
 | `merge_requests.auto_assign_reviewers` | unset (inherit) | **Assign reviewers from blame**. |
 | `merge_requests.reviewer_map` | empty | **Reviewer map additions**, merged over the global map. |
 | `merge_requests.reviewer_exclude_emails` | empty | **Exclude authors**, added to the global list. |

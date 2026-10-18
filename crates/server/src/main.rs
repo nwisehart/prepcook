@@ -42,6 +42,7 @@ fn main() -> Result<(), PrepCookError> {
 
     let serve = match &command {
         Command::Secret(rest) => std::process::exit(secret_command(rest)),
+        Command::IntegrationsDescribe { json } => std::process::exit(integrations_describe(*json)),
         Command::Help => {
             println!("{}", cli::USAGE);
             return Ok(());
@@ -350,6 +351,36 @@ pub async fn perform_cleanup_actions(deployment: &DeploymentImpl) {
 const SECRET_USAGE: &str = "usage:\n  prepcook secret set <NAME>    read the value from stdin (prompts on a terminal)\n  prepcook secret list          print the names that have a value\n  prepcook secret unset <NAME>  remove a value from the secrets file";
 
 /// `prepcook secret set|list|unset`. Returns the process exit code.
+/// Prints every integration provider's descriptor: JSON for
+/// `scripts/gen-config-docs.py`, or a short listing for a person.
+fn integrations_describe(json: bool) -> i32 {
+    let descriptors = services::services::integrations::descriptors();
+    if json {
+        match serde_json::to_string_pretty(&descriptors) {
+            Ok(text) => {
+                println!("{text}");
+                0
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                1
+            }
+        }
+    } else {
+        for (area, providers) in &descriptors {
+            println!("{area}");
+            for provider in providers {
+                println!("  {:<10} {}", provider.kind, provider.summary);
+                for field in &provider.fields {
+                    let required = if field.required { " (required)" } else { "" };
+                    println!("    {}{required}: {}", field.key, field.label);
+                }
+            }
+        }
+        0
+    }
+}
+
 fn secret_command(args: &[String]) -> i32 {
     use services::services::secrets;
 

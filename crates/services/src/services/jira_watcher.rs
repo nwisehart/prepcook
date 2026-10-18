@@ -540,7 +540,7 @@ impl JiraWatcherService {
 
         loop {
             // Each enabled board is polled with its own filter. Nothing here
-            // posts to Slack: what the watcher finds is either a to-do, which
+            // sends a notification: what the watcher finds is either a to-do, which
             // the morning digest carries, or bookkeeping, which is a log line.
             let (targets, settings, poll_secs) = {
                 let config = self.config.read().await;
@@ -735,7 +735,7 @@ impl JiraWatcherService {
 
     /// Imports one Jira issue into the Plan column: metadata, comment thread,
     /// create, self-assign, work-class tag. Logging of the outcome and any
-    /// Slack ping stay with the caller — the two polls announce differently.
+    /// notification stay with the caller — the two polls announce differently.
     /// `Err` means the create itself failed (already logged); assignee/tag
     /// failures only warn, matching the importer route.
     #[allow(clippy::too_many_arguments)]

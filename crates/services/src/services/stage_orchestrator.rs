@@ -102,11 +102,15 @@ use crate::services::{
     },
     container::{ContainerError, ContainerService},
     daily, jira_watcher,
+    notifications::{
+        self, Confidence, Digest, DigestItem, DigestSectionId, Event, IssueRef, Mention,
+        NotificationSource, PlanKind, PlanningEscalation, ThreadRef,
+    },
     playbook_context::{self, PlaybookContext},
     remote_client::{RemoteClient, RemoteClientError},
     remote_sync, reopen,
     scripts::{self, AppRun, SlotReservation, StandUpOptions, StandUpOutcome, StandUpReport},
-    secrets, slack,
+    secrets,
     tracker::{self, IssueFields, NewIssue, RemoteLink, Tracker, TrackerComment, TrackerSource},
 };
 
@@ -1221,196 +1225,6 @@ fn eob_state(
     }
 }
 
-/// Most cards listed per digest section before the tail is summarised. A
-/// section long enough to scroll past stops being a to-do list.
-const DIGEST_SECTION_CAP: usize = 12;
-
-/// Lines per Slack section block. Slack rejects a section whose text exceeds
-/// 3000 characters, and ticket titles are long enough that a dozen lines can
-/// reach it.
-const DIGEST_LINES_PER_BLOCK: usize = 4;
-
-/// One card as the digest prints it.
-struct DigestLine {
-    /// Jira key, and the fallback link target when no merge request exists.
-    key: String,
-    jira_url: Option<String>,
-    title: String,
-    mr_url: Option<String>,
-    urgent: bool,
-    /// Days since the card last moved. `None` for a line that came from
-    /// somewhere other than the board and has no such clock.
-    days: Option<i64>,
-    note: String,
-}
-
-impl DigestLine {
-    /// Links to the merge request where one exists, because that is what the
-    /// reader of this section is about to open; to the ticket otherwise. The
-    /// label names whichever it is, so a glance down the column separates
-    /// "there is a diff waiting" from "there is not".
-    fn render(&self) -> String {
-        let link = match (self.mr_url.as_deref(), mr_number_from_url_opt(&self.mr_url)) {
-            (Some(url), Some(number)) => format!("<{url}|!{number}>"),
-            (Some(url), None) => format!("<{url}|MR>"),
-            (None, _) => match self.jira_url.as_deref() {
-                Some(url) => format!("<{url}|{}>", self.key),
-                None => self.key.clone(),
-            },
-        };
-        let marker = if self.urgent { ":red_circle: " } else { "" };
-        let title = self.short_title();
-        let note = if self.note.is_empty() {
-            String::new()
-        } else {
-            format!(" — {}. Waiting on an engineer", self.note)
-        };
-        let age = match self.days {
-            Some(days) => format!(" · {days}d"),
-            None => String::new(),
-        };
-        // The key rides along when the link points at a merge request, so the
-        // line is still searchable by ticket.
-        let key = if self.mr_url.is_some() {
-            format!(" `{}`", self.key)
-        } else {
-            String::new()
-        };
-        format!(
-            "{marker}{link}{key} {}{age}{note}",
-            slack::escape_text(title)
-        )
-    }
-
-    /// The title without the importer's leading `BUG-1234: `, which every
-    /// surface prints beside a link that already carries the key.
-    fn short_title(&self) -> &str {
-        self.title
-            .strip_prefix(&format!("{}: ", self.key))
-            .unwrap_or(&self.title)
-    }
-
-    /// One row of a canvas table.
-    ///
-    /// Canvas tables size their columns to fit the page, so every column costs
-    /// the others width. Two therefore earn their keep by not existing: the
-    /// reason a card is stuck rides under its title, and the urgency marker
-    /// leads the title rather than holding a column of its own. Both were
-    /// columns first — six of them pushed the table past the right edge and
-    /// squeezed the ticket key until it wrapped mid-word.
-    ///
-    /// The marker leads the *title* and not the ticket because the ticket cell
-    /// is barely wider than `BUG-10165`, and an emoji in front of it puts that
-    /// wrap straight back.
-    ///
-    /// There is no checkbox column: canvas markdown has no syntax for one.
-    /// `[]` in a cell is what the editor turns into a box as you type, but sent
-    /// through the API it stays literal text.
-    ///
-    /// Links are `[text](url)`, not Slack's `<url|text>`; canvas content is
-    /// real markdown.
-    fn canvas_row(&self, mr_column: bool, show_why: bool) -> String {
-        let mut row = String::from("|");
-        if mr_column {
-            row.push_str(
-                &match (self.mr_url.as_deref(), mr_number_from_url_opt(&self.mr_url)) {
-                    (Some(url), Some(number)) => format!("[!{number}]({url})"),
-                    (Some(url), None) => format!("[MR]({url})"),
-                    (None, _) => "—".to_string(),
-                },
-            );
-            row.push('|');
-        }
-        row.push_str(&match self.jira_url.as_deref() {
-            Some(url) => format!("[{}]({url})", slack::escape_cell(&self.key)),
-            None => slack::escape_cell(&self.key),
-        });
-        row.push('|');
-        if self.urgent {
-            row.push_str(":red_circle: ");
-        }
-        row.push_str(&slack::escape_cell(self.short_title()));
-        if show_why && !self.note.is_empty() {
-            // `<br>` is the one way to get a second line inside a cell.
-            row.push_str(&format!("<br>_{}_", slack::escape_cell(&self.note)));
-        }
-        row.push('|');
-        row.push_str(&match self.days {
-            Some(days) => format!("{days}d"),
-            None => "—".to_string(),
-        });
-        row.push('|');
-        row
-    }
-}
-
-/// Title of the channel canvas the digest maintains.
-const CANVAS_TITLE: &str = "Daily Digest";
-
-/// One digest section as the canvas prints it.
-struct CanvasSection<'a> {
-    heading: &'static str,
-    waiting_on: &'static str,
-    /// Off for "Needs an answer": those cards are parked in planning and none
-    /// of them has a merge request, so the column would be a stripe of dashes.
-    mr_column: bool,
-    /// On only for "Not moving", the one section whose cards carry a reason.
-    /// Elsewhere the heading already says what everything is waiting on.
-    show_why: bool,
-    lines: &'a [DigestLine],
-}
-
-/// The canvas body: every card, in tables.
-///
-/// The channel message is capped because a long message is unreadable in a
-/// scroll-back; a page opened on purpose is not, so nothing is hidden here.
-/// That is the whole reason for the split — the truncated tail was the part
-/// nobody ever saw.
-fn canvas_markdown(updated: &str, next: &str, sections: &[CanvasSection<'_>]) -> String {
-    let mut out = String::new();
-    out.push_str(&format!(
-        "Last updated **{updated}** · next update **{next}**\n\n"
-    ));
-    out.push_str(
-        "_Rewritten in full by the orchestrator on every run. Notes typed here are lost — \
-         put them on the ticket._\n",
-    );
-
-    let mut any = false;
-    for section in sections {
-        if section.lines.is_empty() {
-            continue;
-        }
-        any = true;
-        out.push_str(&format!(
-            "\n---\n\n## {} — {}\n\n{}\n\n",
-            section.heading,
-            section.lines.len(),
-            section.waiting_on
-        ));
-        let mut header = String::from("|");
-        let mut rule = String::from("|");
-        if section.mr_column {
-            header.push_str("MR|");
-            rule.push_str("---|");
-        }
-        header.push_str("Ticket|Title|Age|");
-        rule.push_str("---|---|---|");
-        out.push_str(&header);
-        out.push('\n');
-        out.push_str(&rule);
-        out.push('\n');
-        for line in section.lines {
-            out.push_str(&line.canvas_row(section.mr_column, section.show_why));
-            out.push('\n');
-        }
-    }
-    if !any {
-        out.push_str("\n---\n\nNothing is waiting on a person today.\n");
-    }
-    out
-}
-
 /// One fetched comment as a row, or `None` when it carries no text.
 ///
 /// Shared by the live poll and the backfill. The two differ in when they run,
@@ -1479,10 +1293,6 @@ fn review_record(
         line,
         commented_at,
     })
-}
-
-fn mr_number_from_url_opt(url: &Option<String>) -> Option<i64> {
-    mr_number_from_url(url.as_deref()?)
 }
 
 /// The warning an integration bug carries into Jira, if it is one.
@@ -1705,6 +1515,26 @@ fn jira_key_for(issue: &Issue, metadata: &IssueExtMetadata) -> String {
     tracker_key(metadata)
         .map(str::to_string)
         .unwrap_or_else(|| issue.simple_id.clone())
+}
+
+/// The card's board page, for links in notifications.
+fn card_url(issue: &Issue) -> String {
+    format!(
+        "{}/projects/{}/issues/{}",
+        public_ui_base(),
+        issue.project_id,
+        issue.id
+    )
+}
+
+/// The ticket a notification is about.
+fn issue_ref(issue: &Issue, metadata: &IssueExtMetadata) -> IssueRef {
+    IssueRef {
+        key: jira_key_for(issue, metadata),
+        title: issue.title.clone(),
+        url: metadata.jira.as_ref().and_then(|jira| jira.url.clone()),
+        card_url: Some(card_url(issue)),
+    }
 }
 
 /// Whether a taken-over card's finished RCA is still owed to its ticket: the
@@ -2110,6 +1940,7 @@ pub struct StageOrchestratorService<C: ContainerService> {
     workspace_manager: WorkspaceManager,
     remote_client: Option<RemoteClient>,
     tracker: TrackerSource,
+    notifications: NotificationSource,
     /// Last time each issue's Jira comments were polled, so the (potentially
     /// sub-minute) orchestrator tick doesn't hit the Jira API every pass.
     jira_comment_poll_at: Arc<std::sync::Mutex<HashMap<Uuid, Instant>>>,
@@ -2184,6 +2015,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         workspace_manager: WorkspaceManager,
         remote_client: Option<RemoteClient>,
         tracker: TrackerSource,
+        notifications: NotificationSource,
     ) -> Arc<Self> {
         let service = Arc::new(Self {
             config,
@@ -2192,6 +2024,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             workspace_manager,
             remote_client,
             tracker,
+            notifications,
             jira_comment_poll_at: Arc::new(std::sync::Mutex::new(HashMap::new())),
             jira_command_poll_at: Arc::new(std::sync::Mutex::new(HashMap::new())),
             knowledge_runs: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -2257,12 +2090,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             // Seat limit backoff (executors::usage_limits): a launch that hit
             // "session limit" arms a pause; sitting the pause out beats
             // re-launching into the wall and burning the window the moment it
-            // reopens. One-shot Slack alert per pause.
+            // reopens. One-shot notification per pause.
             let seat_pause = executors::usage_limits::pause_detail();
             if executors::usage_limits::take_notify() {
-                // Global webhook on purpose: the seat is process-wide, so the
-                // pause affects every board rather than one board's channel.
-                let webhook = self.config.read().await.slack_webhook_url.clone();
+                // The global targets on purpose: the seat is process-wide, so
+                // the pause affects every board rather than one board's channel.
                 let window = seat_pause
                     .as_ref()
                     .and_then(|pause| pause.limit_type.clone())
@@ -2271,14 +2103,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     .as_ref()
                     .map(|pause| pause.remaining.as_secs() / 60 + 1)
                     .unwrap_or(0);
-                slack::notify_if_configured(
-                    webhook.as_deref(),
-                    &format!(
-                        ":hourglass: *Prep Cook: Claude seat {window} limit hit.* \
-                         Agent launches are paused for ~{minutes}m, until the window reopens."
-                    ),
-                )
-                .await;
+                self.notifications
+                    .send(None, Event::SeatLimitHit { window, minutes })
+                    .await;
             }
             // Walk the board back once the seat is serving again, one session
             // per interval. Not all at once: one seat sits behind the window
@@ -2294,7 +2121,6 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 // A separate card from the routine pause above: the board is not
                 // waiting out one window, it is getting nothing through at all,
                 // so "resumes automatically" would be misleading.
-                let webhook = self.config.read().await.slack_webhook_url.clone();
                 let rounds = seat_pause
                     .as_ref()
                     .map(|pause| pause.consecutive_arms)
@@ -2303,16 +2129,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     .as_ref()
                     .and_then(|pause| pause.report.clone())
                     .unwrap_or_default();
-                slack::notify_if_configured(
-                    webhook.as_deref(),
-                    &format!(
-                        ":rotating_light: *Prep Cook: the Claude seat keeps running \
-                         out.* {rounds} windows in a row exhausted with nothing getting through \
-                         between them, so no board is advancing — that needs less burn or more \
-                         budget, not more waiting.\nThe seat reported: `{report}`"
-                    ),
-                )
-                .await;
+                self.notifications
+                    .send(None, Event::SeatExhausted { rounds, report })
+                    .await;
             }
 
             let idle_reason = if mode != OrchestratorMode::Auto {
@@ -2321,7 +2140,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 // Stable text so it can serve as the dedup key; the remaining
                 // time is appended at log time instead.
                 Some(match (&pause.limit_type, pause.repeatedly_exhausted) {
-                    (_, true) => "seat limit — the seat keeps running out, see Slack".to_string(),
+                    (_, true) => {
+                        "seat limit — the seat keeps running out, see the notifications".to_string()
+                    }
                     (Some(window), false) => {
                         format!("seat {window} limit — launches paused until the window reopens")
                     }
@@ -2764,20 +2585,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         issue.simple_id, key
                     );
                     if !open_mrs.is_empty() {
-                        let list = open_mrs
-                            .iter()
-                            .map(|n| format!("!{n}"))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        slack::notify_if_configured(
-                            settings.slack_webhook_url.as_deref(),
-                            &format!(
-                                ":warning: *{key} was closed in Jira with {list} still \
-                                 open.* The card has been retired; that merge request needs \
-                                 closing or merging by hand."
-                            ),
-                        )
-                        .await;
+                        let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
+                        self.notifications
+                            .send(
+                                Some(settings.project_id),
+                                Event::TicketClosedWithOpenMrs {
+                                    issue: issue_ref(issue, &metadata),
+                                    mr_numbers: open_mrs,
+                                },
+                            )
+                            .await;
                     }
                 }
                 Err(e) => warn!(
@@ -3762,9 +3579,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             })
             .await?;
 
-        let mut needs_merge: Vec<DigestLine> = Vec::new();
-        let mut needs_answer: Vec<DigestLine> = Vec::new();
-        let mut not_moving: Vec<DigestLine> = Vec::new();
+        let mut needs_merge: Vec<DigestItem> = Vec::new();
+        let mut needs_answer: Vec<DigestItem> = Vec::new();
+        let mut not_moving: Vec<DigestItem> = Vec::new();
 
         for issue in &response.issues {
             let Some(stage) = stage_by_status.get(&issue.status_id).copied() else {
@@ -3789,14 +3606,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         continue;
                     }
                 };
-            let line = DigestLine {
+            let item = DigestItem {
                 key: jira_key_for(issue, &metadata),
-                jira_url: metadata.jira.as_ref().and_then(|jira| jira.url.clone()),
+                url: metadata.jira.as_ref().and_then(|jira| jira.url.clone()),
                 title: issue.title.clone(),
                 mr_url: metadata.mr_url.clone(),
                 urgent: issue.priority == Some(IssuePriority::Urgent),
                 days: Some((now - issue.updated_at).num_days().max(0)),
-                note: String::new(),
+                note: None,
             };
             let stalled_for = daily::read(|state| state.unchanged_since(issue.id))
                 .map(|since| daily::business_days_between(since, daily::local_date(now, tz)))
@@ -3807,11 +3624,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 &pull_requests,
                 stalled_for,
             ) {
-                DigestSection::NeedsMerge => needs_merge.push(line),
-                DigestSection::NeedsAnswer => needs_answer.push(line),
-                DigestSection::NotMoving(reason) => not_moving.push(DigestLine {
-                    note: reason.to_string(),
-                    ..line
+                DigestSection::NeedsMerge => needs_merge.push(item),
+                DigestSection::NeedsAnswer => needs_answer.push(item),
+                DigestSection::NotMoving(reason) => not_moving.push(DigestItem {
+                    note: Some(reason.to_string()),
+                    ..item
                 }),
                 DigestSection::InFlight => {}
             }
@@ -3832,18 +3649,20 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         // Tickets the watcher found assigned to the agent with a finished card
         // and a still-working Jira status. Detected there because that is where
         // the Jira side is read; reported here because it is a to-do, and the
-        // watcher would otherwise post one Slack message per ticket.
+        // watcher would otherwise send one notification per ticket.
         for (jira_key, summary) in daily::update(|state| state.take_stuck_hints()) {
-            not_moving.push(DigestLine {
+            not_moving.push(DigestItem {
                 key: jira_key,
-                jira_url: None,
+                url: None,
                 title: summary,
                 mr_url: None,
                 urgent: false,
                 days: None,
-                note: "its card is finished but the ticket is still in progress; move it to a \
-                       To Do status to restart it"
-                    .to_string(),
+                note: Some(
+                    "its card is finished but the ticket is still in progress; move it to a \
+                     To Do status to restart it"
+                        .to_string(),
+                ),
             });
         }
 
@@ -3852,214 +3671,50 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
 
         let today = daily::local_date(now, tz);
-        let heading = format!("Orchestrator — {}", today.format("%A %-d %B"));
-
-        // The canvas is written first: the message links to it and reports
-        // whether it is current, so posting a pointer to a stale page is worse
-        // than posting the whole list.
-        let canvas_sections = [
-            CanvasSection {
-                heading: "Needs a merge",
-                waiting_on: "Waiting on an engineer to read a diff.",
-                mr_column: true,
-                show_why: false,
-                lines: &needs_merge,
-            },
-            CanvasSection {
-                heading: "Needs an answer",
-                waiting_on: "Waiting on a person to settle a question.",
-                mr_column: false,
-                show_why: false,
-                lines: &needs_answer,
-            },
-            CanvasSection {
-                heading: "Not moving",
-                waiting_on: "Waiting on someone to decide the next step.",
-                mr_column: true,
-                show_why: true,
-                lines: &not_moving,
-            },
-        ];
-        let canvas_id = match (
-            settings
-                .slack_bot_token
-                .as_deref()
-                .map(str::trim)
-                .filter(|token| !token.is_empty()),
-            settings
-                .slack_channel
-                .as_deref()
-                .map(str::trim)
-                .filter(|channel| !channel.is_empty()),
-        ) {
-            (Some(token), Some(channel)) => {
-                let markdown = canvas_markdown(
-                    &now.with_timezone(&tz)
-                        .format("%A %-d %B, %-I:%M %p %Z")
-                        .to_string(),
-                    &daily::next_run_date(today).format("%A %-d %B").to_string(),
-                    &canvas_sections,
-                );
-                let known = daily::read(|state| state.canvas_id(project_id).map(str::to_string));
-                let id = slack::publish_channel_canvas(
-                    token,
-                    channel,
-                    CANVAS_TITLE,
-                    &markdown,
-                    known.as_deref(),
-                )
-                .await;
-                if let Some(id) = id.as_deref() {
-                    daily::update(|state| state.record_canvas_id(project_id, id));
-                }
-                id
-            }
-            _ => None,
+        let counts = (needs_merge.len(), needs_answer.len(), not_moving.len());
+        let section = |id, title: &str, waiting_on: &str, items| notifications::DigestSection {
+            id,
+            title: title.to_string(),
+            waiting_on: waiting_on.to_string(),
+            items,
         };
-
-        let mut blocks = vec![serde_json::json!({
-            "type": "header",
-            "text": { "type": "plain_text", "text": heading, "emoji": true }
-        })];
-
-        let sections = [
-            ("Needs a merge", "an engineer to read a diff", &needs_merge),
-            (
-                "Needs an answer",
-                "a person to settle a question",
-                &needs_answer,
-            ),
-            ("Not moving", "someone to decide the next step", &not_moving),
-        ];
-        let total = needs_merge.len() + needs_answer.len() + not_moving.len();
-
-        if canvas_id.is_some() {
-            // With the full list a tap away, the message answers only the
-            // question that cannot wait for a tap: is anything on fire.
-            blocks.push(serde_json::json!({
-                "type": "context",
-                "elements": [{
-                    "type": "mrkdwn",
-                    "text": format!(
-                        "{} to merge · {} to answer · {} not moving · {} awaiting staging — full list on the *{CANVAS_TITLE}* canvas at the top of this channel",
-                        needs_merge.len(),
-                        needs_answer.len(),
-                        not_moving.len(),
-                        awaiting_staging
-                    )
-                }]
-            }));
-            let mut any_urgent = false;
-            for (title, _, lines) in sections {
-                let urgent: Vec<String> = lines
-                    .iter()
-                    .filter(|line| line.urgent)
-                    .map(DigestLine::render)
-                    .collect();
-                if urgent.is_empty() {
-                    continue;
-                }
-                any_urgent = true;
-                blocks.push(serde_json::json!({ "type": "divider" }));
-                blocks.push(serde_json::json!({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": format!("*{title}* · {} P0", urgent.len())
-                    }
-                }));
-                for batch in urgent.chunks(DIGEST_LINES_PER_BLOCK) {
-                    blocks.push(serde_json::json!({
-                        "type": "section",
-                        "text": { "type": "mrkdwn", "text": batch.join("\n") }
-                    }));
-                }
-            }
-            if !any_urgent {
-                blocks.push(serde_json::json!({
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": if total == 0 {
-                            "Nothing is waiting on a person today.".to_string()
-                        } else {
-                            "No P0s waiting — the canvas has the rest.".to_string()
-                        }
-                    }]
-                }));
-            }
-        } else {
-            // No canvas: the message is the only surface, so it carries the
-            // whole list, capped.
-            for (title, subtitle, lines) in sections {
-                if lines.is_empty() {
-                    continue;
-                }
-                blocks.push(serde_json::json!({ "type": "divider" }));
-                blocks.push(serde_json::json!({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": format!("*{title}* · {} waiting on {subtitle}", lines.len())
-                    }
-                }));
-                // Slack rejects a section over 3000 characters, and a long line
-                // list reaches that well before the section cap does. Batched so
-                // a busy day degrades into more blocks rather than a dropped
-                // post.
-                let rendered: Vec<String> = lines
-                    .iter()
-                    .take(DIGEST_SECTION_CAP)
-                    .map(DigestLine::render)
-                    .collect();
-                for batch in rendered.chunks(DIGEST_LINES_PER_BLOCK) {
-                    blocks.push(serde_json::json!({
-                        "type": "section",
-                        "text": { "type": "mrkdwn", "text": batch.join("\n") }
-                    }));
-                }
-                if lines.len() > DIGEST_SECTION_CAP {
-                    blocks.push(serde_json::json!({
-                        "type": "context",
-                        "elements": [{
-                            "type": "mrkdwn",
-                            "text": format!("…and {} more", lines.len() - DIGEST_SECTION_CAP)
-                        }]
-                    }));
-                }
-            }
-            if total == 0 {
-                blocks.push(serde_json::json!({
-                    "type": "section",
-                    "text": { "type": "mrkdwn", "text": "Nothing is waiting on a person today." }
-                }));
-            }
-        }
-
-        // The fallback is what a notification and a client that ignores blocks
-        // shows, so it carries the counts rather than the heading alone.
-        let fallback = format!(
-            "Orchestrator: {} to merge, {} to answer, {} not moving, {} awaiting staging",
-            needs_merge.len(),
-            needs_answer.len(),
-            not_moving.len(),
-            awaiting_staging
-        );
-        slack::notify_blocks_if_configured(
-            settings.slack_webhook_url.as_deref(),
-            &fallback,
-            serde_json::Value::Array(blocks),
-        )
-        .await;
+        let digest = Digest {
+            date: today,
+            generated_at: now,
+            timezone: tz.name().to_string(),
+            next_run: daily::next_run_date(today),
+            awaiting_staging,
+            sections: vec![
+                section(
+                    DigestSectionId::NeedsMerge,
+                    "Needs a merge",
+                    "an engineer to read a diff",
+                    needs_merge,
+                ),
+                section(
+                    DigestSectionId::NeedsAnswer,
+                    "Needs an answer",
+                    "a person to settle a question",
+                    needs_answer,
+                ),
+                section(
+                    DigestSectionId::NotMoving,
+                    "Not moving",
+                    "someone to decide the next step",
+                    not_moving,
+                ),
+            ],
+        };
+        self.notifications
+            .send(Some(project_id), Event::DailyDigest(digest))
+            .await;
 
         // Marked whatever the post returned: a webhook that is failing should
         // cost one attempt a day, not one per tick until someone notices.
         daily::update(|state| state.record_digest(project_id, daily::local_date(now, tz)));
         info!(
-            "Stage orchestrator: digest posted for {project_id} — {} to merge, {} to answer, {} not moving",
-            needs_merge.len(),
-            needs_answer.len(),
-            not_moving.len()
+            "Stage orchestrator: digest sent for {project_id} — {} to merge, {} to answer, {} not moving",
+            counts.0, counts.1, counts.2
         );
         Ok(())
     }
@@ -5711,13 +5366,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         metadata: &IssueExtMetadata,
     ) {
         let project_id = settings.project_id;
-        let (autonomy, slack_webhook, slack_bot_token, slack_channel) = (
-            settings.autonomy,
-            settings.slack_webhook_url.clone(),
-            settings.slack_bot_token.clone(),
-            settings.slack_channel.clone(),
-        );
-        if autonomy != AutonomyMode::Full {
+        if settings.autonomy != AutonomyMode::Full {
             return;
         }
 
@@ -5734,16 +5383,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         let result = match stage {
             Stage::Planning => {
-                self.autonomy_planning(
-                    client,
-                    project_id,
-                    issue,
-                    metadata,
-                    slack_webhook.as_deref(),
-                    slack_bot_token.as_deref(),
-                    slack_channel.as_deref(),
-                )
-                .await
+                self.autonomy_planning(client, project_id, issue, metadata)
+                    .await
             }
             Stage::Executing => {
                 self.autonomy_executing(client, project_id, issue, metadata)
@@ -6099,17 +5740,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
     /// Planning gate: a passing verdict (spec: 0 open questions, RCA: high
     /// confidence) self-approves through the local route and advances to
-    /// Executing. A recorded-but-failing verdict escalates to Slack once.
-    #[allow(clippy::too_many_arguments)]
+    /// Executing. A recorded-but-failing verdict escalates to the board's
+    /// notification targets once.
     async fn autonomy_planning(
         &self,
         client: &RemoteClient,
         project_id: Uuid,
         issue: &Issue,
         metadata: &IssueExtMetadata,
-        slack_webhook: Option<&str>,
-        slack_bot_token: Option<&str>,
-        slack_channel: Option<&str>,
     ) -> Result<(), StageOrchestratorError> {
         // Throughout planning, forward any new Jira comments to the agent so
         // teammate guidance left on the ticket reaches it. Self-throttled and
@@ -6211,34 +5849,25 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 .and_then(|state| state.escalated_at)
                 .is_some();
             if already {
-                self.poll_slack_unblock_replies(client, issue, metadata, slack_bot_token)
+                self.poll_escalation_replies(client, project_id, issue, metadata)
                     .await;
                 return Ok(());
             }
-            // Slack gets a skimmable card, not the essay: severity emoji,
-            // linked headline, a one-line root cause, and up to three short
-            // next-step bullets (only when the agent labeled them — no
-            // summary dumps). The full summary goes into the message's
-            // thread on the bot path, where the reply relay ignores
-            // bot-authored messages, or as a trimmed trailer on the
-            // thread-less webhook path.
+            // The escalation carries the verdict as data; each target renders
+            // it (Slack: a skimmable card whose full summary goes into its
+            // thread). A conversational target hands back the thread, which
+            // later ticks poll for replies; without one the escalation is
+            // post-only.
             let confidence = planning.confidence.unwrap_or(ConfidenceLevel::Low);
             let confidence_word = match confidence {
                 ConfidenceLevel::Low => "Low",
                 ConfidenceLevel::Medium => "Medium",
                 ConfidenceLevel::High => "High",
             };
-            let (emoji, detail) = match kind {
-                "rca" => (
-                    match confidence {
-                        ConfidenceLevel::Low => "🔴",
-                        ConfidenceLevel::Medium => "🟡",
-                        ConfidenceLevel::High => "🟢",
-                    },
-                    format!("{confidence_word} confidence RCA"),
-                ),
+            let (plan_kind, detail) = match kind {
+                "rca" => (PlanKind::Rca, format!("{confidence_word} confidence RCA")),
                 _ => (
-                    "🟠",
+                    PlanKind::Spec,
                     format!(
                         "{} open question(s) on the spec",
                         planning.open_questions.unwrap_or(0)
@@ -6247,192 +5876,58 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             };
             // Cleaned again at render time, not only at ingress: tickets
             // planned before the ingress fix still hold the agent's tool
-            // syntax in this field, and the escalation card is the one place
-            // the whole team sees it.
+            // syntax in this field, and the escalation is the one place the
+            // whole team sees it.
             let summary = planning
                 .summary
                 .as_deref()
                 .map(api_types::strip_agent_scaffolding)
                 .unwrap_or_else(|| "(no summary recorded)".to_string());
-            let root_cause = first_sentence(&summary, 240);
-            let steps = next_steps_bullets(&summary);
-            let vk_url = format!(
-                "{}/projects/{}/issues/{}",
-                public_ui_base(),
-                project_id,
-                issue.id
-            );
-            let jira_link = match self.tracker_for(issue, metadata, "Slack ticket link").await {
-                Some(ticket) => format!(
-                    " · <{}|{} in {}>",
-                    ticket.tracker.issue_url(&ticket.key),
-                    ticket.key,
-                    ticket.tracker.kind()
-                ),
-                None => String::new(),
-            };
-            // `|` would terminate the mrkdwn link label early.
-            let title_label = issue.title.replace('|', "¦");
-            let mut base_blocks = vec![
-                serde_json::json!({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": format!(
-                            "{emoji} *<{vk_url}|{}: {}>*",
-                            slack::escape_text(&jira_key),
-                            slack::escape_text(&title_label)
-                        )
-                    }
-                }),
-                serde_json::json!({
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Blocked on*\n{}", slack::escape_text(&detail))
-                        },
-                        { "type": "mrkdwn", "text": "*Status*\nWaiting in Plan for a human" }
-                    ]
-                }),
-                serde_json::json!({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": format!(
-                            "*Root cause (one line)*\n{}",
-                            slack::escape_text(&root_cause)
-                        )
-                    }
-                }),
-            ];
-            let confidence_reason = planning
-                .confidence_reason
-                .as_deref()
-                .map(api_types::strip_agent_scaffolding);
-            if let Some(reason) = confidence_reason
-                .as_deref()
-                .filter(|reason| !reason.trim().is_empty())
+            let mut issue_link = issue_ref(issue, metadata);
+            let mut tracker_name = None;
+            if let Some(ticket) = self
+                .tracker_for(issue, metadata, "escalation ticket link")
+                .await
             {
-                base_blocks.push(serde_json::json!({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": format!(
-                            "*Why not higher*\n{}",
-                            slack::escape_text(&clip_chars(reason, 300))
-                        )
-                    }
-                }));
+                issue_link.url = Some(ticket.tracker.issue_url(&ticket.key));
+                tracker_name = Some(ticket.tracker.kind().to_string());
             }
-            if let Some(items) = &steps {
-                let joined = items
-                    .iter()
-                    .map(|item| format!("• {}", slack::escape_text(item)))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                base_blocks.push(serde_json::json!({
-                    "type": "section",
-                    "text": { "type": "mrkdwn", "text": format!("*Next steps*\n{joined}") }
-                }));
-            }
-            let context_block = |thread_hint: bool| {
-                serde_json::json!({
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": format!(
-                            "<{vk_url}|Open ticket in Prep Cook>{jira_link}{}",
-                            if thread_hint {
-                                " · full summary in this thread — reply here to steer the agent"
-                            } else {
-                                ""
-                            }
-                        )
-                    }]
-                })
+            let escalation = PlanningEscalation {
+                issue: issue_link,
+                tracker: tracker_name,
+                plan_kind,
+                confidence: (plan_kind == PlanKind::Rca).then_some(match confidence {
+                    ConfidenceLevel::Low => Confidence::Low,
+                    ConfidenceLevel::Medium => Confidence::Medium,
+                    ConfidenceLevel::High => Confidence::High,
+                }),
+                open_questions: (plan_kind == PlanKind::Spec)
+                    .then(|| planning.open_questions.unwrap_or(0)),
+                blocked_on: detail.clone(),
+                root_cause: first_sentence(&summary, 240),
+                why_not_higher: planning
+                    .confidence_reason
+                    .as_deref()
+                    .map(api_types::strip_agent_scaffolding)
+                    .filter(|reason| !reason.trim().is_empty()),
+                next_steps: next_steps_bullets(&summary).unwrap_or_default(),
+                summary,
             };
-            let mut bot_blocks = base_blocks.clone();
-            bot_blocks.push(context_block(true));
-            // The webhook can't thread, so it carries a trimmed summary
-            // trailer instead.
-            let mut webhook_blocks = base_blocks;
-            webhook_blocks.push(serde_json::json!({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": format!(
-                        "*Summary*\n{}",
-                        slack::escape_text(&clip_chars(&summary, 700))
-                    )
-                }
-            }));
-            webhook_blocks.push(context_block(false));
-            let fallback = format!("{emoji} {jira_key}: {detail} — waiting in Plan for a human");
             let mut state = metadata.autonomy.clone().unwrap_or_default();
             state.escalated_at = Some(Utc::now());
-            // Bot-token path: post via the Web API and remember the thread so
-            // later ticks can poll it for replies. Falls back to the
-            // post-only incoming webhook (no reply polling) when no bot token
-            // is configured.
-            match (slack_bot_token, slack_channel) {
-                (Some(token), Some(channel)) if !token.is_empty() && !channel.is_empty() => {
-                    if let Some(thread) = slack::post_message(
-                        token,
-                        channel,
-                        &fallback,
-                        serde_json::Value::Array(bot_blocks),
-                    )
-                    .await
-                    {
-                        // Long detail lives in the thread, keeping the
-                        // channel card short. The reply relay filters
-                        // bot-authored messages, so this can't be mistaken
-                        // for human feedback.
-                        let detail_blocks = serde_json::json!([{
-                            "type": "section",
-                            "text": {
-                                "type": "mrkdwn",
-                                "text": format!(
-                                    "*Full planning summary*\n{}",
-                                    slack::escape_text(&clip_chars(&summary, 2900))
-                                )
-                            }
-                        }]);
-                        slack::post_thread_reply(
-                            token,
-                            &thread.channel,
-                            &thread.ts,
-                            "Full planning summary",
-                            detail_blocks,
-                        )
-                        .await;
-                        state.slack_channel = Some(thread.channel);
-                        state.slack_thread_ts = Some(thread.ts);
-                    } else {
-                        // Post failed — fall back so the human is still paged.
-                        slack::notify_blocks_if_configured(
-                            slack_webhook,
-                            &fallback,
-                            serde_json::Value::Array(webhook_blocks),
-                        )
-                        .await;
-                    }
-                }
-                _ => {
-                    slack::notify_blocks_if_configured(
-                        slack_webhook,
-                        &fallback,
-                        serde_json::Value::Array(webhook_blocks),
-                    )
-                    .await;
-                }
+            if let Some(thread) = self
+                .notifications
+                .escalate(Some(project_id), Event::PlanningEscalated(escalation))
+                .await
+            {
+                state.slack_channel = Some(thread.channel);
+                state.slack_thread_ts = Some(thread.ts);
             }
             self.save_autonomy_state(client, issue, state).await?;
             self.post_autonomy_comment(
                 client,
                 issue,
-                &format!("autonomy: {detail} — escalated to Slack; waiting in Plan for a human"),
+                &format!("autonomy: {detail} — escalated for a human; waiting in Plan"),
             )
             .await;
             self.tag_issue_rca(client, project_id, issue, "process:escalated")
@@ -6854,7 +6349,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     }
 
     /// Tells a person that the script runner cannot do its job for this card:
-    /// Slack when a webhook is configured, and a desktop notification. Once
+    /// the board's notification targets, and a desktop notification. Once
     /// per card and outcome for the life of the process — a setup problem
     /// does not fix itself between retries, and a message per retry is noise.
     async fn escalate_runner_fault(
@@ -6875,15 +6370,17 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             .message
             .clone()
             .unwrap_or_else(|| report.log_tail().to_string());
-        let webhook = self.config.read().await.slack_webhook_url.clone();
-        slack::notify_if_configured(
-            webhook.as_deref(),
-            &format!(
-                ":construction: *{key}: {what} cannot run — script runner reported `{label}`.* \
-                 This is the setup's problem, not the branch's; the card holds until it is fixed.\n{detail}"
-            ),
-        )
-        .await;
+        self.notifications
+            .send(
+                Some(issue.project_id),
+                Event::RunnerFault {
+                    issue: issue_ref(issue, metadata),
+                    step: what.to_string(),
+                    outcome: label.to_string(),
+                    detail: detail.clone(),
+                },
+            )
+            .await;
         self.container
             .notification_service()
             .notify(
@@ -7112,14 +6609,15 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         if rounds >= review_cap {
             if state.escalated_at.is_none() {
                 if autonomous {
-                    slack::notify_if_configured(
-                        settings.slack_webhook_url.as_deref(),
-                        &format!(
-                            "🔴 {jira_key}: review loop hit the {review_cap}-round \
-                             cap — waiting in Review for a human"
-                        ),
-                    )
-                    .await;
+                    self.notifications
+                        .send(
+                            Some(project_id),
+                            Event::ReviewLoopCapped {
+                                issue: issue_ref(issue, metadata),
+                                rounds: review_cap,
+                            },
+                        )
+                        .await;
                 }
                 let mut next = state.clone();
                 next.escalated_at = Some(Utc::now());
@@ -7254,21 +6752,18 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     /// the worktree). Waits briefly for the previous agent turn to finish —
     /// approval auto-advance often lands while the planning agent is still
     /// wrapping up its final turn.
-    /// While a planning ticket sits escalated in Slack, forward new teammate
-    /// replies in the escalation thread to the blocked agent as a follow-up.
-    /// No-op unless a bot token is configured and an escalation thread was
-    /// recorded. Runs each tick from `autonomy_planning`, so it stops on its
-    /// own once the ticket leaves Planning.
-    async fn poll_slack_unblock_replies(
+    /// While a planning ticket sits escalated, forward new teammate replies in
+    /// the escalation thread to the blocked agent as a follow-up. No-op unless
+    /// the board has a conversational notification target and an escalation
+    /// thread was recorded. Runs each tick from `autonomy_planning`, so it
+    /// stops on its own once the ticket leaves Planning.
+    async fn poll_escalation_replies(
         &self,
         client: &RemoteClient,
+        project_id: Uuid,
         issue: &Issue,
         metadata: &IssueExtMetadata,
-        slack_bot_token: Option<&str>,
     ) {
-        let Some(token) = slack_bot_token.filter(|t| !t.is_empty()) else {
-            return;
-        };
         let Some(state) = metadata.autonomy.as_ref() else {
             return;
         };
@@ -7278,28 +6773,36 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         ) else {
             return;
         };
-
-        let replies = slack::thread_replies(token, channel, thread_ts).await;
+        let thread = ThreadRef {
+            channel: channel.to_string(),
+            ts: thread_ts.to_string(),
+        };
+        let since = state
+            .slack_last_reply_ts
+            .as_deref()
+            .and_then(notifications::parse_reply_mark);
+        let replies = match self
+            .notifications
+            .replies(Some(project_id), &thread, since)
+            .await
+        {
+            None => return,
+            Some(Ok(replies)) => replies,
+            Some(Err(error)) => {
+                warn!("escalation replies: could not read the thread: {error}");
+                return;
+            }
+        };
         // Human replies newer than the last one forwarded, never the thread
-        // root (the escalation message itself).
-        let mut new_replies: Vec<&slack::Reply> = replies
+        // root (the escalation message itself). Oldest first.
+        let new_replies: Vec<&notifications::Reply> = replies
             .iter()
-            .filter(|r| !r.is_bot && r.ts != thread_ts && !r.text.trim().is_empty())
-            .filter(|r| match state.slack_last_reply_ts.as_deref() {
-                Some(seen) => slack::ts_gt(&r.ts, seen),
-                None => true,
-            })
+            .filter(|r| !r.is_bot && r.id != thread.ts && !r.text.trim().is_empty())
             .collect();
         if new_replies.is_empty() {
             return;
         }
-        new_replies.sort_by(|a, b| {
-            a.ts.parse::<f64>()
-                .unwrap_or(0.0)
-                .partial_cmp(&b.ts.parse::<f64>().unwrap_or(0.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        let newest_ts = new_replies.last().map(|r| r.ts.clone());
+        let newest_at = new_replies.last().map(|r| r.at);
 
         let jira_key = jira_key_for(issue, metadata);
         let combined = new_replies
@@ -7314,30 +6817,38 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             None => " Then end your turn.".to_string(),
         };
         let prompt = format!(
-            "A teammate replied in the Slack escalation thread for {jira_key} with guidance to unblock you:\n\n{combined}\n\nIncorporate this into your spec/RCA and update your recorded verdict (open_questions / confidence and summary) via the Prep Cook MCP `update_issue` planning fields.{reopen}"
+            "A teammate replied in the escalation thread for {jira_key} with guidance to unblock you:\n\n{combined}\n\nIncorporate this into your spec/RCA and update your recorded verdict (open_questions / confidence and summary) via the Prep Cook MCP `update_issue` planning fields.{reopen}"
         );
 
         let workspace = match self.find_implementation_workspace(client, issue).await {
             Ok(workspace) => workspace,
             Err(error) => {
-                tracing::warn!(?error, "slack unblock: no workspace to inject reply into");
+                tracing::warn!(
+                    ?error,
+                    "escalation replies: no workspace to inject reply into"
+                );
                 return;
             }
         };
         if let Err(error) = self.start_follow_up(workspace, &prompt, false).await {
-            tracing::warn!(?error, "slack unblock: failed to inject teammate reply");
+            tracing::warn!(
+                ?error,
+                "escalation replies: failed to inject teammate reply"
+            );
             return;
         }
-        info!("Stage orchestrator: forwarded Slack reply to blocked agent for {jira_key}");
+        info!(
+            "Stage orchestrator: forwarded an escalation reply to the blocked agent for {jira_key}"
+        );
 
         // Persist the high-water mark so each reply is forwarded once.
-        if let Some(ts) = newest_ts {
+        if let Some(at) = newest_at {
             let mut new_state = state.clone();
-            new_state.slack_last_reply_ts = Some(ts);
+            new_state.slack_last_reply_ts = Some(notifications::reply_mark(at));
             if let Err(error) = self.save_autonomy_state(client, issue, new_state).await {
                 tracing::warn!(
                     ?error,
-                    "slack unblock: failed to persist reply high-water mark"
+                    "escalation replies: failed to persist reply high-water mark"
                 );
             }
         }
@@ -8639,14 +8150,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         )
         .await;
         if settings.autonomy == AutonomyMode::Full {
-            slack::notify_if_configured(
-                settings.slack_webhook_url.as_deref(),
-                &format!(
-                    "🔴 {jira_key}: review findings could not be applied — {reason}. \
-                     Waiting in Review for a human"
-                ),
-            )
-            .await;
+            let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
+            self.notifications
+                .send(
+                    Some(settings.project_id),
+                    Event::ReviewRoundAbandoned {
+                        issue: issue_ref(issue, &metadata),
+                        reason: reason.to_string(),
+                    },
+                )
+                .await;
         }
         self.container
             .notification_service()
@@ -10242,8 +9755,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     }
 
     /// Hands a red pipeline to a human: a note on the MR, a comment on the
-    /// ticket, and Slack (this path only runs under autonomy, where nobody is
-    /// watching the board).
+    /// ticket, and the board's notification targets (this path only runs under
+    /// autonomy, where nobody is watching the board).
     #[allow(clippy::too_many_arguments)]
     async fn escalate_pipeline(
         &self,
@@ -10268,16 +9781,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         .await;
         self.post_autonomy_comment(client, issue, &format!("MR pipeline escalated — {reason}."))
             .await;
-        slack::notify_if_configured(
-            settings.slack_webhook_url.as_deref(),
-            &format!(
-                "🔴 *{}* — MR pipeline needs a human: {}\nMR: {}",
-                slack::escape_text(&jira_key),
-                slack::escape_text(&clip_chars(reason, 700)),
-                mr_url
-            ),
-        )
-        .await;
+        self.notifications
+            .send(
+                Some(settings.project_id),
+                Event::PipelineEscalated {
+                    issue: issue_ref(issue, metadata),
+                    mr_url: mr_url.to_string(),
+                    reason: reason.to_string(),
+                },
+            )
+            .await;
         info!("Stage orchestrator: {jira_key} pipeline escalated — {reason}");
     }
 
@@ -10532,24 +10045,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             .map(str::trim)
             .find(|line| !line.is_empty())
             .unwrap_or("(no reason recorded)");
-        let settings = self.settings_for(issue.project_id).await;
-        slack::notify_if_configured(
-            settings.slack_webhook_url.as_deref(),
-            &format!(
-                "🧭 *{}* — MR review feedback rejects the approach, so the agent \
-                 stopped instead of rewriting it.\n{}\n\nA human decides: move \
-                 the ticket back to Plan (then forward again to re-arm) to \
-                 re-plan, or reply on the MR if the agent misread the review.{}",
-                slack::escape_text(&jira_key),
-                slack::escape_text(&clip_chars(reason, 700)),
-                metadata
-                    .mr_url
-                    .as_deref()
-                    .map(|url| format!("\nMR: {url}"))
-                    .unwrap_or_default()
-            ),
-        )
-        .await;
+        self.notifications
+            .send(
+                Some(issue.project_id),
+                Event::ReplanRequested {
+                    issue: issue_ref(issue, metadata),
+                    reason: reason.to_string(),
+                    mr_url: metadata.mr_url.clone(),
+                },
+            )
+            .await;
         self.post_autonomy_comment(
             client,
             issue,
@@ -10796,7 +10301,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
 
         // A blocker is marked in the two places reviewers look: a label that
-        // sorts it out of a queue of thirty, and one Slack post. Both are
+        // sorts it out of a queue of thirty, and one notification. Both are
         // applied after creation, so a failure costs the signal rather than the
         // merge request.
         if blocker {
@@ -10813,15 +10318,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     ),
                 }
             }
-            let webhook = self.settings_for(issue.project_id).await.slack_webhook_url;
-            slack::notify_if_configured(
-                webhook.as_deref(),
-                &format!(
-                    "Blocker merge request needs review — {jira_key}\n{summary}\n{}",
-                    pr_info.url
-                ),
-            )
-            .await;
+            self.notifications
+                .send(
+                    Some(issue.project_id),
+                    Event::BlockerMrOpened {
+                        issue: issue_ref(issue, metadata),
+                        mr_url: pr_info.url.clone(),
+                        summary: summary.to_string(),
+                    },
+                )
+                .await;
         }
 
         // Blame-based reviewer assignment (best effort — the MR exists
@@ -11274,15 +10780,21 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     fresh.len(),
                     jira_ref.key
                 );
-                slack::notify_if_configured(
-                    settings.slack_webhook_url.as_deref(),
-                    &format!(
-                        "💬 *{}* — the agent was mentioned in Jira but no session is running:\n{}",
-                        slack::escape_text(&jira_ref.key),
-                        slack::escape_text(&clip_chars(&listing, 700))
-                    ),
-                )
-                .await;
+                self.notifications
+                    .send(
+                        Some(settings.project_id),
+                        Event::MentionNeedsHuman {
+                            issue: issue_ref(issue, &metadata),
+                            mentions: fresh
+                                .iter()
+                                .map(|comment| Mention {
+                                    author: comment.author.clone(),
+                                    text: clip_chars(comment.body_text.trim(), 700),
+                                })
+                                .collect(),
+                        },
+                    )
+                    .await;
                 self.post_autonomy_comment(
                     client,
                     issue,
@@ -12503,162 +12015,6 @@ mod tests {
         for name in ["Clean up", "clean-up", "CLEANUP"] {
             assert!(is_cleanup_column(name), "{name}");
         }
-    }
-
-    fn digest_line(key: &str, title: &str, mr: Option<&str>) -> DigestLine {
-        DigestLine {
-            key: key.to_string(),
-            jira_url: Some(format!("https://example.atlassian.net/browse/{key}")),
-            title: title.to_string(),
-            mr_url: mr.map(str::to_string),
-            urgent: false,
-            days: Some(7),
-            note: String::new(),
-        }
-    }
-
-    #[test]
-    fn a_canvas_row_escapes_the_brackets_every_ticket_title_starts_with() {
-        // "[P0][Blackbaud] …" is reference-link syntax verbatim; unescaped, the
-        // title renders as a broken link.
-        let line = digest_line(
-            "BUG-10079",
-            "BUG-10079: [P0][Blackbaud] Generated PPT requires repair",
-            Some("https://gitlab.com/example-org/example-app/-/merge_requests/9241"),
-        );
-        let row = line.canvas_row(true, false);
-        assert!(row.contains("\\[P0\\]\\[Blackbaud\\]"), "{row}");
-        // The importer's key prefix is dropped: the ticket cell already links
-        // it.
-        assert!(!row.contains("BUG-10079: "), "{row}");
-        assert!(
-            row.contains(
-                "[!9241](https://gitlab.com/example-org/example-app/-/merge_requests/9241)"
-            ),
-            "{row}"
-        );
-    }
-
-    #[test]
-    fn a_pipe_in_a_title_does_not_end_the_cell() {
-        let row = digest_line("BUG-1", "BUG-1: a | b", None).canvas_row(true, false);
-        assert!(row.contains("a \\| b"), "{row}");
-        // MR, ticket, title, age — four cells, so five bars.
-        assert_eq!(row.matches('|').count() - 1, 5, "{row}");
-    }
-
-    #[test]
-    fn a_newline_in_a_title_cannot_end_the_row() {
-        let row = digest_line("BUG-1", "BUG-1: first\nsecond", None).canvas_row(true, false);
-        assert!(row.contains("first second"), "{row}");
-        assert_eq!(row.lines().count(), 1, "{row}");
-    }
-
-    #[test]
-    fn an_urgent_row_is_marked_at_the_head_of_its_title() {
-        // Not the ticket cell, which is barely wider than the key itself, and
-        // not a column of its own — both cost the title width it needs.
-        let mut line = digest_line("BUG-1", "BUG-1: t", None);
-        line.urgent = true;
-        assert!(
-            line.canvas_row(true, false)
-                .ends_with("|:red_circle: t|7d|")
-        );
-        assert!(
-            digest_line("BUG-1", "BUG-1: t", None)
-                .canvas_row(true, false)
-                .ends_with("|t|7d|")
-        );
-    }
-
-    #[test]
-    fn a_reason_rides_under_the_title_rather_than_in_its_own_column() {
-        let mut line = digest_line("BUG-1", "BUG-1: t", None);
-        line.note = "its merge request was closed unmerged".to_string();
-        let row = line.canvas_row(true, true);
-        assert!(
-            row.contains("|t<br>_its merge request was closed unmerged_|"),
-            "{row}"
-        );
-        // Four cells, so five bars — no escaped pipe in this title to discount.
-        assert_eq!(row.matches('|').count(), 5, "{row}");
-        assert!(!line.canvas_row(true, false).contains("closed unmerged"));
-    }
-
-    #[test]
-    fn the_canvas_lists_every_card_where_the_message_caps() {
-        // The cap is the reason for the canvas: 20 cards is more than
-        // DIGEST_SECTION_CAP, and all 20 must appear.
-        let lines: Vec<DigestLine> = (0..20)
-            .map(|n| digest_line(&format!("BUG-{n}"), &format!("BUG-{n}: title {n}"), None))
-            .collect();
-        assert!(lines.len() > DIGEST_SECTION_CAP);
-        let markdown = canvas_markdown(
-            "Friday 4 September, 8:00 AM PDT",
-            "Monday 7 September",
-            &[CanvasSection {
-                heading: "Needs an answer",
-                waiting_on: "Waiting on a person to settle a question.",
-                mr_column: false,
-                show_why: false,
-                lines: &lines,
-            }],
-        );
-        assert_eq!(markdown.matches("\n|[BUG-").count(), 20, "one row per card");
-        for n in 0..20 {
-            assert!(markdown.contains(&format!("BUG-{n}]")), "missing BUG-{n}");
-        }
-        assert!(markdown.contains("## Needs an answer — 20"));
-        // Header and rule carry one fewer column without the merge requests.
-        assert!(markdown.contains("|Ticket|Title|Age|"));
-        assert!(markdown.contains("|---|---|---|"));
-        assert!(markdown.contains("Last updated **Friday 4 September, 8:00 AM PDT**"));
-        assert!(markdown.contains("next update **Monday 7 September**"));
-        assert!(!markdown.contains("and 8 more"));
-    }
-
-    #[test]
-    fn an_empty_section_prints_no_table_at_all() {
-        let markdown = canvas_markdown(
-            "Friday 4 September, 8:00 AM PDT",
-            "Monday 7 September",
-            &[CanvasSection {
-                heading: "Not moving",
-                waiting_on: "Waiting on someone to decide the next step.",
-                mr_column: true,
-                show_why: true,
-                lines: &[],
-            }],
-        );
-        assert!(!markdown.contains("## Not moving"));
-        assert!(markdown.contains("Nothing is waiting on a person today."));
-    }
-
-    #[test]
-    fn a_line_with_a_merge_request_links_to_it_by_number() {
-        let line = digest_line(
-            "BUG-10079",
-            "BUG-10079: Generated PPT requires repair",
-            Some("https://gitlab.com/example-org/example-app/-/merge_requests/9256"),
-        );
-        let out = line.render();
-        assert!(out.contains("|!9256>"), "{out}");
-        // The importer's key prefix is dropped; the key stays searchable.
-        assert!(out.contains("Generated PPT requires repair"), "{out}");
-        assert!(!out.contains("BUG-10079: Generated"), "{out}");
-        assert!(out.contains("`BUG-10079`"), "{out}");
-    }
-
-    #[test]
-    fn a_line_without_one_links_to_the_ticket() {
-        let line = digest_line(
-            "BUG-9714",
-            "BUG-9714: Account Name dropdown is cut off",
-            None,
-        );
-        let out = line.render();
-        assert!(out.contains("|BUG-9714>"), "{out}");
-        assert!(out.contains("Account Name dropdown is cut off"), "{out}");
     }
 
     #[test]

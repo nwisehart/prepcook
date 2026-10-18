@@ -18,6 +18,7 @@ pub mod events;
 pub mod execution_processes;
 pub mod frontend;
 pub mod health;
+pub mod integrations;
 pub mod knowledge;
 pub mod lavish_proxy;
 pub mod organizations;
@@ -55,6 +56,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(scripts::router())
         .merge(tracker::router())
         .merge(slack::router())
+        .merge(integrations::router())
         .merge(connectors::router())
         .merge(knowledge::router())
         .merge(events::router(&deployment))

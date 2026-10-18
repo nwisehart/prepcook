@@ -44,6 +44,9 @@ function SettingsDialogNavigation({
   const hostSections = SETTINGS_SECTION_DEFINITIONS.filter(
     (section) => section.group === 'host'
   );
+  const integrationSections = SETTINGS_SECTION_DEFINITIONS.filter(
+    (section) => section.group === 'integrations'
+  );
   const universalSections = SETTINGS_SECTION_DEFINITIONS.filter(
     (section) => section.group === 'universal'
   );
@@ -84,6 +87,18 @@ function SettingsDialogNavigation({
         </div>
         <div className="flex flex-col gap-1">
           {hostSections.map((section) => renderSectionButton(section.id))}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="px-3 pt-1">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
+            {t('settings.layout.nav.integrationsGroup')}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          {integrationSections.map((section) =>
+            renderSectionButton(section.id)
+          )}
         </div>
       </div>
       <div className="space-y-2">

@@ -15,6 +15,7 @@
         "title": "Settings",
         "machineSettings": "Machine Settings",
         "accountSettings": "Account Settings",
+        "integrationsGroup": "Integrations",
         "pairOtherMachines": "Pair other machines",
         "selectHost": "Select host",
         "general": "General",
@@ -35,8 +36,8 @@
         "playbooksDesc": "Stage prompt templates for bug and story work",
         "orchestrator": "Orchestrator",
         "orchestratorDesc": "Automatic agent launches per kanban column",
-        "integrations": "Integrations",
-        "integrationsDesc": "Optional connectors for agents (Sentry)",
+        "integrations": "Reviewers & Sentry",
+        "integrationsDesc": "Merge request reviewer picks and the Sentry connector for agents",
         "claude": "Claude",
         "claudeDesc": "Subscription seat health and re-authentication",
         "connectors": "Connectors",
@@ -52,7 +53,9 @@
         "relay": "Remote Access",
         "relayDesc": "Relay tunnel and enrollment",
         "usage": "Usage",
-        "usageDesc": "Token spend per model and workspace"
+        "usageDesc": "Token spend per model and workspace",
+        "notifications": "Notifications",
+        "notificationsDesc": "Where escalations, the digest and alerts are sent"
       }
     },
     "board": {
@@ -614,16 +617,6 @@
         "lavishLabel": "Approve in the document (Lavish)",
         "lavishHelper": "The document carries Approve and Request changes buttons and opens in a Lavish review session. Off: the document has no buttons, and the agent waits for a decision from the card, the ticket or the API."
       },
-      "slack": {
-        "title": "Slack notifications",
-        "description": "Best-effort notifications for events that need a human: low-confidence RCA escalations, autonomy review-loop caps, and repeated launch failures.",
-        "webhookLabel": "Incoming webhook URL",
-        "webhookHelper": "A Slack incoming-webhook URL (https://hooks.slack.com/services/…). Leave empty to disable.",
-        "botTokenLabel": "Bot token (for reply polling)",
-        "botTokenHelper": "A Slack bot token (xoxb-…). When set together with a channel, planning escalations post via the Slack API so teammate replies in the escalation thread are fed back to the blocked agent. Requires chat:write and channels:history (or groups:history) scopes, and the bot must be in the channel. Leave empty to post via the webhook only (no reply polling).",
-        "channelLabel": "Channel ID (for reply polling)",
-        "channelHelper": "The channel escalations post to when a bot token is set, e.g. C0123456."
-      },
       "projects": {
         "title": "Automated projects",
         "description": "Only tickets in these projects are automated. Pick which local repositories agent workspaces check out for each project.",
@@ -661,8 +654,12 @@
         "assignedJqlHelper": "This board's assigned-pickup filter; blank inherits the global one (there is no per-board off — scope the filter instead). Requires ticket pickup on this board. Boards sharing a tracker project add their routing here (component, label) just like the pickup filter above.",
         "trackerKeyLabel": "Tracker project key",
         "trackerKeyHelper": "Only when this board's tickets live in a different tracker project. Site and credentials stay global.",
-        "slackLabel": "Slack notifications",
-        "slackHelper": "Set to Off to silence this board without clearing the global webhook.",
+        "notificationsLabel": "Notifications",
+        "notificationsHelper": "Set to Off to silence every notification for this board.",
+        "skipGlobalLabel": "Skip global targets",
+        "skipGlobalHelper": "This board does not send to the global targets of the kinds checked here; its own targets below still apply.",
+        "boardTargetsLabel": "Board targets",
+        "boardTargetsHelper": "Targets only this board sends to, on top of the global ones it keeps.",
         "blankInheritsHelper": "Blank inherits the global value.",
         "autoAssignLabel": "Assign reviewers from blame",
         "autoAssignHelper": "Assign the humans who last touched the changed lines as MR reviewers.",
@@ -1020,6 +1017,26 @@
         "excludeHelper": "Never pick these as reviewers (bot and shared identities are excluded automatically).",
         "botsLabel": "Ignored comment authors",
         "botsHelper": "Logins whose review comments are never fed back to the agent (GitLab token bots containing “_bot” and GitHub apps ending in “[bot]” are ignored automatically)."
+      },
+      "section": {
+        "required": "required",
+        "empty": "Nothing configured yet.",
+        "remove": "Remove",
+        "unknownKind": "Unknown kind “{{kind}}”: this entry is ignored until it is removed.",
+        "test": "Test connection",
+        "testing": "Testing…",
+        "addLabel": "Add",
+        "add": "Add"
+      }
+    },
+    "notifications": {
+      "title": "Notification targets",
+      "description": "Where Prep Cook sends the events that need a person: planning escalations, review and pipeline escalations, blocker merge requests, the daily digest and Claude seat alerts. Every target gets every event unless its events list names some. A Slack target with a bot token and channel also carries replies to an escalation back to the blocked agent.",
+      "eventsLabel": "Events",
+      "eventsHelper": "Comma-separated event kinds this target receives, e.g. planning_escalated, daily_digest. Blank or * sends every event.",
+      "save": {
+        "success": "Notification targets saved.",
+        "error": "Failed to save notification targets."
       }
     },
     "connectors": {

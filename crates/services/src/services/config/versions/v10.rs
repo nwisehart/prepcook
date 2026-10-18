@@ -7,10 +7,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 pub use v9::{
-    AutonomyMode, EditorConfig, EditorType, EffectiveMrSettings, GitHubConfig, NotificationConfig,
-    OrchestratorMode, ProjectMrOverride, ProjectSlackOverride, RetentionOverride,
-    SendMessageShortcut, ShowcaseState, SoundFile, ThemeMode, UiLanguage, WatchTarget,
-    WorktreePoolConfig,
+    AutonomyMode, EditorConfig, EditorType, EffectiveMrSettings, GitHubConfig, OrchestratorMode,
+    ProjectMrOverride, ProjectSlackOverride, RetentionOverride, SendMessageShortcut, ShowcaseState,
+    SoundFile, ThemeMode, UiLanguage, WatchTarget, WorktreePoolConfig,
 };
 use v9::{
     default_autonomy_review_iterations, default_investigation_threshold, default_jira_type_mapping,
@@ -22,7 +21,10 @@ pub use crate::services::config::playbooks::{
     INVESTIGATION_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY,
     TRIAGE_PLAYBOOK_KEY, default_playbooks,
 };
-use crate::services::config::versions::{superseded_playbooks, v9};
+use crate::services::{
+    config::versions::{superseded_playbooks, v9},
+    notifications::NotifierKind,
+};
 
 /// Shipped playbook texts that have since been replaced, byte-for-byte, as
 /// `(key, old text)`. Saved configs persist the whole playbook map, so a user
@@ -71,6 +73,94 @@ fn default_port_range() -> String {
 
 fn default_max_parallel() -> u32 {
     2
+}
+
+/// Desktop notifications, and the services events are sent to.
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+pub struct NotificationConfig {
+    pub sound_enabled: bool,
+    pub push_enabled: bool,
+    pub sound_file: SoundFile,
+    /// Where orchestrator events go (escalations, the digest, seat alerts):
+    /// any number of Slack, webhook, Discord and Teams targets, each sent
+    /// every event unless its `events` names some. See
+    /// `docs/notifications.md`.
+    #[serde(default)]
+    pub targets: Vec<NotificationTarget>,
+}
+
+impl Default for NotificationConfig {
+    fn default() -> Self {
+        let old = v9::NotificationConfig::default();
+        Self {
+            sound_enabled: old.sound_enabled,
+            push_enabled: old.push_enabled,
+            sound_file: old.sound_file,
+            targets: Vec::new(),
+        }
+    }
+}
+
+impl From<v9::NotificationConfig> for NotificationConfig {
+    fn from(old: v9::NotificationConfig) -> Self {
+        Self {
+            sound_enabled: old.sound_enabled,
+            push_enabled: old.push_enabled,
+            sound_file: old.sound_file,
+            targets: Vec::new(),
+        }
+    }
+}
+
+/// One place notifications are sent to.
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+pub struct NotificationTarget {
+    pub kind: NotifierKind,
+    /// Event kinds this target receives. Unset, or a list holding `*`, is
+    /// every event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub events: Option<Vec<String>>,
+    /// The provider's own settings, keyed as its descriptor names them
+    /// (`webhook_url`, `bot_token`, …), alongside `kind` in the same object.
+    #[serde(flatten)]
+    pub fields: BTreeMap<String, serde_json::Value>,
+}
+
+/// Where a resolved target came from: secret fields of a board's own target
+/// prefer its configured value over the shared secrets-store entry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetOrigin {
+    Global,
+    Board,
+}
+
+/// A board's notification routing. Unset keeps the global targets.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq)]
+pub struct ProjectNotificationsOverride {
+    /// `Some(false)` silences every target for this board, its own included.
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    /// Kinds of global target this board does not send to; its own targets
+    /// of that kind still apply.
+    #[serde(default)]
+    pub skip_global: Vec<NotifierKind>,
+    /// Targets this board sends to on top of the global ones it keeps.
+    #[serde(default)]
+    pub targets: Vec<NotificationTarget>,
+}
+
+impl ProjectNotificationsOverride {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+fn slack_override_is_empty(slack: &ProjectSlackOverride) -> bool {
+    slack.webhook_url.is_none()
+        && slack.bot_token.is_none()
+        && slack.channel.is_none()
+        && slack.enabled.is_none()
 }
 
 /// How the script runner stands target apps up (see `docs/scripts.md`).
@@ -510,7 +600,7 @@ pub struct DeployWatch {
 /// workspaces, plus that board's overrides for otherwise-global settings.
 ///
 /// One runner drives several boards (the app, extensions, …), each with its
-/// own repo, Jira filter, Slack channel and reviewers. Everything
+/// own repo, Jira filter, notification targets and reviewers. Everything
 /// board-specific therefore lives here as an *override*: `None` and empty
 /// collections mean "inherit the global value", so a single-board setup needs
 /// nothing beyond `repo_ids`. Read these through
@@ -524,8 +614,8 @@ pub struct ProjectAutomationDefaults {
     /// Overrides the global executor profile for this project's playbooks.
     #[serde(default)]
     pub executor_profile: Option<ExecutorProfileId>,
-    /// Short board name (e.g. "extensions"), used for the RCA `board:` tag
-    /// and Slack context lines. Unset leaves both unlabelled.
+    /// Short board name (e.g. "extensions"), used for the RCA `board:` tag.
+    /// Unset leaves it unlabelled.
     #[serde(default)]
     pub label: Option<String>,
     /// Also read from a `jira` key, so a config that names the override
@@ -533,6 +623,11 @@ pub struct ProjectAutomationDefaults {
     #[serde(default, alias = "jira")]
     pub tracker: ProjectTrackerOverride,
     #[serde(default)]
+    pub notifications: ProjectNotificationsOverride,
+    /// Board Slack routing as older configs wrote it; read once on load and
+    /// converted into `notifications` (see [`Config::adopt_legacy_slack`]).
+    #[serde(default, skip_serializing_if = "slack_override_is_empty")]
+    #[ts(skip)]
     pub slack: ProjectSlackOverride,
     #[serde(default)]
     pub merge_requests: ProjectMrOverride,
@@ -571,6 +666,7 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
             executor_profile: old.executor_profile,
             label: old.label,
             tracker: old.jira.into(),
+            notifications: ProjectNotificationsOverride::default(),
             slack: old.slack,
             merge_requests: old.merge_requests,
             playbooks: old.playbooks,
@@ -626,11 +722,12 @@ pub struct OrchestratorConfig {
     #[serde(default)]
     pub autonomy: AutonomyMode,
     /// REQUEST CHANGES → fix → re-review cycles autonomy runs before
-    /// escalating to Slack and leaving the ticket for a human.
+    /// escalating to the notification targets and leaving the ticket for a
+    /// human.
     #[serde(default = "default_autonomy_review_iterations")]
     pub autonomy_review_iterations: u32,
-    /// Local time of day, `HH:MM`, at which the engineers' digest is posted
-    /// to each board's Slack route. `None` — and any value that does not
+    /// Local time of day, `HH:MM`, at which the engineers' digest is sent to
+    /// each board's notification targets. `None` — and any value that does not
     /// parse — disables it, so a typo is silence rather than a post at
     /// midnight.
     #[serde(default)]
@@ -649,7 +746,7 @@ pub struct OrchestratorConfig {
     #[serde(default)]
     pub project_defaults: BTreeMap<String, ProjectAutomationDefaults>,
     /// Probe the Claude subscription seat with a headless `claude -p` every
-    /// six hours and post to Slack when its login expires. Off by default: it
+    /// six hours and notify when its login expires. Off by default: it
     /// is for a shared runner, and on a laptop it would spawn `claude` on its
     /// own. Settings' "Re-check now" probes on demand either way.
     #[serde(default)]
@@ -719,9 +816,6 @@ pub struct EffectiveProjectSettings {
     pub watcher_jql: String,
     /// Assigned-pickup JQL, `{project_key}` substituted; `None` = off.
     pub assigned_jql: Option<String>,
-    pub slack_webhook_url: Option<String>,
-    pub slack_bot_token: Option<String>,
-    pub slack_channel: Option<String>,
     pub playbooks: BTreeMap<String, String>,
     pub autonomy: AutonomyMode,
     pub autonomy_review_iterations: u32,
@@ -768,21 +862,17 @@ pub struct Config {
     /// The issue tracker; see [`TrackerConfig`].
     #[serde(default)]
     pub tracker: TrackerConfig,
-    /// Slack incoming-webhook URL for orchestrator notifications
-    /// (low-confidence escalations, autonomy failures). `None` disables
-    /// Slack notifications.
-    #[serde(default)]
+    /// Slack settings as older configs wrote them. Read once on load and
+    /// converted into a Slack entry in `notifications.targets` (see
+    /// [`Config::adopt_legacy_slack`]); nothing else reads them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
     pub slack_webhook_url: Option<String>,
-    /// Slack bot token (`xoxb-…`). When set together with `slack_channel`,
-    /// planning escalations post via the Web API (chat.postMessage) so the
-    /// orchestrator can poll the escalation thread for teammate replies and
-    /// feed them back to the blocked agent. When unset, escalations fall
-    /// back to `slack_webhook_url` (post-only, no reply polling).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
     pub slack_bot_token: Option<String>,
-    /// Slack channel id (e.g. `C0123456`) escalations post to when
-    /// `slack_bot_token` is set.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
     pub slack_channel: Option<String>,
     /// Stage playbooks keyed by "{work_class}:{stage}"; see default_playbooks.
     #[serde(default = "default_playbooks")]
@@ -815,7 +905,7 @@ impl Config {
             disclaimer_acknowledged: old_config.disclaimer_acknowledged,
             onboarding_acknowledged: old_config.onboarding_acknowledged,
             remote_onboarding_acknowledged: old_config.remote_onboarding_acknowledged,
-            notifications: old_config.notifications,
+            notifications: old_config.notifications.into(),
             // EditorConfig is shared across versions; keys it no longer
             // defines (such as `auto_install_extension`) are ignored when read
             // and dropped on the next save.
@@ -859,12 +949,14 @@ impl From<String> for Config {
         {
             upgrade_stale_playbooks(&mut config.playbooks);
             adopt_legacy_tracker_fields(&mut config, &raw_config);
+            config.adopt_legacy_slack();
             return config;
         }
 
         match Self::from_previous_version(&raw_config) {
-            Ok(config) => {
+            Ok(mut config) => {
                 tracing::info!("Config upgraded to v10");
+                config.adopt_legacy_slack();
                 config
             }
             Err(e) => {
@@ -982,17 +1074,6 @@ impl Config {
             .or_else(|| non_empty(&self.tracker.assigned_filter))
             .map(|jql| jql.replace("{project_key}", &jira_project_key));
 
-        let slack_enabled = board.slack.enabled.unwrap_or(true);
-        let (slack_webhook_url, slack_bot_token, slack_channel) = if slack_enabled {
-            (
-                non_empty(&board.slack.webhook_url).or_else(|| non_empty(&self.slack_webhook_url)),
-                non_empty(&board.slack.bot_token).or_else(|| non_empty(&self.slack_bot_token)),
-                non_empty(&board.slack.channel).or_else(|| non_empty(&self.slack_channel)),
-            )
-        } else {
-            (None, None, None)
-        };
-
         let mut playbooks = self.playbooks.clone();
         for (key, text) in &board.playbooks {
             if !text.trim().is_empty() {
@@ -1026,9 +1107,6 @@ impl Config {
             watcher_enabled,
             watcher_jql,
             assigned_jql,
-            slack_webhook_url,
-            slack_bot_token,
-            slack_channel,
             playbooks,
             autonomy: board.autonomy.unwrap_or(self.orchestrator.autonomy),
             autonomy_review_iterations: board
@@ -1064,6 +1142,140 @@ impl Config {
                     git_ref: watch.git_ref.trim().to_string(),
                 })
                 .filter(|watch| !watch.job_name.is_empty() && !watch.git_ref.is_empty()),
+        }
+    }
+
+    /// The notification targets `board` sends to (the global ones for
+    /// `None`): the global targets, less the kinds the board skips, plus the
+    /// board's own — or nothing when the board is silenced.
+    pub fn notification_targets(
+        &self,
+        board: Option<Uuid>,
+    ) -> Vec<(TargetOrigin, NotificationTarget)> {
+        let routing = board.and_then(|id| {
+            self.orchestrator
+                .project_defaults
+                .get(&id.to_string())
+                .map(|defaults| &defaults.notifications)
+        });
+        let Some(routing) = routing else {
+            return self
+                .notifications
+                .targets
+                .iter()
+                .map(|target| (TargetOrigin::Global, target.clone()))
+                .collect();
+        };
+        if routing.enabled == Some(false) {
+            return Vec::new();
+        }
+        self.notifications
+            .targets
+            .iter()
+            .filter(|target| !routing.skip_global.contains(&target.kind))
+            .map(|target| (TargetOrigin::Global, target.clone()))
+            .chain(
+                routing
+                    .targets
+                    .iter()
+                    .map(|target| (TargetOrigin::Board, target.clone())),
+            )
+            .collect()
+    }
+
+    /// Converts Slack settings written by older configs into notification
+    /// targets, once: the global `slack_*` fields become one Slack target
+    /// when `notifications.targets` is empty, and a board's `slack` override
+    /// becomes that board's routing (its own Slack target, merged over the
+    /// global Slack settings, in place of the global one). The converted
+    /// fields are cleared, so the next save drops them.
+    pub fn adopt_legacy_slack(&mut self) {
+        fn non_empty(value: &Option<String>) -> Option<String> {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        }
+        fn slack_target(
+            webhook_url: Option<String>,
+            bot_token: Option<String>,
+            channel: Option<String>,
+        ) -> NotificationTarget {
+            let fields = [
+                ("webhook_url", webhook_url),
+                ("bot_token", bot_token),
+                ("channel", channel),
+            ]
+            .into_iter()
+            .filter_map(|(key, value)| Some((key.to_string(), serde_json::Value::String(value?))))
+            .collect();
+            NotificationTarget {
+                kind: NotifierKind::Slack,
+                events: None,
+                fields,
+            }
+        }
+
+        let legacy = (
+            non_empty(&self.slack_webhook_url),
+            non_empty(&self.slack_bot_token),
+            non_empty(&self.slack_channel),
+        );
+        // The global Slack settings a board override is merged over: the
+        // legacy fields, or the Slack target they were already converted to.
+        let global_slack = match &legacy {
+            (None, None, _) => self
+                .notifications
+                .targets
+                .iter()
+                .find(|target| target.kind == NotifierKind::Slack)
+                .map(|target| {
+                    let field = |key: &str| {
+                        target
+                            .fields
+                            .get(key)
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    };
+                    (field("webhook_url"), field("bot_token"), field("channel"))
+                })
+                .unwrap_or((None, None, None)),
+            (webhook, token, channel) => (webhook.clone(), token.clone(), channel.clone()),
+        };
+
+        if (legacy.0.is_some() || legacy.1.is_some()) && self.notifications.targets.is_empty() {
+            let (webhook, token, channel) = legacy;
+            self.notifications
+                .targets
+                .push(slack_target(webhook, token, channel));
+            self.slack_webhook_url = None;
+            self.slack_bot_token = None;
+            self.slack_channel = None;
+            tracing::info!("Config: Slack settings moved into notifications.targets");
+        }
+
+        for defaults in self.orchestrator.project_defaults.values_mut() {
+            if slack_override_is_empty(&defaults.slack) || !defaults.notifications.is_empty() {
+                continue;
+            }
+            let slack = std::mem::take(&mut defaults.slack);
+            if slack.enabled == Some(false) {
+                defaults.notifications.enabled = Some(false);
+            }
+            let own = (
+                non_empty(&slack.webhook_url),
+                non_empty(&slack.bot_token),
+                non_empty(&slack.channel),
+            );
+            if own.0.is_some() || own.1.is_some() || own.2.is_some() {
+                defaults.notifications.skip_global = vec![NotifierKind::Slack];
+                defaults.notifications.targets.push(slack_target(
+                    own.0.or_else(|| global_slack.0.clone()),
+                    own.1.or_else(|| global_slack.1.clone()),
+                    own.2.or_else(|| global_slack.2.clone()),
+                ));
+            }
         }
     }
 
@@ -1108,11 +1320,25 @@ impl Config {
 mod project_settings_tests {
     use super::*;
 
+    fn slack(fields: &[(&str, &str)]) -> NotificationTarget {
+        NotificationTarget {
+            kind: NotifierKind::Slack,
+            events: None,
+            fields: fields
+                .iter()
+                .map(|(key, value)| (key.to_string(), serde_json::json!(value)))
+                .collect(),
+        }
+    }
+
     /// Single-repository board: repos only, everything else inherited.
     fn config_with_board(project_id: Uuid, board: ProjectAutomationDefaults) -> Config {
         let mut config = Config::default();
         config.tracker.project_key = Some("BUG".to_string());
-        config.slack_webhook_url = Some("https://hooks.slack/global".to_string());
+        config
+            .notifications
+            .targets
+            .push(slack(&[("webhook_url", "https://hooks.slack/global")]));
         config.orchestrator.autonomy = AutonomyMode::Full;
         config.orchestrator.deployed_retention_days = Some(7);
         config.orchestrator.investigation_threshold = 5;
@@ -1170,8 +1396,11 @@ mod project_settings_tests {
 
         assert_eq!(settings.jira_project_key, "BUG");
         assert_eq!(
-            settings.slack_webhook_url.as_deref(),
-            Some("https://hooks.slack/global")
+            config.notification_targets(Some(project_id)),
+            vec![(
+                TargetOrigin::Global,
+                slack(&[("webhook_url", "https://hooks.slack/global")])
+            )]
         );
         assert_eq!(settings.autonomy, AutonomyMode::Full);
         assert_eq!(settings.deployed_retention_days, Some(7));
@@ -1196,7 +1425,14 @@ mod project_settings_tests {
         };
         board.tracker.jql_filter =
             Some("project = {project_key} AND component = Extension".to_string());
-        board.slack.channel = Some("C0EXT".to_string());
+        board.notifications.targets.push(NotificationTarget {
+            kind: NotifierKind::Webhook,
+            events: Some(vec!["daily_digest".to_string()]),
+            fields: BTreeMap::from([(
+                "url".to_string(),
+                serde_json::json!("https://example.com/hook"),
+            )]),
+        });
         board
             .merge_requests
             .reviewer_map
@@ -1206,19 +1442,20 @@ mod project_settings_tests {
             "extension-specific RCA".to_string(),
         );
 
-        let settings = config_with_board(project_id, board).project_settings(project_id);
+        let config = config_with_board(project_id, board);
+        let settings = config.project_settings(project_id);
 
         assert_eq!(settings.label.as_deref(), Some("extensions"));
         assert_eq!(
             settings.watcher_jql,
             "project = BUG AND component = Extension"
         );
-        assert_eq!(settings.slack_channel.as_deref(), Some("C0EXT"));
-        // Global webhook still applies — only the channel differs.
-        assert_eq!(
-            settings.slack_webhook_url.as_deref(),
-            Some("https://hooks.slack/global")
-        );
+        // The board's own target adds to the global one.
+        let targets = config.notification_targets(Some(project_id));
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].0, TargetOrigin::Global);
+        assert_eq!(targets[1].0, TargetOrigin::Board);
+        assert_eq!(targets[1].1.kind, NotifierKind::Webhook);
         assert_eq!(settings.autonomy, AutonomyMode::Off);
         assert_eq!(settings.deployed_retention_days, None);
         // The Clean-up sweep resolves the same three ways, independently.
@@ -1266,13 +1503,30 @@ mod project_settings_tests {
     }
 
     #[test]
-    fn slack_can_be_silenced_for_one_board() {
+    fn notifications_can_be_silenced_or_replaced_for_one_board() {
         let project_id = Uuid::new_v4();
         let mut board = ProjectAutomationDefaults::default();
-        board.slack.enabled = Some(false);
-        let settings = config_with_board(project_id, board).project_settings(project_id);
-        assert!(settings.slack_webhook_url.is_none());
-        assert!(settings.slack_channel.is_none());
+        board.notifications.enabled = Some(false);
+        let config = config_with_board(project_id, board);
+        assert!(config.notification_targets(Some(project_id)).is_empty());
+        // The global scope and other boards are unaffected.
+        assert_eq!(config.notification_targets(None).len(), 1);
+        assert_eq!(config.notification_targets(Some(Uuid::new_v4())).len(), 1);
+
+        let mut board = ProjectAutomationDefaults::default();
+        board.notifications.skip_global = vec![NotifierKind::Slack];
+        board
+            .notifications
+            .targets
+            .push(slack(&[("webhook_url", "https://hooks.slack/board")]));
+        let config = config_with_board(project_id, board);
+        assert_eq!(
+            config.notification_targets(Some(project_id)),
+            vec![(
+                TargetOrigin::Board,
+                slack(&[("webhook_url", "https://hooks.slack/board")])
+            )]
+        );
     }
 
     #[test]
@@ -1381,6 +1635,96 @@ mod project_settings_tests {
 mod migration_tests {
     use super::*;
 
+    /// A v10 file as written before notification targets existed.
+    fn legacy_slack_config() -> serde_json::Value {
+        let board = "6f8c2f8e-0000-4000-8000-000000000001";
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        raw["slack_webhook_url"] = serde_json::json!("https://hooks.slack.com/services/T/B/global");
+        raw["slack_bot_token"] = serde_json::json!("xoxb-global");
+        raw["slack_channel"] = serde_json::json!("C0GLOBAL");
+        raw["notifications"]
+            .as_object_mut()
+            .unwrap()
+            .remove("targets");
+        raw["orchestrator"]["project_defaults"][board] = serde_json::json!({
+            "repo_ids": [],
+            "slack": { "channel": "C0BOARD" }
+        });
+        raw["orchestrator"]["project_defaults"]["6f8c2f8e-0000-4000-8000-000000000002"] =
+            serde_json::json!({ "repo_ids": [], "slack": { "enabled": false } });
+        raw
+    }
+
+    #[test]
+    fn legacy_slack_settings_become_a_slack_target_once() {
+        let config = Config::from(legacy_slack_config().to_string());
+
+        assert_eq!(config.notifications.targets.len(), 1);
+        let target = &config.notifications.targets[0];
+        assert_eq!(target.kind, NotifierKind::Slack);
+        assert_eq!(
+            target.fields["webhook_url"],
+            "https://hooks.slack.com/services/T/B/global"
+        );
+        assert_eq!(target.fields["bot_token"], "xoxb-global");
+        assert_eq!(target.fields["channel"], "C0GLOBAL");
+        assert!(config.slack_webhook_url.is_none());
+        assert!(config.slack_bot_token.is_none());
+        assert!(config.slack_channel.is_none());
+
+        // A board that only changed the channel gets its own Slack target
+        // carrying the global credentials, in place of the global one.
+        let board = &config.orchestrator.project_defaults["6f8c2f8e-0000-4000-8000-000000000001"];
+        assert_eq!(board.notifications.skip_global, vec![NotifierKind::Slack]);
+        assert_eq!(board.notifications.targets.len(), 1);
+        assert_eq!(board.notifications.targets[0].fields["channel"], "C0BOARD");
+        assert_eq!(
+            board.notifications.targets[0].fields["bot_token"],
+            "xoxb-global"
+        );
+        assert!(slack_override_is_empty(&board.slack));
+        // A silenced board stays silenced.
+        let silenced =
+            &config.orchestrator.project_defaults["6f8c2f8e-0000-4000-8000-000000000002"];
+        assert_eq!(silenced.notifications.enabled, Some(false));
+
+        // The saved file no longer carries the old keys, and loading it again
+        // changes nothing.
+        let saved = serde_json::to_value(&config).unwrap();
+        assert!(saved.get("slack_webhook_url").is_none());
+        assert!(
+            saved["orchestrator"]["project_defaults"]["6f8c2f8e-0000-4000-8000-000000000001"]
+                .get("slack")
+                .is_none()
+        );
+        let reloaded = Config::from(saved.to_string());
+        assert_eq!(reloaded.notifications.targets, config.notifications.targets);
+        assert_eq!(
+            reloaded.orchestrator.project_defaults["6f8c2f8e-0000-4000-8000-000000000001"]
+                .notifications,
+            board.notifications
+        );
+    }
+
+    #[test]
+    fn existing_targets_are_never_overwritten_by_legacy_fields() {
+        let mut raw = legacy_slack_config();
+        raw["notifications"]["targets"] = serde_json::json!([
+            { "kind": "webhook", "url": "https://example.com/hook", "events": ["*"] }
+        ]);
+        let config = Config::from(raw.to_string());
+        assert_eq!(config.notifications.targets.len(), 1);
+        assert_eq!(config.notifications.targets[0].kind, NotifierKind::Webhook);
+        assert_eq!(
+            config.notifications.targets[0].fields["url"],
+            "https://example.com/hook"
+        );
+        assert_eq!(
+            config.notifications.targets[0].events,
+            Some(vec!["*".to_string()])
+        );
+    }
+
     fn with_auto_install_extension(config: serde_json::Value) -> String {
         let mut config = config;
         config["editor"]["auto_install_extension"] = serde_json::Value::Bool(true);
@@ -1406,14 +1750,14 @@ mod migration_tests {
     #[test]
     fn a_v10_config_with_auto_install_extension_loads_as_v10() {
         let current = Config {
-            slack_channel: Some("C0KEEP".to_string()),
+            git_branch_prefix: "keep".to_string(),
             ..Config::default()
         };
         let raw = with_auto_install_extension(serde_json::to_value(&current).unwrap());
 
         let config = Config::from(raw);
         assert_eq!(config.config_version, "v10");
-        assert_eq!(config.slack_channel.as_deref(), Some("C0KEEP"));
+        assert_eq!(config.git_branch_prefix, "keep");
         let editor = serde_json::to_value(&config.editor).unwrap();
         assert!(editor.get("auto_install_extension").is_none());
     }
@@ -1421,6 +1765,7 @@ mod migration_tests {
     #[test]
     fn a_v9_config_upgrades_with_its_settings_and_default_app_runs() {
         let mut old = v9::Config {
+            slack_webhook_url: Some("https://hooks.slack.com/services/T/B/x".to_string()),
             slack_channel: Some("C0TEST".to_string()),
             ..v9::Config::default()
         };
@@ -1429,7 +1774,12 @@ mod migration_tests {
 
         let config = Config::from(raw);
         assert_eq!(config.config_version, "v10");
-        assert_eq!(config.slack_channel.as_deref(), Some("C0TEST"));
+        assert_eq!(config.notifications.targets.len(), 1);
+        assert_eq!(
+            config.notifications.targets[0].fields["channel"],
+            serde_json::json!("C0TEST")
+        );
+        assert!(config.slack_channel.is_none());
         assert_eq!(config.orchestrator.poll_interval_secs, 42);
         assert_eq!(config.app_runs, AppRunsConfig::default());
         assert_eq!(config.app_runs.port_range, "4200-4299");

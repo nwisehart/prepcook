@@ -943,25 +943,6 @@ export type Config = { config_version: string, theme: ThemeMode, executor_profil
  */
 tracker: TrackerConfig, 
 /**
- * Slack incoming-webhook URL for orchestrator notifications
- * (low-confidence escalations, autonomy failures). `None` disables
- * Slack notifications.
- */
-slack_webhook_url: string | null, 
-/**
- * Slack bot token (`xoxb-…`). When set together with `slack_channel`,
- * planning escalations post via the Web API (chat.postMessage) so the
- * orchestrator can poll the escalation thread for teammate replies and
- * feed them back to the blocked agent. When unset, escalations fall
- * back to `slack_webhook_url` (post-only, no reply polling).
- */
-slack_bot_token: string | null, 
-/**
- * Slack channel id (e.g. `C0123456`) escalations post to when
- * `slack_bot_token` is set.
- */
-slack_channel: string | null, 
-/**
  * Stage playbooks keyed by "{work_class}:{stage}"; see default_playbooks.
  */
 playbooks: { [key in string]?: string }, worktree_pool: WorktreePoolConfig, orchestrator: OrchestratorConfig, 
@@ -978,7 +959,14 @@ app_runs: AppRunsConfig,
  */
 approvals: ApprovalsConfig, };
 
-export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, };
+export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, 
+/**
+ * Where orchestrator events go (escalations, the digest, seat alerts):
+ * any number of Slack, webhook, Discord and Teams targets, each sent
+ * every event unless its `events` names some. See
+ * `docs/notifications.md`.
+ */
+targets: Array<NotificationTarget>, };
 
 export enum ThemeMode { LIGHT = "LIGHT", DARK = "DARK", SYSTEM = "SYSTEM" }
 
@@ -1131,12 +1119,13 @@ max_launches_per_tick: number,
 autonomy: AutonomyMode, 
 /**
  * REQUEST CHANGES → fix → re-review cycles autonomy runs before
- * escalating to Slack and leaving the ticket for a human.
+ * escalating to the notification targets and leaving the ticket for a
+ * human.
  */
 autonomy_review_iterations: number, 
 /**
- * Local time of day, `HH:MM`, at which the engineers' digest is posted
- * to each board's Slack route. `None` — and any value that does not
+ * Local time of day, `HH:MM`, at which the engineers' digest is sent to
+ * each board's notification targets. `None` — and any value that does not
  * parse — disables it, so a typo is silence rather than a post at
  * midnight.
  */
@@ -1159,7 +1148,7 @@ daily_timezone: string | null,
 project_defaults: { [key in string]?: ProjectAutomationDefaults }, 
 /**
  * Probe the Claude subscription seat with a headless `claude -p` every
- * six hours and post to Slack when its login expires. Off by default: it
+ * six hours and notify when its login expires. Off by default: it
  * is for a shared runner, and on a laptop it would spawn `claude` on its
  * own. Settings' "Re-check now" probes on demand either way.
  */
@@ -1177,15 +1166,15 @@ repo_ids: Array<string>,
  */
 executor_profile: ExecutorProfileId | null, 
 /**
- * Short board name (e.g. "extensions"), used for the RCA `board:` tag
- * and Slack context lines. Unset leaves both unlabelled.
+ * Short board name (e.g. "extensions"), used for the RCA `board:` tag.
+ * Unset leaves it unlabelled.
  */
 label: string | null, 
 /**
  * Also read from a `jira` key, so a config that names the override
  * that way still loads.
  */
-tracker: ProjectTrackerOverride, slack: ProjectSlackOverride, merge_requests: ProjectMrOverride, 
+tracker: ProjectTrackerOverride, notifications: ProjectNotificationsOverride, merge_requests: ProjectMrOverride, 
 /**
  * Playbook texts used for this board only, keyed like
  * [`Config::playbooks`]. Absent keys inherit the global text, so a board
@@ -1245,12 +1234,55 @@ project_key: string | null,
  */
 assigned_jql: string | null, };
 
-export type ProjectSlackOverride = { webhook_url: string | null, bot_token: string | null, channel: string | null, 
+export type ProjectNotificationsOverride = { 
 /**
- * `Some(false)` silences Slack for this board without clearing the
- * global webhook every other board relies on.
+ * `Some(false)` silences every target for this board, its own included.
  */
-enabled: boolean | null, };
+enabled: boolean | null, 
+/**
+ * Kinds of global target this board does not send to; its own targets
+ * of that kind still apply.
+ */
+skip_global: Array<NotifierKind>, 
+/**
+ * Targets this board sends to on top of the global ones it keeps.
+ */
+targets: Array<NotificationTarget>, };
+
+export type NotificationTarget = { kind: NotifierKind, 
+/**
+ * Event kinds this target receives. Unset, or a list holding `*`, is
+ * every event.
+ */
+events?: Array<string>, } & ({ [key in string]?: number | string | boolean | Array<JsonValue> | { [key in string]?: JsonValue } | null });
+
+export type NotifierKind = "slack" | "webhook" | "discord" | "teams";
+
+export type Descriptor = { 
+/**
+ * The config string naming this provider (`kind` in its config entry).
+ */
+kind: string, display_name: string, 
+/**
+ * One sentence.
+ */
+summary: string, fields: Array<Field>, 
+/**
+ * Names in the secrets store this provider reads, one per secret field.
+ */
+secrets: Array<string>, docs_url: string, };
+
+export type Field = { 
+/**
+ * The key in the provider's config entry.
+ */
+key: string, label: string, kind: FieldKind, required: boolean, help: string, };
+
+export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<string>, } | { "type": "bool" } | { "type": "number" };
+
+export type TestOutcome = { ok: boolean, message: string, };
+
+export type IntegrationTestRequest = { fields?: Record<string, unknown>, };
 
 export type ProjectMrOverride = { reviewer_map: { [key in string]?: string }, reviewer_exclude_emails: Array<string>, auto_assign_reviewers: boolean | null, bot_logins: Array<string>, };
 

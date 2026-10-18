@@ -344,7 +344,7 @@ mod tests {
         assert!(Arc::ptr_eq(&first, &source.current().await));
 
         // A change elsewhere in the config keeps the same tracker.
-        config.write().await.slack_channel = Some("C0TEST".to_string());
+        config.write().await.git_branch_prefix = "elsewhere".to_string();
         assert!(Arc::ptr_eq(&first, &source.current().await));
 
         config.write().await.tracker.kind = TrackerKind::Linear;

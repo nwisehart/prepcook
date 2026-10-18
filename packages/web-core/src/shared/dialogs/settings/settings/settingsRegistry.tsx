@@ -15,6 +15,7 @@ import {
   TreeIcon,
   KeyIcon,
   KanbanIcon,
+  BellIcon,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { GeneralSettingsSection } from './GeneralSettingsSection';
@@ -33,6 +34,7 @@ import { ClaudeSettingsSection } from './ClaudeSettingsSection';
 import { UsageSettingsSection } from './UsageSettingsSection';
 import { ConnectorsSettingsSection } from './ConnectorsSettingsSection';
 import { IntegrationsSettingsSection } from './IntegrationsSettingsSection';
+import { NotificationsSettingsSection } from './NotificationsSettingsSection';
 
 export type SettingsSectionType =
   | 'general'
@@ -50,9 +52,12 @@ export type SettingsSectionType =
   | 'claude'
   | 'usage'
   | 'connectors'
-  | 'worktree-pool';
+  | 'worktree-pool'
+  | 'notifications';
 
-export type SettingsSectionGroup = 'host' | 'universal';
+/// `integrations` holds one section per integration area, each rendered from
+/// its providers' descriptors.
+export type SettingsSectionGroup = 'host' | 'integrations' | 'universal';
 
 export type SettingsSectionInitialState = {
   general: undefined;
@@ -73,6 +78,7 @@ export type SettingsSectionInitialState = {
   usage: undefined;
   connectors: undefined;
   'worktree-pool': undefined;
+  notifications: undefined;
 };
 
 export interface SettingsSectionDefinition {
@@ -95,6 +101,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'usage', icon: ChartBarIcon, group: 'host' },
   { id: 'connectors', icon: PlugsConnectedIcon, group: 'host' },
   { id: 'worktree-pool', icon: TreeIcon, group: 'host' },
+  { id: 'notifications', icon: BellIcon, group: 'integrations' },
   { id: 'board', icon: KanbanIcon, group: 'universal' },
   { id: 'organizations', icon: UsersIcon, group: 'universal' },
   { id: 'remote-projects', icon: CloudIcon, group: 'universal' },
@@ -103,10 +110,11 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
 export function isHostSpecificSettingsSection(
   type: SettingsSectionType
 ): boolean {
-  return (
-    SETTINGS_SECTION_DEFINITIONS.find((section) => section.id === type)
-      ?.group === 'host'
-  );
+  // Integration areas are configured per machine like the host sections.
+  const group = SETTINGS_SECTION_DEFINITIONS.find(
+    (section) => section.id === type
+  )?.group;
+  return group === 'host' || group === 'integrations';
 }
 
 export function renderSettingsSection(
@@ -156,6 +164,8 @@ export function renderSettingsSection(
       return <ConnectorsSettingsSection />;
     case 'worktree-pool':
       return <WorktreePoolSettingsSection />;
+    case 'notifications':
+      return <NotificationsSettingsSection />;
     default:
       return <GeneralSettingsSection />;
   }

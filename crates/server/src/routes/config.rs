@@ -163,9 +163,12 @@ async fn get_user_system_info(
 
 async fn update_config(
     State(deployment): State<DeploymentImpl>,
-    Json(new_config): Json<Config>,
+    Json(mut new_config): Json<Config>,
 ) -> ResponseJson<ApiResponse<Config>> {
     let config_path = config_path();
+    // A client that still sends the old Slack keys gets them converted here,
+    // not only on the next load: nothing reads them once saved.
+    new_config.adopt_legacy_slack();
 
     // Validate git branch prefix
     if !git::is_valid_branch_prefix(&new_config.git_branch_prefix) {

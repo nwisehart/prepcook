@@ -7,10 +7,11 @@
 //! silently, until someone notices tickets stalling.
 //!
 //! This service probes the seat every `CHECK_INTERVAL` by running the `claude`
-//! CLI headlessly. On a healthy → unhealthy transition it posts to the Slack
-//! webhook once (not every tick) and flips a process-wide flag the app surfaces
-//! as a banner (`/api/info` → `claude_seat_degraded`). It clears both when the
-//! seat recovers (someone re-runs `claude /login` on the box).
+//! CLI headlessly. On a healthy → unhealthy transition it notifies the global
+//! notification targets once (not every tick) and flips a process-wide flag
+//! the app surfaces as a banner (`/api/info` → `claude_seat_degraded`). It
+//! clears the flag, and says so, when the seat recovers (someone re-runs
+//! `claude /login` on the box).
 //!
 //! Opt-in (`orchestrator.seat_monitor`): it is for a shared runner, and a
 //! laptop install must not spawn `claude` on its own. The Settings "Re-check
@@ -30,7 +31,10 @@ use std::{
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::services::{config::Config, slack};
+use crate::services::{
+    config::Config,
+    notifications::{Event, NotificationSource},
+};
 
 /// Probe cadence.
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
@@ -68,11 +72,18 @@ pub async fn recheck_now() -> bool {
 
 pub struct SeatMonitorService {
     config: Arc<RwLock<Config>>,
+    notifications: NotificationSource,
 }
 
 impl SeatMonitorService {
-    pub async fn spawn(config: Arc<RwLock<Config>>) -> tokio::task::JoinHandle<()> {
-        let service = Self { config };
+    pub async fn spawn(
+        config: Arc<RwLock<Config>>,
+        notifications: NotificationSource,
+    ) -> tokio::task::JoinHandle<()> {
+        let service = Self {
+            config,
+            notifications,
+        };
         tokio::spawn(async move {
             service.start().await;
         })
@@ -108,23 +119,11 @@ impl SeatMonitorService {
 
         if !healthy && !was_degraded {
             warn!("Claude seat probe failed — the subscription login needs a refresh");
-            let webhook = self.config.read().await.slack_webhook_url.clone();
-            slack::notify_if_configured(
-                webhook.as_deref(),
-                ":warning: *Prep Cook: Claude seat expired.* Agents can't run \
-                 until it's re-authenticated. On the runner:\n\
-                 `sudo docker exec -it prepcook claude /login` \
-                 (sign in as the agent's Claude account, then paste the code).",
-            )
-            .await;
+            // Process-wide: the seat serves every board.
+            self.notifications.send(None, Event::SeatExpired {}).await;
         } else if healthy && was_degraded {
             info!("Claude seat recovered");
-            let webhook = self.config.read().await.slack_webhook_url.clone();
-            slack::notify_if_configured(
-                webhook.as_deref(),
-                ":white_check_mark: *Prep Cook: Claude seat is healthy again.*",
-            )
-            .await;
+            self.notifications.send(None, Event::SeatRecovered {}).await;
         }
     }
 }

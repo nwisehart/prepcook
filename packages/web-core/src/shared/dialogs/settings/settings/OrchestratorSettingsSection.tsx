@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import type {
   DeployWatch,
   InAppGate,
+  NotificationTarget,
+  NotifierKind,
   OrchestratorConfig,
   ProjectAutomationDefaults,
   Repo,
@@ -26,6 +28,14 @@ import {
   SettingsTextarea,
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
+import {
+  IntegrationSection,
+  useIntegrationDescriptors,
+} from './IntegrationSection';
+import {
+  NOTIFICATIONS_AREA,
+  NotificationEventsField,
+} from './NotificationsSettingsSection';
 
 // `poll_interval_secs` is typed bigint (u64 via ts-rs) but is a plain JSON
 // number at runtime; keep it a number so config serialization stays valid.
@@ -56,11 +66,10 @@ const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
     project_key: null,
     assigned_jql: null,
   },
-  slack: {
-    webhook_url: null,
-    bot_token: null,
-    channel: null,
+  notifications: {
     enabled: null,
+    skip_global: [],
+    targets: [],
   },
   merge_requests: {
     reviewer_map: {},
@@ -86,7 +95,7 @@ const withOverrideShape = (
   ...cloneDeep(EMPTY_DEFAULTS),
   ...defaults,
   tracker: { ...EMPTY_DEFAULTS.tracker, ...defaults.tracker },
-  slack: { ...EMPTY_DEFAULTS.slack, ...defaults.slack },
+  notifications: { ...EMPTY_DEFAULTS.notifications, ...defaults.notifications },
   merge_requests: {
     ...EMPTY_DEFAULTS.merge_requests,
     ...defaults.merge_requests,
@@ -145,10 +154,9 @@ const countOverrides = (defaults: ProjectAutomationDefaults): number => {
     board.tracker.jql_filter != null,
     board.tracker.project_key != null,
     board.tracker.assigned_jql != null,
-    board.slack.enabled != null,
-    board.slack.webhook_url != null,
-    board.slack.bot_token != null,
-    board.slack.channel != null,
+    board.notifications.enabled != null,
+    board.notifications.skip_global.length > 0,
+    board.notifications.targets.length > 0,
     board.merge_requests.auto_assign_reviewers != null,
     Object.keys(board.merge_requests.reviewer_map ?? {}).length > 0,
     (board.merge_requests.reviewer_exclude_emails ?? []).length > 0,
@@ -167,20 +175,14 @@ export function OrchestratorSettingsSection() {
   const { t } = useTranslation(['settings', 'common']);
   const { setDirty: setContextDirty } = useSettingsDirty();
   const { config, loading, updateAndSaveConfig } = useUserSystem();
+  const descriptorsQuery = useIntegrationDescriptors();
+  const notificationDescriptors =
+    descriptorsQuery.data?.[NOTIFICATIONS_AREA] ?? [];
 
   const [draft, setDraft] = useState<OrchestratorConfig>(() =>
     config?.orchestrator
       ? cloneDeep(config.orchestrator)
       : cloneDeep(DEFAULT_ORCHESTRATOR_CONFIG)
-  );
-  const [slackWebhookDraft, setSlackWebhookDraft] = useState<string>(
-    () => config?.slack_webhook_url ?? ''
-  );
-  const [slackBotTokenDraft, setSlackBotTokenDraft] = useState<string>(
-    () => config?.slack_bot_token ?? ''
-  );
-  const [slackChannelDraft, setSlackChannelDraft] = useState<string>(
-    () => config?.slack_channel ?? ''
   );
   const [inAppGateDraft, setInAppGateDraft] = useState<InAppGate>(
     () => config?.approvals?.in_app_gate ?? 'lavish'
@@ -198,9 +200,6 @@ export function OrchestratorSettingsSection() {
           ? cloneDeep(config.orchestrator)
           : cloneDeep(DEFAULT_ORCHESTRATOR_CONFIG)
       );
-      setSlackWebhookDraft(config.slack_webhook_url ?? '');
-      setSlackBotTokenDraft(config.slack_bot_token ?? '');
-      setSlackChannelDraft(config.slack_channel ?? '');
       setInAppGateDraft(config.approvals?.in_app_gate ?? 'lavish');
     }
   }, [config, dirty]);
@@ -209,19 +208,9 @@ export function OrchestratorSettingsSection() {
     if (!config) return false;
     return (
       !isEqual(draft, config.orchestrator ?? DEFAULT_ORCHESTRATOR_CONFIG) ||
-      slackWebhookDraft !== (config.slack_webhook_url ?? '') ||
-      slackBotTokenDraft !== (config.slack_bot_token ?? '') ||
-      slackChannelDraft !== (config.slack_channel ?? '') ||
       inAppGateDraft !== (config.approvals?.in_app_gate ?? 'lavish')
     );
-  }, [
-    draft,
-    slackWebhookDraft,
-    slackBotTokenDraft,
-    slackChannelDraft,
-    inAppGateDraft,
-    config,
-  ]);
+  }, [draft, inAppGateDraft, config]);
 
   useEffect(() => {
     setContextDirty('orchestrator', hasUnsavedChanges);
@@ -346,12 +335,6 @@ export function OrchestratorSettingsSection() {
     try {
       await updateAndSaveConfig({
         orchestrator: draft,
-        slack_webhook_url:
-          slackWebhookDraft.trim() === '' ? null : slackWebhookDraft.trim(),
-        slack_bot_token:
-          slackBotTokenDraft.trim() === '' ? null : slackBotTokenDraft.trim(),
-        slack_channel:
-          slackChannelDraft.trim() === '' ? null : slackChannelDraft.trim(),
         approvals: { ...config?.approvals, in_app_gate: inAppGateDraft },
       });
       setDirty(false);
@@ -372,9 +355,6 @@ export function OrchestratorSettingsSection() {
         ? cloneDeep(config.orchestrator)
         : cloneDeep(DEFAULT_ORCHESTRATOR_CONFIG)
     );
-    setSlackWebhookDraft(config.slack_webhook_url ?? '');
-    setSlackBotTokenDraft(config.slack_bot_token ?? '');
-    setSlackChannelDraft(config.slack_channel ?? '');
     setInAppGateDraft(config.approvals?.in_app_gate ?? 'lavish');
     setDirty(false);
   };
@@ -623,51 +603,6 @@ export function OrchestratorSettingsSection() {
       </SettingsCard>
 
       <SettingsCard
-        title={t('settings.orchestrator.slack.title')}
-        description={t('settings.orchestrator.slack.description')}
-      >
-        <SettingsField
-          label={t('settings.orchestrator.slack.webhookLabel')}
-          description={t('settings.orchestrator.slack.webhookHelper')}
-        >
-          <SettingsInput
-            value={slackWebhookDraft}
-            onChange={(value) => {
-              markDirty();
-              setSlackWebhookDraft(value);
-            }}
-            placeholder="https://hooks.slack.com/services/…"
-          />
-        </SettingsField>
-        <SettingsField
-          label={t('settings.orchestrator.slack.botTokenLabel')}
-          description={t('settings.orchestrator.slack.botTokenHelper')}
-        >
-          <SettingsInput
-            value={slackBotTokenDraft}
-            onChange={(value) => {
-              markDirty();
-              setSlackBotTokenDraft(value);
-            }}
-            placeholder="xoxb-…"
-          />
-        </SettingsField>
-        <SettingsField
-          label={t('settings.orchestrator.slack.channelLabel')}
-          description={t('settings.orchestrator.slack.channelHelper')}
-        >
-          <SettingsInput
-            value={slackChannelDraft}
-            onChange={(value) => {
-              markDirty();
-              setSlackChannelDraft(value);
-            }}
-            placeholder="C0123456"
-          />
-        </SettingsField>
-      </SettingsCard>
-
-      <SettingsCard
         title={t('settings.orchestrator.projects.title')}
         description={t('settings.orchestrator.projects.description')}
       >
@@ -862,17 +797,19 @@ export function OrchestratorSettingsSection() {
                   </SettingsField>
 
                   <SettingsField
-                    label={t('settings.orchestrator.board.slackLabel')}
-                    description={t('settings.orchestrator.board.slackHelper')}
+                    label={t('settings.orchestrator.board.notificationsLabel')}
+                    description={t(
+                      'settings.orchestrator.board.notificationsHelper'
+                    )}
                   >
                     <SettingsSelect<TriState>
-                      value={toTriState(defaults.slack.enabled)}
+                      value={toTriState(defaults.notifications.enabled)}
                       options={triStateOptions}
                       onChange={(value) =>
                         updateProjectDefaults(projectId, (current) => ({
                           ...current,
-                          slack: {
-                            ...current.slack,
+                          notifications: {
+                            ...current.notifications,
                             enabled: fromTriState(value),
                           },
                         }))
@@ -881,64 +818,69 @@ export function OrchestratorSettingsSection() {
                   </SettingsField>
 
                   <SettingsField
-                    label={t('settings.orchestrator.slack.webhookLabel')}
+                    label={t('settings.orchestrator.board.skipGlobalLabel')}
                     description={t(
-                      'settings.orchestrator.board.blankInheritsHelper'
+                      'settings.orchestrator.board.skipGlobalHelper'
                     )}
                   >
-                    <SettingsInput
-                      value={defaults.slack.webhook_url ?? ''}
-                      onChange={(value) =>
+                    <div className="flex flex-wrap gap-4">
+                      {notificationDescriptors.map((descriptor) => {
+                        const kind = descriptor.kind as NotifierKind;
+                        return (
+                          <SettingsCheckbox
+                            key={kind}
+                            id={`skip-global-${projectId}-${kind}`}
+                            label={descriptor.display_name}
+                            checked={defaults.notifications.skip_global.includes(
+                              kind
+                            )}
+                            onChange={(checked) =>
+                              updateProjectDefaults(projectId, (current) => ({
+                                ...current,
+                                notifications: {
+                                  ...current.notifications,
+                                  skip_global: checked
+                                    ? [
+                                        ...current.notifications.skip_global,
+                                        kind,
+                                      ]
+                                    : current.notifications.skip_global.filter(
+                                        (skipped) => skipped !== kind
+                                      ),
+                                },
+                              }))
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  </SettingsField>
+
+                  <SettingsField
+                    label={t('settings.orchestrator.board.boardTargetsLabel')}
+                    description={t(
+                      'settings.orchestrator.board.boardTargetsHelper'
+                    )}
+                  >
+                    <IntegrationSection<NotificationTarget>
+                      area={NOTIFICATIONS_AREA}
+                      descriptors={notificationDescriptors}
+                      entries={defaults.notifications.targets}
+                      multiple
+                      onChange={(targets) =>
                         updateProjectDefaults(projectId, (current) => ({
                           ...current,
-                          slack: {
-                            ...current.slack,
-                            webhook_url: orNull(value),
+                          notifications: {
+                            ...current.notifications,
+                            targets,
                           },
                         }))
                       }
-                      placeholder={t(
-                        'settings.orchestrator.board.inheritPlaceholder'
-                      )}
-                    />
-                  </SettingsField>
-
-                  <SettingsField
-                    label={t('settings.orchestrator.slack.channelLabel')}
-                    description={t(
-                      'settings.orchestrator.board.blankInheritsHelper'
-                    )}
-                  >
-                    <SettingsInput
-                      value={defaults.slack.channel ?? ''}
-                      onChange={(value) =>
-                        updateProjectDefaults(projectId, (current) => ({
-                          ...current,
-                          slack: { ...current.slack, channel: orNull(value) },
-                        }))
-                      }
-                      placeholder={t(
-                        'settings.orchestrator.board.inheritPlaceholder'
-                      )}
-                    />
-                  </SettingsField>
-
-                  <SettingsField
-                    label={t('settings.orchestrator.slack.botTokenLabel')}
-                    description={t(
-                      'settings.orchestrator.board.blankInheritsHelper'
-                    )}
-                  >
-                    <SettingsInput
-                      value={defaults.slack.bot_token ?? ''}
-                      onChange={(value) =>
-                        updateProjectDefaults(projectId, (current) => ({
-                          ...current,
-                          slack: { ...current.slack, bot_token: orNull(value) },
-                        }))
-                      }
-                      placeholder={t(
-                        'settings.orchestrator.board.inheritPlaceholder'
+                      renderExtra={(target, update) => (
+                        <NotificationEventsField
+                          target={target}
+                          onChange={update}
+                        />
                       )}
                     />
                   </SettingsField>

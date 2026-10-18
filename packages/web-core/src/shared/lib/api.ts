@@ -25,6 +25,9 @@ import {
   ScriptRunState,
   SecretsResponse,
   SetSecretRequest,
+  Descriptor,
+  IntegrationTestRequest,
+  TestOutcome,
   SearchMode,
   SearchResult,
   Tag,
@@ -1598,6 +1601,32 @@ export const playbooksApi = {
 };
 
 // Secrets store: names and the file path go out, values only come in
+// Integration areas: the providers' descriptors Settings renders from, and
+// their connection tests
+export const integrationsApi = {
+  /** Every area's provider descriptors, keyed by area. */
+  descriptors: async (): Promise<Record<string, Descriptor[]>> => {
+    const response = await makeRequest('/api/integrations/descriptors');
+    return handleApiResponse<Record<string, Descriptor[]>>(response);
+  },
+
+  /** Runs one provider's test against `fields` (unsaved values welcome). */
+  test: async (
+    area: string,
+    kind: string,
+    fields?: IntegrationTestRequest['fields']
+  ): Promise<TestOutcome> => {
+    const body: IntegrationTestRequest = { fields };
+    const response = await makeRequest(
+      `/api/integrations/${encodeURIComponent(area)}/${encodeURIComponent(
+        kind
+      )}/test`,
+      { method: 'POST', body: JSON.stringify(body) }
+    );
+    return handleApiResponse<TestOutcome>(response);
+  },
+};
+
 export const secretsApi = {
   list: async (): Promise<SecretsResponse> => {
     const response = await makeRequest('/api/secrets');
