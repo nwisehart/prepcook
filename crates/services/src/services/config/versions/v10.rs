@@ -23,6 +23,7 @@ pub use crate::services::config::playbooks::{
 };
 use crate::services::{
     config::versions::{superseded_playbooks, v9},
+    evidence::EvidenceKind,
     notifications::NotifierKind,
     reproduction::ReproductionTarget,
 };
@@ -35,7 +36,12 @@ use crate::services::{
 /// `default_playbooks`, append the previous text here.
 pub(super) const SUPERSEDED_PLAYBOOKS: &[(&str, &str)] = &[
     ("bug:planning", superseded_playbooks::BUG_PLANNING_1),
+    ("bug:planning", superseded_playbooks::BUG_PLANNING_2),
     ("epic:executing", superseded_playbooks::EPIC_EXECUTING_1),
+    (
+        "investigation:planning",
+        superseded_playbooks::INVESTIGATION_PLANNING_1,
+    ),
     ("pattern:planning", superseded_playbooks::PATTERN_PLANNING_1),
     ("rca_analysis", superseded_playbooks::RCA_ANALYSIS_1),
 ];
@@ -177,6 +183,82 @@ pub struct ProjectNotificationsOverride {
 }
 
 impl ProjectNotificationsOverride {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// One place the agent can look for evidence (see `docs/evidence.md`).
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct EvidenceSourceConfig {
+    pub kind: EvidenceKind,
+    /// What the agent and `evidence_search` call it; unset is the provider's
+    /// name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub label: Option<String>,
+    /// The provider's own settings, keyed as its descriptor names them
+    /// (`org`, `log_group`, `paths`, …), alongside `kind` in the same object.
+    #[serde(flatten)]
+    pub fields: BTreeMap<String, serde_json::Value>,
+}
+
+/// Where failures leave traces outside the reproduction: what the agent is
+/// told about each place, the MCP servers its sessions get, and what
+/// `evidence_search` reads.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct EvidenceConfig {
+    /// Any number of sources, every board's unless it says otherwise.
+    #[serde(default)]
+    pub sources: Vec<EvidenceSourceConfig>,
+}
+
+impl EvidenceConfig {
+    /// v9's Scalyr settings as a DataSet source, when it had any.
+    fn from_v9(old: &v9::IntegrationsConfig) -> Self {
+        let non_empty = |value: &Option<String>| {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| serde_json::Value::String(value.to_string()))
+        };
+        let fields: BTreeMap<String, serde_json::Value> = [
+            ("read_token", non_empty(&old.scalyr_read_token)),
+            ("server", non_empty(&old.scalyr_server)),
+        ]
+        .into_iter()
+        .filter_map(|(key, value)| Some((key.to_string(), value?)))
+        .collect();
+        let sources = if fields.is_empty() {
+            Vec::new()
+        } else {
+            vec![EvidenceSourceConfig {
+                kind: EvidenceKind::Dataset,
+                label: None,
+                fields,
+            }]
+        };
+        Self { sources }
+    }
+}
+
+/// A board's evidence sources. Unset keeps the global ones.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct ProjectEvidenceOverride {
+    /// `Some(false)` turns every source off for this board, its own included.
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    /// Kinds of global source this board does not use; its own sources of
+    /// that kind still apply.
+    #[serde(default)]
+    pub skip_global: Vec<EvidenceKind>,
+    /// Sources this board uses on top of the global ones it keeps.
+    #[serde(default)]
+    pub sources: Vec<EvidenceSourceConfig>,
+}
+
+impl ProjectEvidenceOverride {
     pub fn is_empty(&self) -> bool {
         *self == Self::default()
     }
@@ -766,11 +848,7 @@ impl From<v9::ProjectJiraOverride> for ProjectTrackerOverride {
     }
 }
 
-/// The optional Sentry connector for the coding agent (its stdio MCP server),
-/// and the merge-request reviewer and
-/// bot settings that apply on every git host. Tokens set here override the
-/// same-named runner environment variables; leave them `None` to rely on the
-/// environment.
+/// The merge-request reviewer and bot settings that apply on every git host.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS)]
 pub struct IntegrationsConfig {
     /// git author email -> git-host login, for blame-based reviewer
@@ -791,13 +869,14 @@ pub struct IntegrationsConfig {
     /// `project_<id>_bot_<hash>`, GitHub apps as `<app>[bot]`).
     #[serde(default)]
     pub bot_logins: Vec<String>,
-    /// Sentry user auth token for the `@sentry/mcp-server` stdio server.
-    /// Overrides `SENTRY_ACCESS_TOKEN` from the runner env when set.
-    #[serde(default)]
+    /// Sentry settings as older configs wrote them. Read once on load and
+    /// converted into a Sentry entry in `evidence.sources` (see
+    /// [`Config::adopt_legacy_sentry`]); nothing else reads them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
     pub sentry_access_token: Option<String>,
-    /// Hostname of a self-hosted Sentry (e.g. `sentry.example.com`). `None`
-    /// targets Sentry SaaS (sentry.io).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
     pub sentry_host: Option<String>,
 }
 
@@ -889,6 +968,9 @@ pub struct ProjectAutomationDefaults {
     /// Where this board's bug cards reproduce and verify.
     #[serde(default)]
     pub reproduction: ProjectReproductionOverride,
+    /// Which evidence sources this board's agents are told about and search.
+    #[serde(default)]
+    pub evidence: ProjectEvidenceOverride,
 }
 
 impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
@@ -909,6 +991,7 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
             pattern_threshold: old.investigation_threshold,
             deploy_watch: None,
             reproduction: ProjectReproductionOverride::default(),
+            evidence: ProjectEvidenceOverride::default(),
         }
     }
 }
@@ -1133,9 +1216,12 @@ pub struct Config {
     pub worktree_pool: WorktreePoolConfig,
     #[serde(default)]
     pub orchestrator: OrchestratorConfig,
-    /// The Sentry connector and merge-request reviewer settings.
+    /// The merge-request reviewer settings.
     #[serde(default)]
     pub integrations: IntegrationsConfig,
+    /// Where the agent looks for evidence beyond its reproduction.
+    #[serde(default)]
+    pub evidence: EvidenceConfig,
     /// The script runner's ports and concurrency.
     #[serde(default)]
     pub app_runs: AppRunsConfig,
@@ -1188,6 +1274,7 @@ impl Config {
             playbook_keys: CURRENT_PLAYBOOK_KEYS,
             worktree_pool: old_config.worktree_pool,
             orchestrator,
+            evidence: EvidenceConfig::from_v9(&old_config.integrations),
             integrations: old_config.integrations.into(),
             app_runs: AppRunsConfig::default(),
             approvals: ApprovalsConfig::default(),
@@ -1209,6 +1296,7 @@ impl From<String> for Config {
             upgrade_stale_playbooks(&mut config.playbooks);
             adopt_legacy_tracker_fields(&mut config, &raw_config);
             config.adopt_legacy_slack();
+            config.adopt_legacy_sentry();
             return config;
         }
 
@@ -1216,6 +1304,7 @@ impl From<String> for Config {
             Ok(mut config) => {
                 tracing::info!("Config upgraded to v10");
                 config.adopt_legacy_slack();
+                config.adopt_legacy_sentry();
                 config
             }
             Err(e) => {
@@ -1285,6 +1374,7 @@ impl Default for Config {
             worktree_pool: WorktreePoolConfig::default(),
             orchestrator: OrchestratorConfig::default(),
             integrations: IntegrationsConfig::default(),
+            evidence: EvidenceConfig::default(),
             app_runs: AppRunsConfig::default(),
             approvals: ApprovalsConfig::default(),
         }
@@ -1492,6 +1582,83 @@ impl Config {
                     .map(|target| (TargetOrigin::Board, target.clone())),
             )
             .collect()
+    }
+
+    /// The evidence sources `board` uses (the global ones for `None`): the
+    /// global sources, less the kinds the board skips, plus the board's own —
+    /// or nothing when the board turns evidence off. A repository's own
+    /// `[[profile.evidence]]` is added by the caller, which has the checkout.
+    pub fn evidence_sources(
+        &self,
+        board: Option<Uuid>,
+    ) -> Vec<(TargetOrigin, EvidenceSourceConfig)> {
+        let own = board.and_then(|id| {
+            self.orchestrator
+                .project_defaults
+                .get(&id.to_string())
+                .map(|defaults| &defaults.evidence)
+        });
+        let Some(own) = own else {
+            return self
+                .evidence
+                .sources
+                .iter()
+                .map(|source| (TargetOrigin::Global, source.clone()))
+                .collect();
+        };
+        if own.enabled == Some(false) {
+            return Vec::new();
+        }
+        self.evidence
+            .sources
+            .iter()
+            .filter(|source| !own.skip_global.contains(&source.kind))
+            .map(|source| (TargetOrigin::Global, source.clone()))
+            .chain(
+                own.sources
+                    .iter()
+                    .map(|source| (TargetOrigin::Board, source.clone())),
+            )
+            .collect()
+    }
+
+    /// Converts the Sentry settings older configs kept under `integrations`
+    /// into a Sentry evidence source, once: when `evidence.sources` has no
+    /// Sentry source yet, the token and host become one. Either way the
+    /// legacy fields are cleared, so the next save drops them.
+    pub fn adopt_legacy_sentry(&mut self) {
+        let non_empty = |value: &Option<String>| {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        };
+        let token = non_empty(&self.integrations.sentry_access_token);
+        let host = non_empty(&self.integrations.sentry_host);
+        self.integrations.sentry_access_token = None;
+        self.integrations.sentry_host = None;
+        if token.is_none() && host.is_none() {
+            return;
+        }
+        if self
+            .evidence
+            .sources
+            .iter()
+            .any(|source| source.kind == EvidenceKind::Sentry)
+        {
+            return;
+        }
+        let fields = [("access_token", token), ("host", host)]
+            .into_iter()
+            .filter_map(|(key, value)| Some((key.to_string(), serde_json::Value::String(value?))))
+            .collect();
+        self.evidence.sources.push(EvidenceSourceConfig {
+            kind: EvidenceKind::Sentry,
+            label: None,
+            fields,
+        });
+        tracing::info!("Config: Sentry settings moved into evidence.sources");
     }
 
     /// Converts Slack settings written by older configs into notification
@@ -2223,11 +2390,18 @@ mod migration_tests {
         assert_eq!(integrations.reviewer_exclude_emails, ["ci@example.com"]);
         assert!(!integrations.auto_assign_reviewers);
         assert_eq!(integrations.bot_logins, ["release-bot"]);
+        // v9's observability settings became evidence sources.
         assert_eq!(
-            integrations.sentry_host.as_deref(),
-            Some("sentry.example.com")
+            config.evidence.sources,
+            [EvidenceSourceConfig {
+                kind: EvidenceKind::Sentry,
+                label: None,
+                fields: BTreeMap::from([(
+                    "host".to_string(),
+                    serde_json::json!("sentry.example.com")
+                )]),
+            }]
         );
-        // Of v9's observability settings only Sentry's carry over.
         let integrations = serde_json::to_value(&config.integrations).unwrap();
         let mut keys: Vec<&String> = integrations.as_object().unwrap().keys().collect();
         keys.sort();
@@ -2238,14 +2412,136 @@ mod migration_tests {
                 "bot_logins",
                 "reviewer_exclude_emails",
                 "reviewer_map",
-                "sentry_access_token",
-                "sentry_host",
             ]
         );
         let migrated = &config.orchestrator.project_defaults[&board];
         assert_eq!(migrated.label.as_deref(), Some("app"));
         // The watch is opt-in: nothing migrated turns it on.
         assert_eq!(migrated.deploy_watch, None);
+    }
+
+    #[test]
+    fn v9_scalyr_settings_become_a_dataset_source() {
+        let mut old = v9::Config::default();
+        old.integrations.scalyr_read_token = Some("0readlogs".to_string());
+        old.integrations.scalyr_server = Some("https://app.eu.scalyr.com".to_string());
+        old.integrations.sentry_access_token = Some("sntrys".to_string());
+        let config = Config::from(serde_json::to_string(&old).unwrap());
+        let kinds: Vec<EvidenceKind> = config.evidence.sources.iter().map(|s| s.kind).collect();
+        assert_eq!(kinds, [EvidenceKind::Dataset, EvidenceKind::Sentry]);
+        assert_eq!(
+            config.evidence.sources[0].fields,
+            BTreeMap::from([
+                ("read_token".to_string(), serde_json::json!("0readlogs")),
+                (
+                    "server".to_string(),
+                    serde_json::json!("https://app.eu.scalyr.com")
+                ),
+            ])
+        );
+        assert_eq!(
+            config.evidence.sources[1].fields["access_token"],
+            serde_json::json!("sntrys")
+        );
+    }
+
+    /// A v10 file written while Sentry lived under `integrations`: the token
+    /// and host become one Sentry source on load, the old keys are dropped on
+    /// the next save, and a config that already has a Sentry source keeps it.
+    #[test]
+    fn legacy_sentry_settings_become_an_evidence_source_once() {
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        raw.as_object_mut().unwrap().remove("evidence");
+        raw["integrations"]["sentry_access_token"] = serde_json::json!(" sntrys_token ");
+        raw["integrations"]["sentry_host"] = serde_json::json!("sentry.example.com");
+        let config = Config::from(raw.to_string());
+        assert_eq!(
+            config.evidence.sources,
+            [EvidenceSourceConfig {
+                kind: EvidenceKind::Sentry,
+                label: None,
+                fields: BTreeMap::from([
+                    (
+                        "access_token".to_string(),
+                        serde_json::json!("sntrys_token")
+                    ),
+                    ("host".to_string(), serde_json::json!("sentry.example.com")),
+                ]),
+            }]
+        );
+        let saved = serde_json::to_value(&config).unwrap();
+        assert!(saved["integrations"].get("sentry_access_token").is_none());
+        assert!(saved["integrations"].get("sentry_host").is_none());
+        assert_eq!(saved["evidence"]["sources"][0]["kind"], "sentry");
+        assert_eq!(
+            saved["evidence"]["sources"][0]["host"],
+            "sentry.example.com"
+        );
+
+        let reloaded = Config::from(saved.to_string());
+        assert_eq!(reloaded.evidence, config.evidence);
+
+        let mut raw = serde_json::to_value(&config).unwrap();
+        raw["integrations"]["sentry_access_token"] = serde_json::json!("stale");
+        raw["evidence"]["sources"][0]["label"] = serde_json::json!("Errors");
+        let kept = Config::from(raw.to_string());
+        assert_eq!(kept.evidence.sources.len(), 1);
+        assert_eq!(kept.evidence.sources[0].label.as_deref(), Some("Errors"));
+        assert_eq!(
+            kept.evidence.sources[0].fields["access_token"],
+            serde_json::json!("sntrys_token")
+        );
+        assert_eq!(kept.integrations.sentry_access_token, None);
+    }
+
+    #[test]
+    fn evidence_sources_can_be_switched_off_replaced_or_extended_per_board() {
+        let source = |kind: EvidenceKind, label: &str| EvidenceSourceConfig {
+            kind,
+            label: Some(label.to_string()),
+            fields: BTreeMap::new(),
+        };
+        let project_id = Uuid::new_v4();
+        let mut config = Config::default();
+        config.evidence.sources = vec![
+            source(EvidenceKind::Sentry, "Errors"),
+            source(EvidenceKind::Datadog, "Logs"),
+        ];
+        let labels = |config: &Config, board: Option<Uuid>| -> Vec<(TargetOrigin, String)> {
+            config
+                .evidence_sources(board)
+                .into_iter()
+                .map(|(origin, source)| (origin, source.label.unwrap()))
+                .collect()
+        };
+        assert_eq!(labels(&config, None).len(), 2);
+        // A board without settings, and an unknown board, inherit.
+        assert_eq!(labels(&config, Some(project_id)).len(), 2);
+
+        let mut board = ProjectAutomationDefaults::default();
+        board.evidence.skip_global = vec![EvidenceKind::Datadog];
+        board.evidence.sources = vec![source(EvidenceKind::LogFiles, "App log")];
+        config
+            .orchestrator
+            .project_defaults
+            .insert(project_id.to_string(), board);
+        assert_eq!(
+            labels(&config, Some(project_id)),
+            [
+                (TargetOrigin::Global, "Errors".to_string()),
+                (TargetOrigin::Board, "App log".to_string()),
+            ]
+        );
+        assert_eq!(labels(&config, None).len(), 2);
+
+        config
+            .orchestrator
+            .project_defaults
+            .get_mut(&project_id.to_string())
+            .unwrap()
+            .evidence
+            .enabled = Some(false);
+        assert!(labels(&config, Some(project_id)).is_empty());
     }
 
     #[test]

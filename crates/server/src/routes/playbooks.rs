@@ -37,19 +37,24 @@ async fn get_playbook_context(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<PlaybookContextQuery>,
 ) -> ResponseJson<ApiResponse<PlaybookContextResponse>> {
-    let (repo_ids, in_app_gate) = {
+    let (repo_ids, in_app_gate, evidence) = {
         let config = deployment.config().read().await;
         let repo_ids = query
             .project_id
             .map(|project_id| config.project_settings(project_id).repo_ids)
             .unwrap_or_default();
-        (repo_ids, config.approvals.in_app_gate)
+        (
+            repo_ids,
+            config.approvals.in_app_gate,
+            config.evidence_sources(query.project_id),
+        )
     };
     let context = context_for_repos(
         &deployment.db().pool,
         deployment.git(),
         &repo_ids,
         in_app_gate,
+        &evidence,
     )
     .await;
     ResponseJson(ApiResponse::success(PlaybookContextResponse {

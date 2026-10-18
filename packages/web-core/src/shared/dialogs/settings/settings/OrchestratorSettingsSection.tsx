@@ -86,6 +86,7 @@ const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   pattern_threshold: null,
   deploy_watch: null,
   reproduction: { target: null },
+  evidence: { enabled: null, skip_global: [], sources: [] },
 };
 
 // Boards written before per-board overrides existed (or by an older client)
@@ -103,6 +104,7 @@ const withOverrideShape = (
     ...defaults.merge_requests,
   },
   reproduction: { ...EMPTY_DEFAULTS.reproduction, ...defaults.reproduction },
+  evidence: { ...EMPTY_DEFAULTS.evidence, ...defaults.evidence },
 });
 
 // Overrides are tri-state in the config (null = inherit the global), which a

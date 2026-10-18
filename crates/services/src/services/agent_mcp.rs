@@ -8,18 +8,22 @@
 //! edits that config only when the user asks it to.
 
 use executors::mcp_config::{
-    PRECONFIGURED_MCP_SERVERS, prepcook_session_server, session_mcp_config_path,
-    write_session_mcp_config,
+    prepcook_session_server, session_mcp_config_path, write_session_mcp_config,
 };
 use serde_json::{Map, Value};
+use uuid::Uuid;
 
-use crate::services::{config::IntegrationsConfig, secrets};
+use crate::services::{
+    config::Config,
+    evidence::{self, McpServerEntry},
+    secrets,
+};
 
-/// Rewrites the session MCP config from the current integrations settings.
-/// Called at startup and whenever the Sentry settings change; sessions launched
+/// Rewrites the session MCP config from the current settings. Called at
+/// startup and whenever the evidence sources change; sessions launched
 /// afterwards pick the new file up.
-pub fn write_session_config(integrations: &IntegrationsConfig) {
-    let servers = session_servers(integrations);
+pub fn write_session_config(config: &Config) {
+    let servers = session_servers(config);
     if !servers.contains_key("prepcook") {
         tracing::warn!(
             "No prepcook-mcp binary next to this server or in ~/.local/bin; agent \
@@ -37,89 +41,126 @@ pub fn write_session_config(integrations: &IntegrationsConfig) {
     }
 }
 
-fn session_servers(integrations: &IntegrationsConfig) -> Map<String, Value> {
+fn session_servers(config: &Config) -> Map<String, Value> {
     let mut servers = Map::new();
     if let Some(prepcook) = prepcook_session_server() {
         servers.insert("prepcook".to_string(), prepcook);
     }
-    if let Some(sentry) = PRECONFIGURED_MCP_SERVERS.get("sentry")
-        && sentry_token_configured(integrations)
-    {
-        servers.insert("sentry".to_string(), sentry_server(sentry, integrations));
+    for entry in evidence_servers(config) {
+        servers.entry(entry.name).or_insert(entry.server);
     }
     servers
 }
 
-/// Whether a Sentry access token is configured anywhere the MCP server can
-/// read it: the integrations config, the environment, or the secrets store
-/// (whose values every agent session receives as environment variables).
-fn sentry_token_configured(integrations: &IntegrationsConfig) -> bool {
-    let set = |value: Option<&str>| value.is_some_and(|value| !value.trim().is_empty());
-    set(integrations.sentry_access_token.as_deref())
-        || set(std::env::var("SENTRY_ACCESS_TOKEN").ok().as_deref())
-        || set(secrets::load().get("SENTRY_ACCESS_TOKEN"))
+/// Every evidence source's MCP server: the global sources' and every board's.
+/// The file is shared by all sessions, so a board's own source reaches every
+/// session; one server per distinct entry.
+fn evidence_servers(config: &Config) -> Vec<McpServerEntry> {
+    let store = secrets::load();
+    let boards = config
+        .orchestrator
+        .project_defaults
+        .keys()
+        .filter_map(|key| Uuid::parse_str(key).ok())
+        .map(Some);
+    let mut servers: Vec<McpServerEntry> = Vec::new();
+    for board in std::iter::once(None).chain(boards) {
+        let settings = evidence::resolve_sources(&config.evidence_sources(board), &[], &store);
+        for entry in evidence::build(&settings, None).mcp_servers() {
+            evidence::add_mcp_server(&mut servers, entry);
+        }
+    }
+    servers
 }
 
-/// The `@sentry/mcp-server` stdio entry. A token set in the integrations
-/// config is baked into its env; otherwise the entry keeps its
-/// `${SENTRY_ACCESS_TOKEN}` placeholder, which Claude Code resolves from the
-/// session's environment. A configured `sentry_host` targets a self-hosted
-/// instance via `--host`.
-fn sentry_server(preconfigured: &Value, integrations: &IntegrationsConfig) -> Value {
-    let mut entry = preconfigured.clone();
-    if let Some(token) = integrations
-        .sentry_access_token
-        .as_deref()
-        .map(str::trim)
-        .filter(|token| !token.is_empty())
-        && let Some(env) = entry.get_mut("env").and_then(Value::as_object_mut)
-    {
-        env.insert(
-            "SENTRY_ACCESS_TOKEN".to_string(),
-            Value::String(token.to_string()),
-        );
-    }
-    if let Some(host) = integrations
-        .sentry_host
-        .as_deref()
-        .map(str::trim)
-        .filter(|host| !host.is_empty())
-        && let Some(args) = entry.get_mut("args").and_then(Value::as_array_mut)
-    {
-        args.push(Value::String(format!("--host={host}")));
-    }
-    entry
+/// Whether the session MCP file needs rewriting after a config change.
+pub fn servers_changed(old: &Config, new: &Config) -> bool {
+    old.evidence != new.evidence
+        || old
+            .orchestrator
+            .project_defaults
+            .iter()
+            .map(|(id, board)| (id, &board.evidence))
+            .ne(new
+                .orchestrator
+                .project_defaults
+                .iter()
+                .map(|(id, board)| (id, &board.evidence)))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use serde_json::json;
 
     use super::*;
+    use crate::services::{
+        config::{EvidenceSourceConfig, ProjectAutomationDefaults},
+        evidence::EvidenceKind,
+    };
 
-    #[test]
-    fn a_token_in_the_integrations_config_counts_as_configured() {
-        let integrations = IntegrationsConfig {
-            sentry_access_token: Some("token".to_string()),
-            ..Default::default()
-        };
-        assert!(sentry_token_configured(&integrations));
+    fn sentry(token: &str, host: Option<&str>) -> EvidenceSourceConfig {
+        let mut fields = BTreeMap::from([("access_token".to_string(), json!(token))]);
+        if let Some(host) = host {
+            fields.insert("host".to_string(), json!(host));
+        }
+        EvidenceSourceConfig {
+            kind: EvidenceKind::Sentry,
+            label: None,
+            fields,
+        }
     }
 
     #[test]
-    fn the_sentry_entry_carries_the_configured_token_and_host() {
-        let preconfigured = json!({
-            "command": "npx",
-            "args": ["-y", "@sentry/mcp-server@latest"],
-            "env": { "SENTRY_ACCESS_TOKEN": "${SENTRY_ACCESS_TOKEN}" }
-        });
-        let integrations = IntegrationsConfig {
-            sentry_access_token: Some(" token ".to_string()),
-            sentry_host: Some("sentry.example.com".to_string()),
-            ..Default::default()
-        };
-        let entry = sentry_server(&preconfigured, &integrations);
-        assert_eq!(entry["env"]["SENTRY_ACCESS_TOKEN"], json!("token"));
-        assert_eq!(entry["args"][2], json!("--host=sentry.example.com"));
+    fn every_sentry_source_gets_a_server_once() {
+        let mut config = Config::default();
+        config.evidence.sources = vec![
+            sentry("global-token-test", None),
+            EvidenceSourceConfig {
+                kind: EvidenceKind::LogFiles,
+                label: None,
+                fields: BTreeMap::from([("paths".to_string(), json!("logs/app.log"))]),
+            },
+        ];
+        let mut board = ProjectAutomationDefaults::default();
+        board.evidence.sources = vec![sentry("board-token-test", Some("sentry.example.com"))];
+        config
+            .orchestrator
+            .project_defaults
+            .insert(Uuid::new_v4().to_string(), board);
+
+        let servers = evidence_servers(&config);
+        let names: Vec<&str> = servers.iter().map(|s| s.name.as_str()).collect();
+        // The board also keeps the global source; it is not listed twice.
+        assert_eq!(names, ["sentry", "sentry-2"]);
+        assert_eq!(
+            servers[0].server["env"]["SENTRY_ACCESS_TOKEN"],
+            json!("global-token-test")
+        );
+        assert_eq!(
+            servers[1].server["args"][2],
+            json!("--host=sentry.example.com")
+        );
+        assert!(
+            session_servers(&config).contains_key("sentry"),
+            "the session file carries it"
+        );
+    }
+
+    #[test]
+    fn only_evidence_changes_rewrite_the_file() {
+        let old = Config::default();
+        let mut new = old.clone();
+        new.git_branch_prefix = "other".to_string();
+        assert!(!servers_changed(&old, &new));
+        new.evidence.sources.push(sentry("t", None));
+        assert!(servers_changed(&old, &new));
+        let mut board_changed = old.clone();
+        board_changed.orchestrator.project_defaults.insert(
+            Uuid::new_v4().to_string(),
+            ProjectAutomationDefaults::default(),
+        );
+        assert!(servers_changed(&old, &board_changed));
     }
 }

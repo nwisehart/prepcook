@@ -16,6 +16,7 @@ pub mod filesystem;
 pub mod attachments;
 pub mod connectors;
 pub mod events;
+pub mod evidence;
 pub mod execution_processes;
 pub mod frontend;
 pub mod health;
@@ -64,6 +65,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(approvals::router())
         .merge(plan_decisions::router())
         .merge(cards::router())
+        .merge(evidence::router())
         .merge(playbooks::router())
         .merge(scratch::router(&deployment))
         .merge(search::router(&deployment))

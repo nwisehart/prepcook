@@ -196,8 +196,8 @@ async fn run_server(options: ServeOptions) -> Result<(), PrepCookError> {
         .await;
     // The MCP servers the agent sessions this server launches get, passed to
     // each agent per invocation; the user's own agent config is not touched.
-    let integrations = deployment.config().read().await.integrations.clone();
-    services::services::agent_mcp::write_session_config(&integrations);
+    let config = deployment.config().read().await.clone();
+    services::services::agent_mcp::write_session_config(&config);
     let port = std::env::var("BACKEND_PORT")
         .or_else(|_| std::env::var("PORT"))
         .ok()

@@ -6509,6 +6509,7 @@ dependencies = [
  "futures",
  "git",
  "git-host",
+ "globset",
  "hex",
  "hmac",
  "ignore",

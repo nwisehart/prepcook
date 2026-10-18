@@ -242,12 +242,10 @@ async fn track_config_events(deployment: &DeploymentImpl, old: &Config, new: &Co
 async fn handle_config_events(deployment: &DeploymentImpl, old: &Config, new: &Config) {
     track_config_events(deployment, old, new).await;
 
-    // Rewrite the agent sessions' MCP config when the Sentry token or host
-    // change, so the next session launched picks the new entry up.
-    if old.integrations.sentry_access_token != new.integrations.sentry_access_token
-        || old.integrations.sentry_host != new.integrations.sentry_host
-    {
-        services::services::agent_mcp::write_session_config(&new.integrations);
+    // Rewrite the agent sessions' MCP config when the evidence sources
+    // change, so the next session launched picks the new servers up.
+    if services::services::agent_mcp::servers_changed(old, new) {
+        services::services::agent_mcp::write_session_config(new);
     }
 }
 

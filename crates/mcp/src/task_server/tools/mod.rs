@@ -38,6 +38,7 @@ impl ToolError {
 
 mod app_runs;
 mod context;
+mod evidence;
 mod issue_assignees;
 mod issue_relationships;
 mod issue_tags;
@@ -61,6 +62,7 @@ impl McpServer {
             + Self::task_attempts_tools_router()
             + Self::session_tools_router()
             + Self::app_runs_tools_router()
+            + Self::evidence_tools_router()
     }
 
     pub fn orchestrator_mode_router() -> rmcp::handler::server::tool::ToolRouter<Self> {
@@ -75,7 +77,8 @@ impl McpServer {
     /// Tool set for playbook agent sessions (the hosted runner installs the
     /// MCP entry in this mode). Exactly what the stage playbooks reference —
     /// issue updates/comments, Jira sub-task creation, the kb/graph tools
-    /// used by rca_analysis, and the app the session works against — and
+    /// used by rca_analysis, the app the session works against and the
+    /// evidence search the planning playbooks name — and
     /// nothing else: the full global router is 40+
     /// tools whose schemas cost every agent session thousands of context
     /// tokens, most of them for board/workspace administration no playbook
@@ -83,7 +86,8 @@ impl McpServer {
     pub fn agent_mode_router() -> rmcp::handler::server::tool::ToolRouter<Self> {
         let mut router = Self::context_tools_router()
             + Self::remote_issues_tools_router()
-            + Self::app_runs_tools_router();
+            + Self::app_runs_tools_router()
+            + Self::evidence_tools_router();
         for tool in [
             "create_issue",
             "list_issues",
@@ -500,6 +504,13 @@ mod tests {
         assert!(actual.contains("list_workspaces"));
         assert!(actual.contains("delete_workspace"));
         assert!(!actual.contains("output_markdown"));
+    }
+
+    #[test]
+    fn evidence_search_is_offered_to_agents_and_in_global_mode() {
+        assert!(tool_names(McpServer::agent_mode_router()).contains("evidence_search"));
+        assert!(tool_names(McpServer::global_mode_router()).contains("evidence_search"));
+        assert!(!tool_names(McpServer::orchestrator_mode_router()).contains("evidence_search"));
     }
 
     #[test]

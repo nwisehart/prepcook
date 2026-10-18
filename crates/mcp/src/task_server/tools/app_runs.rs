@@ -9,7 +9,7 @@ use super::{McpServer, ToolError};
 impl McpServer {
     /// The worktree this agent works in: `$PREPCOOK_WORKTREE` when Prep Cook set it,
     /// else the directory the MCP server was started in.
-    fn app_worktree() -> Result<String, ToolError> {
+    pub(super) fn app_worktree() -> Result<String, ToolError> {
         if let Some(worktree) = std::env::var_os("PREPCOOK_WORKTREE").filter(|w| !w.is_empty()) {
             return Ok(worktree.to_string_lossy().into_owned());
         }

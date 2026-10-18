@@ -41,7 +41,8 @@ card, the board's repository and the repository's `.prepcook/scripts.toml`.
 | `{{product.summary}}` | `[profile] summary`; empty without one. |
 | `{{product.areas}}` | `[profile] areas`, comma-separated; may be empty. |
 | `{{product.error_patterns}}` | `[profile] error_patterns`, comma-separated; may be empty. |
-| `{{product.evidence_tools}}` | `[profile] evidence_tools`; may be empty. |
+| `{{product.evidence_tools}}` | Generated for the board: one paragraph per evidence source ([evidence.md](evidence.md#what-the-agent-is-told)) saying what it is and how to query it, then `[profile] evidence_tools`, then "If none of these show the failure, the harness is your evidence." Empty when the board has no source and the profile no `evidence_tools`. |
+| `{{product.evidence_sources}}` | The board's evidence sources' labels, one `- label` line each; empty without a source. |
 | `{{gate_instructions}}` | How a planning agent hands its document to a person; see [The review gate](#the-review-gate). |
 
 The repository is the board's first repository (Settings → Orchestrator →
@@ -58,7 +59,9 @@ A passage that would read badly with an empty value goes in a block:
 
 ```
 The product is {{product.name}}.{{#if product.areas}} The areas that matter: {{product.areas}}.{{/if}}
-{{#if product.evidence_tools}}{{product.evidence_tools}}{{else}}The harness is your evidence.{{/if}}
+{{#if product.evidence_tools}}Where the failure leaves traces:
+
+{{product.evidence_tools}}{{else}}The harness is your evidence.{{/if}}
 ```
 
 `{{#if name}}` keeps its body when the value is not blank; `{{else}}` gives the
@@ -75,7 +78,8 @@ a complete example in [examples/scripts.toml](examples/scripts.toml)):
 | `summary` | One paragraph on what the app is and who uses it; `bug:planning` gives it to the agent before it reproduces anything. |
 | `areas` | The parts of the product a report or review is likely to name. `bug:planning` lists them, and `reviewing` grounds product findings in them. |
 | `error_patterns` | Errors that mean the seed is broken rather than the app. A planning agent that meets one posts it on the card and stops instead of investigating it as the bug. |
-| `evidence_tools` | A sentence or two on where evidence beyond the reproduction is: a log file, an error tracker the agent has a CLI for. Without it, the agent is told the harness is its only evidence. |
+| `evidence_tools` | A sentence or two about evidence that the configured sources do not cover — where older logs are kept, who can grant production access. Appended to the sources' paragraphs in `{{product.evidence_tools}}`; it is the appendix, not the whole story. |
+| `[[profile.evidence]]` | The repository's own log files, as `log_files` sources ([evidence.md](evidence.md#a-repositorys-own-log-files)): each is described in `{{product.evidence_tools}}` after the board's sources and searched by `evidence_search`. |
 
 The profile is read from the repository's checkout when the agent is launched.
 A repository with no `.prepcook/scripts.toml`, or no `[profile]`, gets its own name

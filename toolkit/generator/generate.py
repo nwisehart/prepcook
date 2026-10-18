@@ -65,13 +65,19 @@ SHA_IN_NOTE = re.compile(r"(generate\.py from Prep Cook at )\S+")
 PROFILE_KEYS = ["name", "summary", "areas", "error_patterns", "evidence_tools"]
 UNNAMED_PRODUCT = "this project"
 
+# What `{{product.evidence_tools}}` ends with whenever it is not empty
+# (`evidence::HARNESS_FALLBACK`).
+HARNESS_FALLBACK = "If none of these show the failure, the harness is your evidence."
+LOG_FILES = "Log files"
+
 
 # --------------------------------------------------------------- profile
 
 
 def load_profile(manifest: Path) -> dict[str, str]:
     """The `{{product.*}}` values from a manifest's `[profile]`, joined the way
-    the orchestrator joins them (lists comma-separated)."""
+    the orchestrator joins them (lists comma-separated), with the evidence
+    placeholders rendered from its `[[profile.evidence]]`."""
     try:
         import tomllib
     except ModuleNotFoundError:  # Python < 3.11
@@ -83,7 +89,57 @@ def load_profile(manifest: Path) -> dict[str, str]:
         values[f"product.{key}"] = ", ".join(value) if isinstance(value, list) else str(value)
     if not values["product.name"].strip():
         values["product.name"] = UNNAMED_PRODUCT
+    sources = [log_files_source(entry) for entry in profile.get("evidence", [])]
+    values["product.evidence_tools"] = evidence_tools(
+        [describe for _, describe in sources], values["product.evidence_tools"]
+    )
+    values["product.evidence_sources"] = "\n".join(f"- {label}" for label, _ in sources)
     return values
+
+
+# --------------------------------------------------------------- evidence
+#
+# The orchestrator renders these in Rust (`services::evidence`); a test there
+# (`the_toolkit_skills_carry_the_orchestrators_evidence_text`) fails when the
+# committed skills stop matching it, so a change to either side shows up.
+
+
+def log_files_source(entry: dict) -> tuple[str, str]:
+    """(label, paragraph) for one `[[profile.evidence]]` entry, as
+    `evidence::log_files::describe_paths` writes it. A manifest names only
+    log_files sources; the orchestrator refuses any other kind."""
+    if entry.get("kind") != "log_files":
+        sys.exit(f"[[profile.evidence]] kind {entry.get('kind')!r}: a manifest names only log_files sources")
+    raw = entry.get("paths", [])
+    items = raw if isinstance(raw, list) else re.split(r"[\n,]", raw)
+    paths = [path.strip() for path in items if path.strip()]
+    label = str(entry.get("label", "")).strip() or LOG_FILES
+    heading = label if label == LOG_FILES else f"{label} ({LOG_FILES})"
+    shown = ", ".join(f"`{path}`" for path in paths)
+    relative = ", relative to the worktree" if any(not path.startswith("/") for path in paths) else ""
+    pronoun = "it" if len(paths) == 1 and not any(c in paths[0] for c in "*?[{") else "them"
+    text = (
+        f"{heading}: {shown}{relative}. Read {pronoun} with tail, grep or jq, or call "
+        f"`evidence_search` with source \"{label}\": it returns the lines that contain the "
+        "pattern, ignoring case, leaving out a line whose timestamp falls outside the window and "
+        "keeping one that has none. Look for the failing request and the error logged after it, "
+        "around the time you ran the harness."
+    )
+    notes = str(entry.get("notes", "")).strip()
+    if notes:
+        text += " " + (notes if notes.endswith((".", "!", "?")) else notes + ".")
+    return label, text
+
+
+def evidence_tools(paragraphs: list[str], appendix: str) -> str:
+    """`{{product.evidence_tools}}`: the sources' paragraphs, the profile's
+    `evidence_tools`, then the harness sentence; empty when there is neither."""
+    parts = [paragraph.strip() for paragraph in paragraphs]
+    if appendix.strip():
+        parts.append(appendix.strip())
+    if not parts:
+        return ""
+    return "\n\n".join(parts + [HARNESS_FALLBACK])
 
 
 def render_profile(text: str, values: dict[str, str]) -> str:

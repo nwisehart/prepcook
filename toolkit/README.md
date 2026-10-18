@@ -258,7 +258,10 @@ python3 toolkit/generator/generate.py --manifest ~/code/your-app/.prepcook/scrip
 ```
 
 The `[profile]` of that manifest fills the product name, summary, areas, seed
-error patterns and evidence tools; nothing else changes. The skills `setup.sh`
+error patterns and evidence: its `[[profile.evidence]]` log files are described
+the way the orchestrator describes them, followed by its `evidence_tools`.
+Evidence sources configured in Prep Cook's Settings are not in the skills;
+`evidence_search` searches them. Nothing else changes. The skills `setup.sh`
 linked pick the regeneration up at once.
 
 ## Improving a skill

@@ -68,8 +68,20 @@ name = "Example App"
 summary = "One paragraph on what the app is."
 areas = ["Sign-in", "Dashboard"]
 error_patterns = ["SeedDataMissing"]
-evidence_tools = "The app logs to logs/app.log."  # optional
+evidence_tools = "Logs older than a day are in the ops archive."  # optional appendix
+
+[[profile.evidence]]          # optional, repeatable: log files the app writes
+kind = "log_files"            # the only kind a manifest may name
+label = "App log"             # optional
+paths = ["logs/app.log"]      # files or globs, relative to the worktree
+notes = "One JSON line per request."  # optional
 ```
+
+`[profile] evidence_tools` is an appendix, not where an agent learns where the
+logs are: each evidence source, including the `[[profile.evidence]]` log files, gets
+its own paragraph in `{{product.evidence_tools}}`, and `evidence_tools` is
+appended after them for whatever they do not say ([evidence.md](evidence.md),
+[playbooks.md](playbooks.md#the-product-profile)).
 
 A complete manifest for a small web app is in
 [examples/scripts.toml](examples/scripts.toml).

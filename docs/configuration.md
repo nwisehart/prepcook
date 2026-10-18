@@ -72,7 +72,7 @@ credentials.
 ## Git host and integrations
 
 **Settings → General** (Git, Pull Requests, Commits, GitHub Integration),
-**Settings → Integrations** and **Settings → Worktree pool**.
+**Settings → Reviewers** and **Settings → Worktree pool**.
 
 | Key | Default | What it does |
 | --- | --- | --- |
@@ -87,8 +87,6 @@ credentials.
 | `integrations.reviewer_map` | empty | **Reviewer map**: git author email to host login. Unmapped authors are named in a comment instead of assigned. |
 | `integrations.reviewer_exclude_emails` | empty | **Excluded author emails**, on top of the agent's own. |
 | `integrations.bot_logins` | empty | **Ignored comment authors**: merge-request comments from these logins are not fed to the agent. |
-| `integrations.sentry_access_token` | unset (`SENTRY_ACCESS_TOKEN`) | **Sentry → Access token** for the agent's Sentry MCP server, which agent sessions get only while a token is set here, in the environment or in the secrets store. |
-| `integrations.sentry_host` | unset (sentry.io) | **Host** of a self-hosted Sentry. |
 | `worktree_pool.enabled` | `false` | **Enable worktree pool**: reuse warm worktrees instead of creating one per workspace. |
 | `worktree_pool.max_trees` | `8` | **Max worktrees per repository**. |
 | `worktree_pool.root` | unset (the default location) | **Pool root directory**. |
@@ -109,7 +107,54 @@ A config written with the older `slack_webhook_url`, `slack_bot_token` and
 `slack_channel` keys, or a board's `slack` override, is converted into Slack
 targets the first time it is read.
 
+## Evidence
+
+**Settings → Integrations → Evidence.** Where failures leave traces outside the
+reproduction: error trackers, log services, the app's log files. Each source is
+described to the planning agents, may give their sessions an MCP server, and is
+searched by `evidence_search` ([evidence.md](evidence.md)).
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `evidence.sources` | empty (none) | The sources, each `{ "kind": …, "label": …, "areas": …, "notes": …, …fields }`. `kind` is one of the providers below; the fields are that provider's. |
+| `orchestrator.project_defaults.<board>.evidence.enabled` | unset (on) | `false` turns every source off for the board, its own included. |
+| `orchestrator.project_defaults.<board>.evidence.skip_global` | empty | Kinds of global source the board does not use. |
+| `orchestrator.project_defaults.<board>.evidence.sources` | empty | Sources only that board uses, on top of the global ones it keeps. |
+
+A repository adds its own log files under `[[profile.evidence]]` in its
+`.prepcook/scripts.toml` ([scripts.md](scripts.md)). A config written with
+`integrations.sentry_access_token` or `integrations.sentry_host` is converted
+into a Sentry source the first time it is read.
+
 <!-- BEGIN GENERATED: integrations (scripts/gen-config-docs.py) -->
+
+### Evidence sources
+
+Generated from the providers' descriptors. A secret field is read from the secrets store under the name shown, then from the config, then from the environment variable of that name; a board's own source reads its config value first. Every source also takes `label`, `areas` and `notes` ([evidence.md](evidence.md#configuring-sources)), left out of the table.
+
+| `kind` | Field | Required | Secret name | What it is |
+| --- | --- | --- | --- | --- |
+| `sentry` (Sentry) | | | | The errors the app raised in production, grouped into issues: agent sessions get Sentry's MCP server, and evidence_search lists a project's issues seen in a window. |
+| | `access_token` | yes | `SENTRY_ACCESS_TOKEN` | **Access token**. A user auth token (Settings → Account → API → Auth Tokens) with org:read, project:read and event:read. |
+| | `host` | no |  | **Host**. The host name of a self-hosted Sentry, e.g. sentry.example.com. Blank is sentry.io. |
+| | `org` | no |  | **Organization slug**. The organization in Sentry's URLs, e.g. acme. With the project, evidence_search can list issues; without them the agent has the MCP server only. |
+| | `project` | no |  | **Project slug**. The project the app reports to, e.g. web. |
+| | `environment` | no |  | **Environment**. Only issues seen in this environment, e.g. production. Blank is every environment. |
+| `dataset` (DataSet) | | | | Logs shipped to DataSet (Scalyr), searched with its query API. |
+| | `read_token` | yes | `DATASET_READ_TOKEN` | **Read Logs token**. A "Read Logs" API token (API Keys in DataSet's settings). |
+| | `server` | no |  | **Server**. Your account's region, e.g. https://app.eu.scalyr.com. Blank is https://app.scalyr.com. |
+| | `filter` | no |  | **Base filter**. A DataSet filter every search is narrowed by, e.g. serverHost == "web-1" or $logfile contains "app". |
+| `datadog` (Datadog) | | | | Logs in Datadog, searched with the Logs Search API. |
+| | `api_key` | yes | `DATADOG_API_KEY` | **API key**. An API key (Organization Settings → API Keys). |
+| | `application_key` | yes | `DATADOG_APPLICATION_KEY` | **Application key**. An application key with the logs_read_data scope (Organization Settings → Application Keys). |
+| | `site` | no |  | **Site**. Your Datadog site, e.g. datadoghq.eu or us5.datadoghq.com. Blank is datadoghq.com. |
+| | `query` | no |  | **Base query**. Log search terms every search is narrowed by, e.g. service:web env:production. |
+| `cloudwatch` (CloudWatch Logs) | | | | A CloudWatch Logs group, searched through the aws CLI on this machine with the credentials it is configured with. |
+| | `log_group` | yes |  | **Log group**. The log group's name, e.g. /ecs/pantry-web. |
+| | `region` | no |  | **Region**. e.g. us-east-1. Blank uses the aws CLI's configured region. |
+| | `profile` | no |  | **Profile**. The aws CLI profile to use. Blank uses its default credentials. |
+| `log_files` (Log files) | | | | Log files the app writes where it runs for the card, read on this machine; a repository can also name its own in [[profile.evidence]]. |
+| | `paths` | yes |  | **Paths**. Comma-separated files or globs, relative to the card's worktree (e.g. logs/app.log, logs/*.log) or absolute. |
 
 ### Notification providers
 
@@ -177,9 +222,10 @@ Generated from the providers' descriptors. A secret field is read from the secre
 
 Not settings, but where they end up. The agent sessions Prep Cook launches get
 the `prepcook` MCP server (the `prepcook-mcp` binary beside the server, or in
-`~/.local/bin` or `/usr/local/bin`) and, with a Sentry token, the Sentry one.
-Prep Cook writes them to `agent-mcp.json` in the app data directory at startup
-and when the Sentry settings change, and hands that file to each session:
+`~/.local/bin` or `/usr/local/bin`) and the MCP server of every evidence source
+that has one (Sentry's, for each Sentry source with a token). Prep Cook writes
+them to `agent-mcp.json` in the app data directory at startup and when the
+evidence sources change, and hands that file to each session:
 Claude Code through `--mcp-config`, which adds the servers to the user's own
 for that session only, and Codex as a thread config override (`prepcook`
 only). The other agents have no per-session mechanism and get the servers only

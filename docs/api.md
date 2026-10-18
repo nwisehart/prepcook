@@ -17,7 +17,7 @@ A failure has `"success": false` and says why in `message`.
 
 ## Authentication
 
-The card and approval endpoints accept two callers:
+The card, approval and evidence endpoints accept two callers:
 
 - **A service**, sending `Authorization: Bearer <token>`, where the token is
   the `PREPCOOK_API_TOKEN` secret (`prepcook secret set PREPCOOK_API_TOKEN`).
@@ -224,6 +224,36 @@ lists every decision recorded on the card. The body is
 and the answer the `ApprovalRecord` written. An investigation card takes only
 `replan` (it has no gate; convert it instead). The full contract, with every
 status, is in [approvals.md](approvals.md#the-api).
+
+## Evidence
+
+`POST /api/evidence/search` searches a board's evidence sources — the global
+ones it keeps, its own, and its repository's `[[profile.evidence]]` — and
+merges what they found ([evidence.md](evidence.md)). Agents reach it through
+the `evidence_search` tool.
+
+```json
+{
+  "pattern": "SeedMissing",
+  "from": "2026-10-18T08:00:00Z",
+  "to": "2026-10-18T12:00:00Z",
+  "source": "Pantry app log",
+  "limit": 50,
+  "area": "Sharing",
+  "project_id": "<board id>",
+  "worktree": "/path/to/the/worktree"
+}
+```
+
+Only `pattern` is required. `to` defaults to now and `from` to a day before
+`to`; `source` names one source by label or kind; `limit` is 1 to 200 (50);
+`area` skips sources that cover other product areas; `project_id` defaults to
+the default board (`orchestrator.default_board`, else the first board);
+`worktree`, when it is inside a workspace or the board's repository, is where
+`log_files` paths resolve and whose manifest is read. The answer is
+`{ hits, truncated, sources }`, described in
+[evidence.md](evidence.md#evidence_search). An unknown `source` or a bad window
+is a `400`, a board with no source a `404`.
 
 ## Scripts and app runs
 

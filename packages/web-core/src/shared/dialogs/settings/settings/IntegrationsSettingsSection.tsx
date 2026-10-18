@@ -8,7 +8,6 @@ import {
   SettingsCard,
   SettingsCheckbox,
   SettingsField,
-  SettingsInput,
   SettingsSaveBar,
   SettingsTextarea,
 } from './SettingsComponents';
@@ -19,8 +18,6 @@ const EMPTY_INTEGRATIONS: IntegrationsConfig = {
   reviewer_exclude_emails: [],
   auto_assign_reviewers: true,
   bot_logins: [],
-  sentry_access_token: null,
-  sentry_host: null,
 };
 
 // One "email=username" pair per line; blank/invalid lines are dropped.
@@ -43,13 +40,6 @@ const textToList = (text: string): string[] =>
     .split(/[\n,]/)
     .map((entry) => entry.trim())
     .filter(Boolean);
-
-// Trim to null so an emptied field clears the override (falling back to the
-// runner environment) rather than persisting an empty string.
-const orNull = (value: string): string | null => {
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
-};
 
 export function IntegrationsSettingsSection() {
   const { t } = useTranslation(['settings', 'common']);
@@ -217,33 +207,6 @@ export function IntegrationsSettingsSection() {
             }}
             rows={2}
             monospace
-          />
-        </SettingsField>
-      </SettingsCard>
-
-      <SettingsCard
-        title={t('settings.integrations.sentry.title')}
-        description={t('settings.integrations.sentry.description')}
-      >
-        <SettingsField
-          label={t('settings.integrations.sentry.tokenLabel')}
-          description={t('settings.integrations.sentry.tokenHelper')}
-        >
-          <SettingsInput
-            type="password"
-            value={draft.sentry_access_token ?? ''}
-            onChange={(value) => patch({ sentry_access_token: orNull(value) })}
-            placeholder={t('settings.integrations.fromRunnerEnv')}
-          />
-        </SettingsField>
-        <SettingsField
-          label={t('settings.integrations.sentry.hostLabel')}
-          description={t('settings.integrations.sentry.hostHelper')}
-        >
-          <SettingsInput
-            value={draft.sentry_host ?? ''}
-            onChange={(value) => patch({ sentry_host: orNull(value) })}
-            placeholder="sentry.io"
           />
         </SettingsField>
       </SettingsCard>

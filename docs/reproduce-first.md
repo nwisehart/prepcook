@@ -47,6 +47,18 @@ the card with the JSON lines, the mechanism in one paragraph, the commit the
 app was built from and the UTC time; and, when a tracker is configured, the
 same evidence in plain language on the ticket.
 
+## The harness and the logs
+
+The harness shows the failure on this worktree's build; where the app runs for
+real there is often more. With the failure in hand, the planning agent is told
+about every evidence source its board has — an error tracker, a log service,
+the log files the app writes in the worktree — and to call `evidence_search`
+with a pattern from the report or the harness before guessing at a cause
+([evidence.md](evidence.md)). What a source shows goes into the RCA's Root
+cause with the source and the time, and so does a source that shows nothing.
+Logs corroborate the mechanism the harness exercises; they do not replace the
+harness, and when none of them show the failure, the harness is the evidence.
+
 ## Intermittent bugs are a rate
 
 When the report says "sometimes", "every few days", or names a time window

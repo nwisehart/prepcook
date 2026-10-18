@@ -26,6 +26,7 @@ END = "<!-- END GENERATED: integrations -->"
 
 # Section titles for areas whose name does not read well capitalised.
 AREA_TITLES = {
+    "evidence": "Evidence sources",
     "notifications": "Notification providers",
     "reproduction": "Reproduction targets",
     "ticketing": "Ticketing providers",
@@ -37,6 +38,11 @@ SECRET_NOTE = (
     "from the config, then from the environment variable of that name"
 )
 AREA_NOTES = {
+    "evidence": (
+        f"{SECRET_NOTE}; a board's own source reads its config value first. Every source also "
+        "takes `label`, `areas` and `notes` ([evidence.md](evidence.md#configuring-sources)), "
+        "left out of the table."
+    ),
     "notifications": f"{SECRET_NOTE}; a board's own target reads its config value first.",
     "ticketing": f"{SECRET_NOTE}. Each field is a key of the `ticketing` section.",
     "reproduction": (
@@ -44,6 +50,13 @@ AREA_NOTES = {
         "global settings, only each repository's `[app.remote]`. A board picks "
         "its target with `reproduction.target`."
     ),
+}
+
+
+# Fields every provider of an area shares, documented in the area's note
+# instead of under each provider.
+COMMON_FIELDS = {
+    "evidence": {"label", "areas", "notes"},
 }
 
 
@@ -98,6 +111,8 @@ def render(descriptors: dict) -> str:
                 secret = ""
                 if field["kind"]["type"] == "secret":
                     secret = f"`{next(secret_names)}`"
+                if field["key"] in COMMON_FIELDS.get(area, set()):
+                    continue
                 required = "yes" if field["required"] else "no"
                 lines.append(
                     f"| | `{field['key']}` | {required} | {secret} | "

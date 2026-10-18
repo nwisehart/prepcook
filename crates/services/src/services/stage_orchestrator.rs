@@ -4707,12 +4707,19 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     /// What a playbook launched for this board fills its repository and
     /// product placeholders with.
     async fn playbook_context(&self, settings: &EffectiveProjectSettings) -> PlaybookContext {
-        let in_app_gate = self.config.read().await.approvals.in_app_gate;
+        let (in_app_gate, evidence) = {
+            let config = self.config.read().await;
+            (
+                config.approvals.in_app_gate,
+                config.evidence_sources(Some(settings.project_id)),
+            )
+        };
         playbook_context::context_for_repos(
             &self.db.pool,
             self.container.git(),
             &settings.repo_ids,
             in_app_gate,
+            &evidence,
         )
         .await
     }

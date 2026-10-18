@@ -1099,9 +1099,13 @@ playbooks: { [key in string]?: string },
  */
 playbook_keys: number, worktree_pool: WorktreePoolConfig, orchestrator: OrchestratorConfig, 
 /**
- * The Sentry connector and merge-request reviewer settings.
+ * The merge-request reviewer settings.
  */
 integrations: IntegrationsConfig, 
+/**
+ * Where the agent looks for evidence beyond its reproduction.
+ */
+evidence: EvidenceConfig, 
 /**
  * The script runner's ports and concurrency.
  */
@@ -1416,7 +1420,11 @@ deploy_watch: DeployWatch | null,
 /**
  * Where this board's bug cards reproduce and verify.
  */
-reproduction: ProjectReproductionOverride, };
+reproduction: ProjectReproductionOverride, 
+/**
+ * Which evidence sources this board's agents are told about and search.
+ */
+evidence: ProjectEvidenceOverride, };
 
 export type DeployWatch = { job_name: string, git_ref: string, };
 
@@ -1527,17 +1535,37 @@ auto_assign_reviewers: boolean,
  * top of the built-in bot patterns (GitLab project tokens comment as
  * `project_<id>_bot_<hash>`, GitHub apps as `<app>[bot]`).
  */
-bot_logins: Array<string>, 
+bot_logins: Array<string>, };
+
+export type EvidenceConfig = { 
 /**
- * Sentry user auth token for the `@sentry/mcp-server` stdio server.
- * Overrides `SENTRY_ACCESS_TOKEN` from the runner env when set.
+ * Any number of sources, every board's unless it says otherwise.
  */
-sentry_access_token: string | null, 
+sources: Array<EvidenceSourceConfig>, };
+
+export type EvidenceSourceConfig = { kind: EvidenceKind, 
 /**
- * Hostname of a self-hosted Sentry (e.g. `sentry.example.com`). `None`
- * targets Sentry SaaS (sentry.io).
+ * What the agent and `evidence_search` call it; unset is the provider's
+ * name.
  */
-sentry_host: string | null, };
+label?: string, } & ({ [key in string]?: number | string | boolean | Array<JsonValue> | { [key in string]?: JsonValue } | null });
+
+export type ProjectEvidenceOverride = { 
+/**
+ * `Some(false)` turns every source off for this board, its own included.
+ */
+enabled: boolean | null, 
+/**
+ * Kinds of global source this board does not use; its own sources of
+ * that kind still apply.
+ */
+skip_global: Array<EvidenceKind>, 
+/**
+ * Sources this board uses on top of the global ones it keeps.
+ */
+sources: Array<EvidenceSourceConfig>, };
+
+export type EvidenceKind = "sentry" | "dataset" | "datadog" | "cloudwatch" | "log_files";
 
 export type AutonomyMode = "off" | "full";
 
@@ -1689,11 +1717,19 @@ areas: Array<string>,
  */
 error_patterns: Array<string>, 
 /**
- * Where an agent finds evidence beyond its own reproduction (log files,
- * an error tracker it has a CLI for), in a sentence or two. Unset means
- * the reproduction is the only evidence.
+ * Anything about evidence the configured sources do not say (where
+ * older logs are kept, who to ask for production access), in a sentence
+ * or two. Appended to the sources' descriptions in
+ * `{{product.evidence_tools}}`.
  */
-evidence_tools: string | null, };
+evidence_tools: string | null, 
+/**
+ * Evidence sources this repository brings itself, `[[profile.evidence]]`:
+ * `log_files` entries only, since their paths are a fact of the
+ * repository; services with accounts and credentials are configured in
+ * Settings → Integrations → Evidence.
+ */
+evidence?: Array<EvidenceSourceConfig>, };
 
 export type Step = "setup" | "build" | "start" | "ready" | "seed" | "test" | "stop";
 

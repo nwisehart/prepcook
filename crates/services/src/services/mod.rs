@@ -8,6 +8,7 @@ pub mod container;
 pub mod daily;
 pub mod diff_stream;
 pub mod events;
+pub mod evidence;
 pub mod execution_process;
 pub mod file;
 pub mod file_ranker;

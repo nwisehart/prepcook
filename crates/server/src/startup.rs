@@ -183,8 +183,8 @@ pub async fn initialize_deployment(
     // each agent per invocation; the user's own agent config is not touched.
     // The standalone binary does the same from its own `main`, which does not
     // share this function.
-    let integrations = deployment.config().read().await.integrations.clone();
-    services::services::agent_mcp::write_session_config(&integrations);
+    let config = deployment.config().read().await.clone();
+    services::services::agent_mcp::write_session_config(&config);
 
     Ok(deployment)
 }

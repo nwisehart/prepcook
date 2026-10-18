@@ -17,6 +17,7 @@ use services::services::{
     config::{Config, load_config_from_file, save_config_to_file},
     container::ContainerService,
     events::EventService,
+    evidence::EvidenceSources,
     file::FileService,
     file_search::FileSearchCache,
     filesystem::FilesystemService,
@@ -68,6 +69,7 @@ pub struct LocalDeployment {
     pr_sync_notify: Arc<Notify>,
     script_runner: ScriptRunner,
     tracker: TrackerSource,
+    evidence: EvidenceSources,
     decisions: Decisions,
     cards: Cards,
 }
@@ -272,6 +274,7 @@ impl Deployment for LocalDeployment {
             PrMonitorService::spawn(db, analytics, container, rc, pr_sync_notify.clone()).await;
         }
         let tracker = TrackerSource::new(config.clone());
+        let evidence = EvidenceSources::new(config.clone());
         let notifications = NotificationSource::new(config.clone());
         let (decisions, cards) = {
             let config = config.clone();
@@ -335,6 +338,7 @@ impl Deployment for LocalDeployment {
             pr_sync_notify,
             script_runner,
             tracker,
+            evidence,
             decisions,
             cards,
         };
@@ -412,6 +416,10 @@ impl Deployment for LocalDeployment {
 
     fn tracker(&self) -> &TrackerSource {
         &self.tracker
+    }
+
+    fn evidence(&self) -> &EvidenceSources {
+        &self.evidence
     }
 
     fn decisions(&self) -> &Decisions {

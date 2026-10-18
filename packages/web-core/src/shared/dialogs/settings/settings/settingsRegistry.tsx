@@ -17,6 +17,7 @@ import {
   KanbanIcon,
   BellIcon,
   BugIcon,
+  UserCheckIcon,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { GeneralSettingsSection } from './GeneralSettingsSection';
@@ -37,6 +38,7 @@ import { ConnectorsSettingsSection } from './ConnectorsSettingsSection';
 import { IntegrationsSettingsSection } from './IntegrationsSettingsSection';
 import { NotificationsSettingsSection } from './NotificationsSettingsSection';
 import { ReproductionSettingsSection } from './ReproductionSettingsSection';
+import { EvidenceSettingsSection } from './EvidenceSettingsSection';
 
 export type SettingsSectionType =
   | 'general'
@@ -56,7 +58,8 @@ export type SettingsSectionType =
   | 'connectors'
   | 'worktree-pool'
   | 'notifications'
-  | 'reproduction';
+  | 'reproduction'
+  | 'evidence';
 
 /// `integrations` holds one section per integration area, each rendered from
 /// its providers' descriptors.
@@ -83,6 +86,7 @@ export type SettingsSectionInitialState = {
   'worktree-pool': undefined;
   notifications: undefined;
   reproduction: undefined;
+  evidence: undefined;
 };
 
 export interface SettingsSectionDefinition {
@@ -99,7 +103,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'mcp', icon: PlugIcon, group: 'host' },
   { id: 'playbooks', icon: BookOpenIcon, group: 'host' },
   { id: 'orchestrator', icon: RobotIcon, group: 'host' },
-  { id: 'integrations', icon: BinocularsIcon, group: 'host' },
+  { id: 'integrations', icon: UserCheckIcon, group: 'host' },
   { id: 'claude', icon: SparkleIcon, group: 'host' },
   { id: 'usage', icon: ChartBarIcon, group: 'host' },
   { id: 'connectors', icon: PlugsConnectedIcon, group: 'host' },
@@ -107,6 +111,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'ticketing', icon: TicketIcon, group: 'integrations' },
   { id: 'notifications', icon: BellIcon, group: 'integrations' },
   { id: 'reproduction', icon: BugIcon, group: 'integrations' },
+  { id: 'evidence', icon: BinocularsIcon, group: 'integrations' },
   { id: 'board', icon: KanbanIcon, group: 'universal' },
   { id: 'organizations', icon: UsersIcon, group: 'universal' },
   { id: 'remote-projects', icon: CloudIcon, group: 'universal' },
@@ -173,6 +178,8 @@ export function renderSettingsSection(
       return <NotificationsSettingsSection />;
     case 'reproduction':
       return <ReproductionSettingsSection />;
+    case 'evidence':
+      return <EvidenceSettingsSection />;
     default:
       return <GeneralSettingsSection />;
   }

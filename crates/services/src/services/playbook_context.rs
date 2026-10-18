@@ -17,10 +17,12 @@ use api_types::WorkClass;
 
 use crate::services::{
     config::{
-        InAppGate,
+        EvidenceSourceConfig, InAppGate, TargetOrigin,
         playbooks::{INVESTIGATION_GATE_VAR, gate_instructions, gate_instructions_for},
     },
+    evidence::{self, SourceBrief},
     scripts::{load_manifest, manifest::ProductProfile},
+    secrets,
 };
 
 /// The repository- and product-level values every playbook can use, resolved
@@ -32,7 +34,10 @@ pub struct PlaybookContext {
     pub product_summary: String,
     pub product_areas: Vec<String>,
     pub product_error_patterns: Vec<String>,
+    /// `[profile] evidence_tools`: the appendix to the sources' paragraphs.
     pub product_evidence_tools: String,
+    /// The evidence sources the board's agents are told about, in order.
+    pub evidence: Vec<SourceBrief>,
     /// The branch work is based on and merged into, as its remote-tracking
     /// ref when it has one (`origin/main`).
     pub target_branch: String,
@@ -84,11 +89,18 @@ impl PlaybookContext {
             product_evidence_tools: text(
                 profile.and_then(|profile| profile.evidence_tools.as_ref()),
             ),
+            evidence: Vec::new(),
             target_branch,
             bot_name,
             host,
             in_app_gate,
         }
+    }
+
+    /// The context with these evidence sources described.
+    pub fn with_evidence(mut self, evidence: Vec<SourceBrief>) -> Self {
+        self.evidence = evidence;
+        self
     }
 
     /// The command-line client for the git host. GitHub's `gh` is the
@@ -129,7 +141,11 @@ impl PlaybookContext {
             ),
             (
                 "product.evidence_tools".to_string(),
-                self.product_evidence_tools.clone(),
+                evidence::render_evidence_tools(&self.evidence, &self.product_evidence_tools),
+            ),
+            (
+                "product.evidence_sources".to_string(),
+                evidence::render_evidence_sources(&self.evidence),
             ),
             ("target_branch".to_string(), self.target_branch.clone()),
             ("bot_name".to_string(), self.bot_name.clone()),
@@ -184,9 +200,15 @@ impl Default for PlaybookContext {
 }
 
 /// The context for one repository: its profile from `.prepcook/scripts.toml` in
-/// the checkout, its default target branch, its remote's host and the commit
-/// identity configured for it.
-pub fn context_for_repo(git: &GitService, repo: &Repo, in_app_gate: InAppGate) -> PlaybookContext {
+/// the checkout, its default target branch, its remote's host, the commit
+/// identity configured for it, and the evidence sources `configured` for its
+/// board plus the profile's own.
+pub fn context_for_repo(
+    git: &GitService,
+    repo: &Repo,
+    in_app_gate: InAppGate,
+    configured: &[(TargetOrigin, EvidenceSourceConfig)],
+) -> PlaybookContext {
     let branch = repo
         .default_target_branch
         .as_deref()
@@ -206,6 +228,11 @@ pub fn context_for_repo(git: &GitService, repo: &Repo, in_app_gate: InAppGate) -
         .ok()
         .and_then(|remote| GitHostService::from_url(&remote.url).ok())
         .map(|host| host.provider_kind());
+    let own = profile
+        .as_ref()
+        .map(|profile| profile.evidence.as_slice())
+        .unwrap_or_default();
+    let briefs = evidence_briefs(configured, own, Some(repo.path.clone()));
     PlaybookContext::new(
         &repo.name,
         profile.as_ref(),
@@ -214,25 +241,41 @@ pub fn context_for_repo(git: &GitService, repo: &Repo, in_app_gate: InAppGate) -
         host,
         in_app_gate,
     )
+    .with_evidence(briefs)
+}
+
+/// The usable sources among `configured` and a repository's `own`, as a
+/// playbook describes them. A source missing a setting it needs is left out,
+/// as it is from searches.
+pub fn evidence_briefs(
+    configured: &[(TargetOrigin, EvidenceSourceConfig)],
+    own: &[EvidenceSourceConfig],
+    root: Option<std::path::PathBuf>,
+) -> Vec<SourceBrief> {
+    let settings = evidence::resolve_sources(configured, own, &secrets::load());
+    evidence::build(&settings, root).briefs()
 }
 
 /// The context for a board: its first repository that still exists, or the
-/// defaults when it has none.
+/// defaults when it has none. `configured` is the board's evidence sources
+/// (`Config::evidence_sources`).
 pub async fn context_for_repos(
     pool: &SqlitePool,
     git: &GitService,
     repo_ids: &[Uuid],
     in_app_gate: InAppGate,
+    configured: &[(TargetOrigin, EvidenceSourceConfig)],
 ) -> PlaybookContext {
     for repo_id in repo_ids {
         if let Ok(Some(repo)) = Repo::find_by_id(pool, *repo_id).await {
-            return context_for_repo(git, &repo, in_app_gate);
+            return context_for_repo(git, &repo, in_app_gate, configured);
         }
     }
     PlaybookContext {
         in_app_gate,
         ..PlaybookContext::default()
     }
+    .with_evidence(evidence_briefs(configured, &[], None))
 }
 
 /// Fills `template` from `vars`.
@@ -334,6 +377,7 @@ mod tests {
             areas: vec!["Lists".to_string(), "Sharing".to_string()],
             error_patterns: vec!["SeedMissing".to_string()],
             evidence_tools: Some("The app logs to logs/app.log.".to_string()),
+            evidence: Vec::new(),
         }
     }
 
@@ -381,7 +425,8 @@ mod tests {
         assert_eq!(
             filled,
             "Pantry: A shared grocery list. [Lists, Sharing] [SeedMissing] \
-             The app logs to logs/app.log. Pantry Bot glab merge request origin/main KEY-7"
+             The app logs to logs/app.log.\n\nIf none of these show the failure, the harness \
+             is your evidence. Pantry Bot glab merge request origin/main KEY-7"
         );
     }
 
@@ -399,11 +444,85 @@ mod tests {
         assert_eq!(
             full(InAppGate::None).fill(template, card("x")),
             "The product is Pantry. A shared grocery list. Areas: Lists, Sharing. \
-             Logs: The app logs to logs/app.log. Use glab for the merge request."
+             Logs: The app logs to logs/app.log.\n\nIf none of these show the failure, the \
+             harness is your evidence. Use glab for the merge request."
         );
         assert_eq!(
             PlaybookContext::default().vars()["product.name"],
             UNNAMED_PRODUCT
+        );
+    }
+
+    fn log_source(label: &str, paths: &[&str]) -> EvidenceSourceConfig {
+        EvidenceSourceConfig {
+            kind: evidence::EvidenceKind::LogFiles,
+            label: Some(label.to_string()),
+            fields: BTreeMap::from([("paths".to_string(), serde_json::json!(paths))]),
+        }
+    }
+
+    #[test]
+    fn configured_sources_are_described_with_the_profile_text_as_their_appendix() {
+        let configured = [(
+            TargetOrigin::Global,
+            log_source("Worker log", &["logs/worker.log"]),
+        )];
+        let own = [log_source("App log", &["logs/app.log"])];
+        let briefs = evidence_briefs(&configured, &own, None);
+        let labels: Vec<&str> = briefs.iter().map(|b| b.label.as_str()).collect();
+        assert_eq!(labels, ["Worker log", "App log"]);
+        let vars = full(InAppGate::None).with_evidence(briefs.clone()).vars();
+        let tools = &vars["product.evidence_tools"];
+        assert_eq!(
+            tools,
+            &format!(
+                "{}\n\n{}\n\nThe app logs to logs/app.log.\n\n{}",
+                briefs[0].describe,
+                briefs[1].describe,
+                evidence::HARNESS_FALLBACK
+            )
+        );
+        assert_eq!(vars["product.evidence_sources"], "- Worker log\n- App log");
+
+        let none = bare().vars();
+        assert_eq!(none["product.evidence_tools"], "");
+        assert_eq!(none["product.evidence_sources"], "");
+    }
+
+    /// The toolkit's generated skills fill `{{product.evidence_tools}}` from
+    /// the Pantry manifest in Python (`toolkit/generator/generate.py`); this
+    /// keeps that rendering identical to the orchestrator's.
+    #[test]
+    fn the_toolkit_skills_carry_the_orchestrators_evidence_text() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let path = root.join("docs/examples/scripts.toml");
+        let manifest = crate::services::scripts::manifest::Manifest::parse(
+            &std::fs::read_to_string(&path).unwrap(),
+            &path,
+        )
+        .unwrap();
+        let profile = manifest.profile.unwrap();
+        let context = PlaybookContext::new(
+            "pantry",
+            Some(&profile),
+            "origin/main".to_string(),
+            "Prep Cook".to_string(),
+            None,
+            InAppGate::None,
+        )
+        .with_evidence(evidence_briefs(&[], &profile.evidence, None));
+        let tools = context.vars()["product.evidence_tools"].clone();
+        assert!(
+            tools.starts_with("Pantry app log (Log files): `logs/app.log`"),
+            "{tools}"
+        );
+        let skill =
+            std::fs::read_to_string(root.join("toolkit/skills/prepcook-rca/SKILL.md")).unwrap();
+        assert!(
+            skill.contains(&tools),
+            "toolkit/skills/prepcook-rca/SKILL.md does not carry:\n{tools}\n\nRun \
+             `python3 toolkit/generator/generate.py`, or bring `evidence_tools` in generate.py \
+             back in line with `evidence::log_files::describe_paths`."
         );
     }
 

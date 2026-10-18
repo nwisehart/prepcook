@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::services::secrets;
+use crate::services::{
+    config::EvidenceSourceConfig, evidence::EvidenceKind, integrations::FieldKind, secrets,
+};
 
 /// Where the manifest lives, relative to the repository root.
 pub const MANIFEST_PATH: &str = ".prepcook/scripts.toml";
@@ -214,11 +216,18 @@ pub struct ProductProfile {
     /// meets one reports it and stops.
     #[serde(default)]
     pub error_patterns: Vec<String>,
-    /// Where an agent finds evidence beyond its own reproduction (log files,
-    /// an error tracker it has a CLI for), in a sentence or two. Unset means
-    /// the reproduction is the only evidence.
+    /// Anything about evidence the configured sources do not say (where
+    /// older logs are kept, who to ask for production access), in a sentence
+    /// or two. Appended to the sources' descriptions in
+    /// `{{product.evidence_tools}}`.
     #[serde(default)]
     pub evidence_tools: Option<String>,
+    /// Evidence sources this repository brings itself, `[[profile.evidence]]`:
+    /// `log_files` entries only, since their paths are a fact of the
+    /// repository; services with accounts and credentials are configured in
+    /// Settings → Integrations → Evidence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<EvidenceSourceConfig>,
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -284,6 +293,9 @@ impl Manifest {
                 return Err("app.remote.max_parallel must be above 0".to_string());
             }
         }
+        if let Some(profile) = &self.profile {
+            validate_evidence(&profile.evidence)?;
+        }
         if let Some(name) = self
             .secrets
             .requires
@@ -312,6 +324,50 @@ impl Manifest {
     pub fn workspace_archive(&self) -> Option<&str> {
         self.workspace.archive.as_deref()
     }
+}
+
+/// `[[profile.evidence]]` entries: `log_files` with at least one path, and
+/// nothing a descriptor marks secret (a manifest is committed).
+fn validate_evidence(entries: &[EvidenceSourceConfig]) -> Result<(), String> {
+    for (index, entry) in entries.iter().enumerate() {
+        let key = format!("profile.evidence[{index}]");
+        if entry.kind != EvidenceKind::LogFiles {
+            return Err(format!(
+                "{key} is {}; a repository can name only log_files sources, and the others \
+                 are configured in Settings → Integrations → Evidence",
+                entry.kind
+            ));
+        }
+        let descriptor = entry.kind.descriptor();
+        if let Some(field) = descriptor
+            .fields
+            .iter()
+            .find(|field| field.kind == FieldKind::Secret && entry.fields.contains_key(&field.key))
+        {
+            return Err(format!(
+                "{key}.{} is a secret; keep it out of the manifest",
+                field.key
+            ));
+        }
+        if let Some(unknown) = entry
+            .fields
+            .keys()
+            .find(|key| !descriptor.fields.iter().any(|field| &field.key == *key))
+        {
+            return Err(format!("{key} has an unknown key {unknown:?}"));
+        }
+        let has_path = match entry.fields.get("paths") {
+            Some(serde_json::Value::String(paths)) => !paths.trim().is_empty(),
+            Some(serde_json::Value::Array(paths)) => paths
+                .iter()
+                .any(|path| path.as_str().is_some_and(|path| !path.trim().is_empty())),
+            _ => false,
+        };
+        if !has_path {
+            return Err(format!("{key}.paths needs at least one file or glob"));
+        }
+    }
+    Ok(())
 }
 
 fn validate_ready(key: &str, ready: &ReadyCheck) -> Result<(), String> {
@@ -431,7 +487,60 @@ evidence_tools = "The app logs to logs/app.log."
         assert_eq!(profile.name.as_deref(), Some("Pantry"));
         assert_eq!(profile.areas, ["Sign-in", "Lists", "Items", "Sharing"]);
         assert_eq!(profile.error_patterns, ["SeedMissing"]);
-        assert!(profile.evidence_tools.unwrap().contains("logs/app.log"));
+        assert_eq!(profile.evidence.len(), 1);
+        assert_eq!(profile.evidence[0].kind, EvidenceKind::LogFiles);
+        assert_eq!(profile.evidence[0].label.as_deref(), Some("Pantry app log"));
+        assert_eq!(
+            profile.evidence[0].fields["paths"],
+            serde_json::json!(["logs/app.log"])
+        );
+        assert!(profile.evidence_tools.is_some());
+    }
+
+    #[test]
+    fn a_profile_names_its_own_log_files_and_nothing_else() {
+        let manifest = parse(
+            r#"
+[app]
+start = "x"
+
+[profile]
+name = "App"
+
+[[profile.evidence]]
+kind = "log_files"
+label = "App log"
+paths = ["logs/app.log", "logs/worker-*.log"]
+notes = "JSON lines."
+
+[[profile.evidence]]
+kind = "log_files"
+paths = "tmp/server.log"
+"#,
+        )
+        .unwrap();
+        let evidence = &manifest.profile.unwrap().evidence;
+        assert_eq!(evidence.len(), 2);
+        assert_eq!(evidence[0].label.as_deref(), Some("App log"));
+        assert_eq!(evidence[1].label, None);
+
+        let refused = |entry: &str| {
+            parse(&format!(
+                "[app]\nstart = \"x\"\n[profile]\n[[profile.evidence]]\n{entry}"
+            ))
+            .unwrap_err()
+            .to_string()
+        };
+        assert!(
+            refused("kind = \"sentry\"\norg = \"acme\"\n").contains("only log_files"),
+            "another kind"
+        );
+        assert!(refused("kind = \"log_files\"\n").contains("paths needs"));
+        assert!(refused("kind = \"log_files\"\npaths = []\n").contains("paths needs"));
+        assert!(
+            refused("kind = \"log_files\"\npaths = \"a\"\npath = \"b\"\n").contains("\"path\"")
+        );
+        assert!(refused("kind = \"splunk\"\n").contains("splunk"));
     }
 
     #[test]

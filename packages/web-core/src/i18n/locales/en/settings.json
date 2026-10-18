@@ -36,8 +36,8 @@
         "playbooksDesc": "Stage prompt templates for bug and story work",
         "orchestrator": "Orchestrator",
         "orchestratorDesc": "Automatic agent launches per kanban column",
-        "integrations": "Reviewers & Sentry",
-        "integrationsDesc": "Merge request reviewer picks and the Sentry connector for agents",
+        "integrations": "Reviewers",
+        "integrationsDesc": "Merge request reviewer picks and the review comments agents ignore",
         "claude": "Claude",
         "claudeDesc": "Subscription seat health and re-authentication",
         "connectors": "Connectors",
@@ -57,7 +57,9 @@
         "notifications": "Notifications",
         "notificationsDesc": "Where escalations, the digest and alerts are sent",
         "reproduction": "Reproduction",
-        "reproductionDesc": "Where bug cards' apps run: this machine or a remote deploy"
+        "reproductionDesc": "Where bug cards' apps run: this machine or a remote deploy",
+        "evidence": "Evidence",
+        "evidenceDesc": "Where failures leave traces: error trackers, log services, log files"
       }
     },
     "board": {
@@ -967,15 +969,6 @@
       }
     },
     "integrations": {
-      "fromRunnerEnv": "Using the runner environment",
-      "sentry": {
-        "title": "Sentry",
-        "description": "Optional. Exposes the Sentry MCP server to agents so they can inspect issues, errors, and events while investigating. It is installed only while an access token is set here, in the environment (SENTRY_ACCESS_TOKEN), or as a Prep Cook secret of that name.",
-        "tokenLabel": "Access token",
-        "tokenHelper": "Sentry user auth token (scopes: org:read, project:read, event:write). Overrides SENTRY_ACCESS_TOKEN from the environment when set; takes effect on save.",
-        "hostLabel": "Host (self-hosted only)",
-        "hostHelper": "Hostname of a self-hosted Sentry instance. Leave blank for Sentry SaaS (sentry.io)."
-      },
       "save": {
         "success": "Integration settings saved.",
         "error": "Failed to save integration settings."
@@ -1032,6 +1025,29 @@
       "save": {
         "success": "Reproduction settings saved.",
         "error": "Failed to save reproduction settings."
+      }
+    },
+    "evidence": {
+      "sources": {
+        "title": "Evidence sources",
+        "description": "Where a failure leaves traces outside the reproduction: an error tracker, a log service, the log files the app writes. Each source gets a paragraph in the planning playbooks, telling the agent what it is and how to query it, and evidence_search can search it on the agent's behalf; a Sentry source also gives agent sessions the Sentry MCP server. A repository can name its own log files in [[profile.evidence]] of .prepcook/scripts.toml."
+      },
+      "boards": {
+        "title": "Boards",
+        "description": "Every board uses the sources above unless it turns them off or skips a kind, and can add its own: a different Sentry project, its own log group.",
+        "empty": "No boards are configured yet; add one under Orchestrator.",
+        "enabledLabel": "Evidence sources",
+        "enabledHelper": "Off: this board's agents are told about no source, its own included, and the harness is their only evidence.",
+        "on": "On",
+        "off": "Off",
+        "skipGlobalLabel": "Skip global sources of these kinds",
+        "skipGlobalHelper": "The board's own sources of a skipped kind still apply, so it can replace a global source with its own.",
+        "ownLabel": "This board's own sources",
+        "ownHelper": "Used on top of the global sources this board keeps."
+      },
+      "save": {
+        "success": "Evidence sources saved.",
+        "error": "Failed to save evidence sources."
       }
     },
     "connectors": {

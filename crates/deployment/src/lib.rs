@@ -18,6 +18,7 @@ use services::services::{
     config::{Config, ConfigError},
     container::{ContainerError, ContainerService},
     events::{EventError, EventService},
+    evidence::EvidenceSources,
     file::{FileError, FileService},
     file_search::FileSearchCache,
     filesystem::{FilesystemError, FilesystemService},
@@ -112,6 +113,9 @@ pub trait Deployment: Clone + Send + Sync + 'static {
 
     /// The issue tracker the config describes.
     fn tracker(&self) -> &TrackerSource;
+
+    /// The evidence sources the config describes (see `docs/evidence.md`).
+    fn evidence(&self) -> &EvidenceSources;
 
     /// Applies plan decisions (see `docs/approvals.md`).
     fn decisions(&self) -> &Decisions;
