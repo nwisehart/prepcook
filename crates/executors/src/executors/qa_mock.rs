@@ -37,7 +37,7 @@ impl QaMockExecutor {
         crate::descriptor::AgentDescriptor::new(
             BaseCodingAgent::QaMock,
             "QA mock",
-            "Scripted sessions for testing Prep Cook itself; only in QA builds.",
+            "Scripted sessions for testing Prepcook itself; only in QA builds.",
             "",
             "Nothing to sign in.",
             crate::descriptor::McpWiring::Unsupported,

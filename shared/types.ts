@@ -990,7 +990,7 @@ export type CardView = { id: string, key: string, title: string, url: string, pr
 /**
  * Where the card is in the workflow: `backlog`, `planning`, `triaged`,
  * `executing`, `reviewing`, `pushed_mr`, `closed`, `cleanup`, or `other`
- * for a column Prep Cook does not know.
+ * for a column Prepcook does not know.
  */
 status: string, 
 /**
@@ -1170,7 +1170,7 @@ pagerduty_api_token: string | null,
  */
 service_ids: string | null, 
 /**
- * PagerDuty user Prep Cook acts as: notes are written as this user, and
+ * PagerDuty user Prepcook acts as: notes are written as this user, and
  * it is the identity tracker comments are recognised by.
  */
 user_id: string | null, 
@@ -1183,7 +1183,7 @@ linear_api_key: string | null,
  */
 team_key: string | null, 
 /**
- * What Prep Cook may do to an incident in `incidents` mode.
+ * What Prepcook may do to an incident in `incidents` mode.
  */
 incidents: IncidentsConfig, 
 /**
@@ -1528,7 +1528,7 @@ export type AgentDescriptor = { executor: BaseCodingAgent, display_name: string,
 summary: string, 
 /**
  * The program a session runs, looked up on PATH. Empty for an agent
- * that runs inside Prep Cook.
+ * that runs inside Prepcook.
  */
 binary: string, 
 /**

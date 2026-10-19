@@ -401,7 +401,7 @@ pub(crate) async fn pin_document_to_jira(
             jira_key,
             services::services::tracker::RemoteLink {
                 id: &format!("prepcook-rca-{document_id}"),
-                title: &format!("RCA — Prep Cook ({jira_key})"),
+                title: &format!("RCA — Prepcook ({jira_key})"),
                 url: &document_url(document_id),
             },
         )

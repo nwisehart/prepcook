@@ -17,7 +17,7 @@ function getPlatform(): string {
   if (platform === "darwin" && arch === "x64") return "macos-x64";
   if (platform === "darwin" && arch === "arm64") return "macos-arm64";
 
-  console.error(`No prebuilt Prep Cook for ${platform}-${arch}.`);
+  console.error(`No prebuilt Prepcook for ${platform}-${arch}.`);
   console.error("Releases cover Linux x64, macOS x64 and macOS arm64;");
   console.error(
     "elsewhere, build from source: https://github.com/nwisehart/prepcook#install",
@@ -70,7 +70,7 @@ async function run(binary: "prepcook" | "prepcook-mcp", args: string[]): Promise
     dir = await ensureRelease(CLI_VERSION, platform, showProgress);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`\nCould not get Prep Cook ${CLI_VERSION}: ${msg}`);
+    console.error(`\nCould not get Prepcook ${CLI_VERSION}: ${msg}`);
     process.exit(1);
   }
   if (!LOCAL_DEV_MODE) cleanOldVersions();

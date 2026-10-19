@@ -45,7 +45,7 @@ fn lookup_error(error: sqlx::Error, container_ref: &str) -> ApiError {
     }
 }
 
-const NOT_A_WORKSPACE: &str = "No Prep Cook workspace contains this path.";
+const NOT_A_WORKSPACE: &str = "No Prepcook workspace contains this path.";
 
 async fn get_container_info(
     Query(query): Query<ContainerQuery>,

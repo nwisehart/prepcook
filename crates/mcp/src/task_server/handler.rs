@@ -19,10 +19,10 @@ impl ServerHandler for McpServer {
 
         let preamble = match self.mode() {
             McpMode::Global => {
-                "A Prep Cook MCP server for task, issue, repository, workspace, and session management."
+                "A Prepcook MCP server for task, issue, repository, workspace, and session management."
             }
             McpMode::Orchestrator => {
-                "An orchestrator-scoped Prep Cook MCP server with tools limited to the configured workspace and orchestrator session context."
+                "An orchestrator-scoped Prepcook MCP server with tools limited to the configured workspace and orchestrator session context."
             }
         };
         let mut instruction = format!(

@@ -1,6 +1,6 @@
 # Working alongside people
 
-Prep Cook works tickets that people also work on, read and report on. These are the
+Prepcook works tickets that people also work on, read and report on. These are the
 rules it follows so that it helps and does not talk over anyone. Most of them
 read the tracker; a card made on the board has no ticket, and of these only
 the card-comment decisions apply to it.
@@ -21,7 +21,7 @@ then on:
   underneath them. The exception is a comment that @-mentions the agent: that
   person is asking it something, and the question goes to the session that has
   the context.
-- **The ticket says so once.** Prep Cook posts one comment on the ticket naming the
+- **The ticket says so once.** Prepcook posts one comment on the ticket naming the
   stage it was in, what still runs, and how to hand it back, and tags the card
   `taken-over`. The card panel shows the pause and who holds it.
 - **The card is parked in Close** once the in-flight work has finished, so the
@@ -36,7 +36,7 @@ the marker is set silently, with no comment.
 
 ### Handing a ticket back
 
-Unassign yourself in the tracker. Prep Cook posts "Handed back" on the ticket and
+Unassign yourself in the tracker. Prepcook posts "Handed back" on the ticket and
 removes the `taken-over` tag, and stays parked: move the card back a column and
 forward again to run that stage's automation again. Nothing restarts on its
 own, because the card may no longer be where the automation left it.
@@ -96,7 +96,7 @@ Neither is read while a person holds the ticket.
 
 A fix that shipped and did not hold is new work, not a continuation. When a
 shipped ticket is moved back out of done, or a reporter replies with
-`NOT FIXED` as the first line of a comment, Prep Cook files a **follow-up ticket**
+`NOT FIXED` as the first line of a comment, Prepcook files a **follow-up ticket**
 instead of re-arming the old card:
 
 - It carries the original's issue type, its priority (P1 when the original was

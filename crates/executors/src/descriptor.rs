@@ -29,7 +29,7 @@ use crate::{
     profile::{ExecutorConfigs, ExecutorProfileId},
 };
 
-/// How an agent's sessions receive the MCP servers Prep Cook hands out.
+/// How an agent's sessions receive the MCP servers Prepcook hands out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum McpWiring {
@@ -52,7 +52,7 @@ pub struct AgentDescriptor {
     /// One sentence.
     pub summary: String,
     /// The program a session runs, looked up on PATH. Empty for an agent
-    /// that runs inside Prep Cook.
+    /// that runs inside Prepcook.
     pub binary: String,
     /// The command line a session starts from, before its own arguments.
     /// The version probe runs it with `--version`.
@@ -211,7 +211,7 @@ pub async fn probe_with(
         return ProbeOutcome {
             ok: true,
             message: format!(
-                "{} runs inside Prep Cook; there is nothing to install.",
+                "{} runs inside Prepcook; there is nothing to install.",
                 descriptor.display_name
             ),
         };

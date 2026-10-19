@@ -1,6 +1,6 @@
-# Contributing to Prep Cook
+# Contributing to Prepcook
 
-Thanks for helping. Prep Cook is small enough that one person reads every pull
+Thanks for helping. Prepcook is small enough that one person reads every pull
 request, so keep changes focused and say what they are for.
 
 ## Before you start
@@ -9,7 +9,7 @@ request, so keep changes focused and say what they are for.
   agreed before the code is written.
 - Read `AGENTS.md` for the repository layout, build commands and coding
   conventions. The same file is what coding agents read.
-- Write the name as **Prep Cook** in prose and the UI, and `prepcook` in code,
+- Write the name as **Prepcook** in prose and the UI, and `prepcook` in code,
   binaries (`prepcook`, `prepcook-mcp`), packages (`@prepcook/*`), paths
   (`.prepcook/scripts.toml`) and skills (`prepcook-*`); environment variables
   take the `PREPCOOK_` prefix.

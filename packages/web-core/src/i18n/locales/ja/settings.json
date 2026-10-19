@@ -87,7 +87,7 @@
           "host": {
             "label": "リモートSSHホスト（オプション）",
             "placeholder": "例: ホスト名またはIPアドレス",
-            "helper": "Prep Cookがリモートサーバーで実行されている場合に設定してください。設定すると、「エディターで開く」をクリックしたときに、ローカルコマンドを実行する代わりにSSH経由でエディターを開くURLが生成されます。"
+            "helper": "Prepcookがリモートサーバーで実行されている場合に設定してください。設定すると、「エディターで開く」をクリックしたときに、ローカルコマンドを実行する代わりにSSH経由でエディターを開くURLが生成されます。"
           },
           "user": {
             "label": "リモートSSHユーザー（オプション）",
@@ -213,7 +213,7 @@
       },
       "privacy": {
         "title": "プライバシー",
-        "description": "匿名の使用データを共有してPrep Cookの改善にご協力ください。",
+        "description": "匿名の使用データを共有してPrepcookの改善にご協力ください。",
         "telemetry": {
           "label": "テレメトリを有効化",
           "helper": "アプリケーションの改善に役立つ匿名の使用イベント追跡を有効にします。プロンプトやプロジェクト情報は収集されません。"
@@ -425,7 +425,7 @@
     },
     "repos": {
       "title": "リポジトリ設定",
-      "description": "Repository details, and the scripts Prep Cook reads from the repository's .prepcook/scripts.toml.",
+      "description": "Repository details, and the scripts Prepcook reads from the repository's .prepcook/scripts.toml.",
       "loading": "リポジトリを読み込み中...",
       "loadError": "リポジトリの読み込みに失敗しました。",
       "addRepo": {
@@ -473,14 +473,14 @@
       },
       "scripts": {
         "title": "Scripts",
-        "description": "Read from .prepcook/scripts.toml at the repository root. Prep Cook never edits that file: change the scripts there and reload.",
+        "description": "Read from .prepcook/scripts.toml at the repository root. Prepcook never edits that file: change the scripts there and reload.",
         "reload": "Reload",
         "standUp": "Test stand-up",
         "loading": "Reading .prepcook/scripts.toml…",
         "loadError": "Could not read the scripts manifest.",
         "missingTitle": "This repository has no .prepcook/scripts.toml",
         "invalidTitle": "This repository's .prepcook/scripts.toml cannot be read",
-        "hint": "Prep Cook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
+        "hint": "Prepcook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
         "steps": {
           "title": "App steps",
           "timeout": "timeout {{seconds}}s",
@@ -528,11 +528,11 @@
       },
       "remove": {
         "title": "リポジトリを削除",
-        "description": "このリポジトリをPrep Cookからリンク解除します。ディスク上のファイルは削除されません。",
+        "description": "このリポジトリをPrepcookからリンク解除します。ディスク上のファイルは削除されません。",
         "button": "削除",
         "confirm": "リポジトリを削除",
         "dialogTitle": "「{{name}}」を削除しますか？",
-        "dialogDescription": "リポジトリをPrep Cookからリンク解除します。ディスク上のファイルには影響しません。後で再度追加できます。",
+        "dialogDescription": "リポジトリをPrepcookからリンク解除します。ディスク上のファイルには影響しません。後で再度追加できます。",
         "success": "リポジトリが正常に削除されました。",
         "error": "リポジトリの削除に失敗しました。"
       },
@@ -547,12 +547,12 @@
     },
     "secrets": {
       "title": "Secrets",
-      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prep Cook redacts the values from logs, comments and messages. Values are never shown here.",
+      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prepcook redacts the values from logs, comments and messages. Values are never shown here.",
       "loading": "Loading secrets…",
       "loadError": "Failed to load the secrets store.",
       "file": {
         "label": "Secrets file",
-        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prep Cook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
+        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prepcook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
       },
       "list": {
         "label": "Stored secrets",

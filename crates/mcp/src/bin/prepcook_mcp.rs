@@ -197,7 +197,7 @@ fn init_process_logging(log_prefix: &str, version: &str) {
         .init();
 
     tracing::debug!(
-        "[{}] Starting Prep Cook MCP server version {}...",
+        "[{}] Starting Prepcook MCP server version {}...",
         log_prefix,
         version
     );

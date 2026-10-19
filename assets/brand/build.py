@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates every Prep Cook brand file from the geometry below.
+"""Regenerates every Prepcook brand file from the geometry below.
 
     python3 assets/brand/build.py            # from the repository root
 
@@ -15,8 +15,8 @@ Outputs (all overwritten):
   assets/brand/prepcook-mark-dark.svg       the hat alone, off-white on transparent (dark backgrounds)
   assets/brand/prepcook-mark-mono.svg       single colour, inherits currentColor
   assets/brand/prepcook-app-icon.svg        white hat on the blue tile (favicons, app icons)
-  assets/brand/prepcook-logo.svg            mark + "Prep Cook" for light backgrounds
-  assets/brand/prepcook-logo-dark.svg       mark + "Prep Cook" for dark backgrounds
+  assets/brand/prepcook-logo.svg            mark + "Prepcook" for light backgrounds
+  assets/brand/prepcook-logo-dark.svg       mark + "Prepcook" for dark backgrounds
   packages/public/favicon.svg               = prepcook-app-icon.svg
   packages/public/favicon-16.png, favicon-32.png, favicon.ico (16/32/48)
   packages/public/apple-touch-icon.png      180 px
@@ -92,7 +92,7 @@ def hat_paths() -> str:
 
 def mark_svg(fill: str) -> str:
     return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Prep Cook">\n'
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Prepcook">\n'
         f'<g fill="{fill}">\n  {hat_paths()}\n</g>\n</svg>\n'
     )
 
@@ -100,7 +100,7 @@ def mark_svg(fill: str) -> str:
 def app_icon_svg() -> str:
     """White hat, scaled to leave a margin, on a rounded blue tile."""
     return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Prep Cook">\n'
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Prepcook">\n'
         f'<rect width="64" height="64" rx="14" fill="{BLUE}"/>\n'
         f'<g fill="{WHITE}" transform="translate(32 32.5) scale(0.74) translate(-32 -32)">\n  {hat_paths()}\n</g>\n'
         "</svg>\n"
@@ -108,13 +108,14 @@ def app_icon_svg() -> str:
 
 
 def logo_svg(fill: str) -> str:
-    """The mark beside the words "Prep Cook". 280 x 64; the mark fills the height,
-    and the width leaves room for both words at the mark's 40 px type size."""
+    """The mark beside the word "Prepcook". 265 x 64; the mark fills the height,
+    and the width leaves room for the word at the mark's 40 px type size (about
+    182 px of bold sans-serif from x=70, with a margin on the right)."""
     font = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
     return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" role="img" aria-label="Prep Cook">\n'
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 265 64" role="img" aria-label="Prepcook">\n'
         f'<g fill="{fill}">\n  {hat_paths()}\n'
-        f'  <text x="70" y="49" font-family="{font}" font-size="40" font-weight="700" letter-spacing="-0.5">Prep Cook</text>\n'
+        f'  <text x="70" y="49" font-family="{font}" font-size="40" font-weight="700" letter-spacing="-0.5">Prepcook</text>\n'
         "</g>\n</svg>\n"
     )
 

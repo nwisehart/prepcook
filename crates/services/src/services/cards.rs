@@ -102,7 +102,7 @@ pub struct CardView {
     pub project_id: Uuid,
     /// Where the card is in the workflow: `backlog`, `planning`, `triaged`,
     /// `executing`, `reviewing`, `pushed_mr`, `closed`, `cleanup`, or `other`
-    /// for a column Prep Cook does not know.
+    /// for a column Prepcook does not know.
     pub status: String,
     /// The column's name as the board shows it.
     pub column: String,

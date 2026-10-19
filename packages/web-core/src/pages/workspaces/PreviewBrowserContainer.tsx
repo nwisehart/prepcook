@@ -285,11 +285,11 @@ export function PreviewBrowserContainer({
     // Loopback URLs need the preview proxy for origin isolation
     if (!previewProxyPort) return undefined;
 
-    // Don't proxy to Prep Cook's own ports (would create infinite loop)
+    // Don't proxy to Prepcook's own ports (would create infinite loop)
     const prepcookPort = window.location.port || '80';
     if (devServerPort === prepcookPort) {
       console.warn(
-        `[Preview] Ignoring dev server URL with same port as Prep Cook (${devServerPort}). ` +
+        `[Preview] Ignoring dev server URL with same port as Prepcook (${devServerPort}). ` +
           'This usually means the dev server failed to start or reported the wrong port.'
       );
       return undefined;

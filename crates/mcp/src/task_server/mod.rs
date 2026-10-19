@@ -223,18 +223,18 @@ impl McpServer {
     ///
     /// Never fails: outside a workspace, or with the server down, the bridge
     /// still starts, serving the global tool set without `get_context`, and
-    /// says why in one log line. A session that is not one of Prep Cook's
+    /// says why in one log line. A session that is not one of Prepcook's
     /// (an engineer's own checkout) then sees a working server, not a broken
     /// one.
     pub async fn init(mut self) -> anyhow::Result<Self> {
         match self.fetch_context_at_startup().await {
             StartupContext::Workspace(context) => {
-                tracing::info!("Prep Cook workspace context loaded");
+                tracing::info!("Prepcook workspace context loaded");
                 self.context = Some(*context);
             }
             StartupContext::NotAWorkspace => {
                 self.reduce();
-                tracing::info!("not inside a Prep Cook workspace; workspace tools disabled");
+                tracing::info!("not inside a Prepcook workspace; workspace tools disabled");
             }
             StartupContext::Unavailable(reason) => {
                 self.reduce();
@@ -284,12 +284,12 @@ impl McpServer {
             )),
             Ok(ContextLookup::NotAWorkspace) => StartupContext::NotAWorkspace,
             Ok(ContextLookup::Failed(status)) => StartupContext::Unavailable(format!(
-                "Prep Cook server answered {status} to the workspace lookup"
+                "Prepcook server answered {status} to the workspace lookup"
             )),
             Err(error) => {
                 tracing::debug!("workspace lookup failed: {error:#}");
                 StartupContext::Unavailable(format!(
-                    "Prep Cook server not reachable at {}",
+                    "Prepcook server not reachable at {}",
                     self.base_url.get()
                 ))
             }
@@ -571,7 +571,7 @@ mod startup_tests {
             while let Ok((mut socket, _)) = listener.accept().await {
                 let mut buf = [0u8; 4096];
                 let _ = socket.read(&mut buf).await;
-                let body = r#"{"success":false,"data":null,"message":"No Prep Cook workspace contains this path."}"#;
+                let body = r#"{"success":false,"data":null,"message":"No Prepcook workspace contains this path."}"#;
                 let response = format!(
                     "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                     body.len()

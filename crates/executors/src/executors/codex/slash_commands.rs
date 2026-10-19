@@ -420,7 +420,7 @@ async fn fetch_status_message(
                 }
                 lines.push(format!("- **CWD**: `{}`", thread.cwd.display()));
                 lines.push(format!("- **CLI version**: `{}`", thread.cli_version));
-                let source_label = format!("{:?}", thread.source).replace("VsCode", "Prep Cook");
+                let source_label = format!("{:?}", thread.source).replace("VsCode", "Prepcook");
                 lines.push(format!("- **Source**: `{source_label}`"));
             }
             Err(err) => {

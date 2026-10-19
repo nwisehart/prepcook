@@ -1,11 +1,11 @@
 /**
- * Client-side mirror of the Prep Cook workflow transition rules enforced by the
+ * Client-side mirror of the Prepcook workflow transition rules enforced by the
  * remote server in `crates/remote/src/workflow.rs`. Keep the two
  * implementations in sync.
  */
 
 /**
- * Ordered Prep Cook workflow stages; later aliases are earlier column names kept
+ * Ordered Prepcook workflow stages; later aliases are earlier column names kept
  * so existing projects keep validating until renamed. Columns with other
  * names are exempt.
  */
@@ -37,7 +37,7 @@ function stageIndex(name: string | null | undefined): number {
  * Returns true when moving an issue from `fromName` to `toName` is allowed.
  *
  * Rules (stage names are matched case-insensitively):
- * - Either name outside the Prep Cook stage list => allowed (non-workflow project
+ * - Either name outside the Prepcook stage list => allowed (non-workflow project
  *   or hidden/custom columns).
  * - Same stage (no-op) or any backward move => allowed.
  * - Forward moves are only allowed to the immediately next stage.
@@ -85,7 +85,7 @@ export function planningGateError(
       ? (metadata.planning as Record<string, unknown>)
       : null;
 
-  // Generic tickets never went through the Prep Cook planning flow.
+  // Generic tickets never went through the Prepcook planning flow.
   if (metadata.work_class == null && planning == null) return null;
 
   if (metadata.work_class === 'investigation') {

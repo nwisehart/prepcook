@@ -1,7 +1,7 @@
 # `.prepcook/scripts.toml`
 
-Every repository Prep Cook works on describes how to install, build, start, seed and
-test itself in `.prepcook/scripts.toml` at its root. Prep Cook runs those scripts itself,
+Every repository Prepcook works on describes how to install, build, start, seed and
+test itself in `.prepcook/scripts.toml` at its root. Prepcook runs those scripts itself,
 in the card's worktree, on a port it allocates, and hands the app's address and
 test login to the agent through environment variables.
 
@@ -30,7 +30,7 @@ ready = { url = "/health", timeout_secs = 300 }
 #   `command` passes when it exits 0. Exactly one of the two.
 seed = "node scripts/seed.js" # optional; load test data, write KEY=VALUE lines to $PREPCOOK_ENV_OUT
 test = "pnpm test"            # optional; the exit code is the verdict
-stop = "pnpm stop"            # optional; runs before Prep Cook kills the start process group
+stop = "pnpm stop"            # optional; runs before Prepcook kills the start process group
 
 [app.remote]                  # optional; the remote target (see "Remote targets")
 start = "./scripts/deploy-preview.sh"   # required; deploys, reports the URL, exits
@@ -93,13 +93,13 @@ order, stopping at the first failure:
 
 1. `setup` and `build` run to completion within their timeouts.
 2. `start` is spawned in its own process group, with its output captured.
-3. Prep Cook waits for something to accept connections on `$PREPCOOK_PORT`, for up to
+3. Prepcook waits for something to accept connections on `$PREPCOOK_PORT`, for up to
    `timeouts.start` seconds. If `start` exits first, the outcome is
    `start-failed`; if nothing listens in time, `not-ready`.
 4. The ready check is polled every half second for up to
    `ready.timeout_secs`, counted from when the port started listening.
    Without a ready check, a listening port is ready.
-5. `seed` runs; afterwards Prep Cook reads `$PREPCOOK_ENV_OUT`.
+5. `seed` runs; afterwards Prepcook reads `$PREPCOOK_ENV_OUT`.
 
 Teardown runs `stop` (bounded by `timeouts.stop`), then signals the whole start
 process group (SIGINT, SIGTERM, SIGKILL, two seconds apart) and frees the port.
@@ -123,7 +123,7 @@ the manifest has no `[app.remote]`.
 
 ## Environment
 
-Every script receives the Prep Cook process's own environment plus:
+Every script receives the Prepcook process's own environment plus:
 
 | Variable | Value |
 | --- | --- |
@@ -136,13 +136,13 @@ Every script receives the Prep Cook process's own environment plus:
 | `PREPCOOK_CHANGED_FILES` | `test` only: newline-separated paths, relative to the worktree, from `git diff --name-only <target>...HEAD` |
 | `PREPCOOK_SECRET_<NAME>` and `<NAME>` | every secret in the secrets store |
 
-Ports come from `app_runs.port_range` in the Prep Cook config (default
+Ports come from `app_runs.port_range` in the Prepcook config (default
 `4200-4299`). A port is handed out only if no other run holds it and nothing is
 already bound to it.
 
 ### What the seed hands on
 
-After `seed`, Prep Cook reads `$PREPCOOK_ENV_OUT` (blank lines and `#` comments are
+After `seed`, Prepcook reads `$PREPCOOK_ENV_OUT` (blank lines and `#` comments are
 skipped) and adds each variable to the environment of the agent session that
 works against the app. Name them so the agent can find them, for example
 `PREPCOOK_TEST_USER_EMAIL` and `PREPCOOK_TEST_USER_PASSWORD`. The value of any variable
@@ -156,7 +156,7 @@ seed wrote, and every secret (`PREPCOOK_SECRET_<NAME>` and `<NAME>`).
 
 ## What each stage does
 
-- **Planning** (bug cards): before the agent starts, Prep Cook creates the worktree
+- **Planning** (bug cards): before the agent starts, Prepcook creates the worktree
   and stands up the reported version of the app in it. The agent's Playwright
   harness runs against `PREPCOOK_APP_URL`. If the reported version does not stand
   up (a branch-side outcome), the planning session is not started; the card
@@ -169,7 +169,7 @@ seed wrote, and every secret (`PREPCOOK_SECRET_<NAME>` and `<NAME>`).
   missing secret, no free port): the failure is escalated to Slack and as a
   desktop notification, and the session starts without an app.
 - The app is torn down when the agent process it was stood up for finishes,
-  when the workspace is archived or cleaned up, and when Prep Cook shuts down.
+  when the workspace is archived or cleaned up, and when Prepcook shuts down.
 - **Pre-merge verification**: a fresh stand-up plus `test` in the
   implementation worktree. It runs automatically only with autonomy set to
   Full (Prep mode): when an Executing turn completes, the card does not
@@ -213,7 +213,7 @@ preview environment per card is expensive.
 
 ### The script contract
 
-Every `[app.remote]` command receives the Prep Cook process's environment plus:
+Every `[app.remote]` command receives the Prepcook process's environment plus:
 
 | Variable | Value |
 | --- | --- |
@@ -266,7 +266,7 @@ which is escalated like any other setup problem, and the Scripts panel says so.
 
 Values the scripts need but that must not be committed live in
 `~/.config/prepcook/secrets.env` on every platform, as `NAME=VALUE` lines with `#`
-comments. The file is written with mode `0600`. `PREPCOOK_SECRETS_FILE` points Prep Cook
+comments. The file is written with mode `0600`. `PREPCOOK_SECRETS_FILE` points Prepcook
 at a different file, and an environment variable `PREPCOOK_SECRET_<NAME>` overrides
 the file's entry.
 

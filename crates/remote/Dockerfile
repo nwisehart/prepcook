@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 # The board service image: the `remote` binary only. The board UI is served by
-# the native Prep Cook server, so no frontend is built here.
+# the native Prepcook server, so no frontend is built here.
 
 ARG APP_NAME=remote
 

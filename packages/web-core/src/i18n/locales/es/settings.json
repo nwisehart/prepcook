@@ -87,7 +87,7 @@
           "host": {
             "label": "Host SSH Remoto (Opcional)",
             "placeholder": "ej., nombre de host o dirección IP",
-            "helper": "Configura esto si Prep Cook se ejecuta en un servidor remoto. Cuando se establece, al hacer clic en \"Abrir en Editor\" se generará una URL para abrir tu editor a través de SSH en lugar de ejecutar un comando local."
+            "helper": "Configura esto si Prepcook se ejecuta en un servidor remoto. Cuando se establece, al hacer clic en \"Abrir en Editor\" se generará una URL para abrir tu editor a través de SSH en lugar de ejecutar un comando local."
           },
           "user": {
             "label": "Usuario SSH Remoto (Opcional)",
@@ -213,7 +213,7 @@
       },
       "privacy": {
         "title": "Privacidad",
-        "description": "Ayuda a mejorar Prep Cook compartiendo datos de uso anónimos.",
+        "description": "Ayuda a mejorar Prepcook compartiendo datos de uso anónimos.",
         "telemetry": {
           "label": "Habilitar Telemetría",
           "helper": "Habilita el seguimiento anónimo para ayudar a mejorar la aplicación. No se recopilan prompts ni información del proyecto."
@@ -425,7 +425,7 @@
     },
     "repos": {
       "title": "Configuración del Repositorio",
-      "description": "Repository details, and the scripts Prep Cook reads from the repository's .prepcook/scripts.toml.",
+      "description": "Repository details, and the scripts Prepcook reads from the repository's .prepcook/scripts.toml.",
       "loading": "Cargando repositorios...",
       "loadError": "Error al cargar repositorios.",
       "addRepo": {
@@ -473,14 +473,14 @@
       },
       "scripts": {
         "title": "Scripts",
-        "description": "Read from .prepcook/scripts.toml at the repository root. Prep Cook never edits that file: change the scripts there and reload.",
+        "description": "Read from .prepcook/scripts.toml at the repository root. Prepcook never edits that file: change the scripts there and reload.",
         "reload": "Reload",
         "standUp": "Test stand-up",
         "loading": "Reading .prepcook/scripts.toml…",
         "loadError": "Could not read the scripts manifest.",
         "missingTitle": "This repository has no .prepcook/scripts.toml",
         "invalidTitle": "This repository's .prepcook/scripts.toml cannot be read",
-        "hint": "Prep Cook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
+        "hint": "Prepcook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
         "steps": {
           "title": "App steps",
           "timeout": "timeout {{seconds}}s",
@@ -528,11 +528,11 @@
       },
       "remove": {
         "title": "Eliminar Repositorio",
-        "description": "Desvincular este repositorio de Prep Cook. Los archivos en disco no se eliminarán.",
+        "description": "Desvincular este repositorio de Prepcook. Los archivos en disco no se eliminarán.",
         "button": "Eliminar",
         "confirm": "Eliminar Repositorio",
         "dialogTitle": "¿Eliminar \"{{name}}\"?",
-        "dialogDescription": "Esto desvinculará el repositorio de Prep Cook. Tus archivos en disco no se verán afectados. Puedes volver a agregarlo más tarde.",
+        "dialogDescription": "Esto desvinculará el repositorio de Prepcook. Tus archivos en disco no se verán afectados. Puedes volver a agregarlo más tarde.",
         "success": "Repositorio eliminado exitosamente.",
         "error": "Error al eliminar el repositorio."
       },
@@ -547,12 +547,12 @@
     },
     "secrets": {
       "title": "Secrets",
-      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prep Cook redacts the values from logs, comments and messages. Values are never shown here.",
+      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prepcook redacts the values from logs, comments and messages. Values are never shown here.",
       "loading": "Loading secrets…",
       "loadError": "Failed to load the secrets store.",
       "file": {
         "label": "Secrets file",
-        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prep Cook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
+        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prepcook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
       },
       "list": {
         "label": "Stored secrets",

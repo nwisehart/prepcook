@@ -55,8 +55,8 @@ pub enum GitServiceError {
 }
 
 /// The commit identity of a repository with no `user.name`/`user.email`
-/// configured: what Prep Cook commits as there, and what an agent's commits carry.
-pub const FALLBACK_AUTHOR_NAME: &str = "Prep Cook";
+/// configured: what Prepcook commits as there, and what an agent's commits carry.
+pub const FALLBACK_AUTHOR_NAME: &str = "Prepcook";
 pub const FALLBACK_AUTHOR_EMAIL: &str = "noreply@prepcook.invalid";
 
 /// Service for managing Git operations in task execution workflows

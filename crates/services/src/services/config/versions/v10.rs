@@ -416,7 +416,7 @@ impl std::fmt::Display for TrackerKind {
     }
 }
 
-/// What Prep Cook may do to an incident on its own, beyond the notes it
+/// What Prepcook may do to an incident on its own, beyond the notes it
 /// posts (see `docs/incidents.md`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
 pub struct IncidentsConfig {
@@ -547,7 +547,7 @@ pub struct TrackerConfig {
     /// when the pickup filter names none.
     #[serde(default)]
     pub service_ids: Option<String>,
-    /// PagerDuty user Prep Cook acts as: notes are written as this user, and
+    /// PagerDuty user Prepcook acts as: notes are written as this user, and
     /// it is the identity tracker comments are recognised by.
     #[serde(default)]
     pub user_id: Option<String>,
@@ -557,7 +557,7 @@ pub struct TrackerConfig {
     /// Linear team key.
     #[serde(default)]
     pub team_key: Option<String>,
-    /// What Prep Cook may do to an incident in `incidents` mode.
+    /// What Prepcook may do to an incident in `incidents` mode.
     #[serde(default)]
     pub incidents: IncidentsConfig,
     /// Query the import dialog runs when the caller does not supply one.

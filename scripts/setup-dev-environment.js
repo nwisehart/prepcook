@@ -130,7 +130,7 @@ async function allocatePorts() {
   }
 
   // Find new free ports
-  // Base port 4100 keeps Prep Cook clear of the target repository's Docker bindings
+  // Base port 4100 keeps Prepcook clear of the target repository's Docker bindings
   // (3007, 5001-5002, 5432-5434, 5678-5693, 6x79 redis, 8080, 9001-9010).
   const frontendPort = await findFreePort(4100);
   const backendPort = await findFreePort(frontendPort + 1);

@@ -30,7 +30,7 @@ The harness lives in `.repro/<KEY>/` in the card's worktree. `.repro/` goes into
 a branch that contains it is refused at the push gate.
 
 It is a Playwright script built with the `repro-harness` skill, run against the
-app Prep Cook stood up for the worktree (`$PREPCOOK_APP_URL`, with the seed's login in
+app Prepcook stood up for the worktree (`$PREPCOOK_APP_URL`, with the seed's login in
 the environment; see [scripts.md](scripts.md)). It must:
 
 - **Assert the reported behaviour.** It fails against the target branch, or the
@@ -108,7 +108,7 @@ records the harness relied on (by name, never by id or credential), anything it
 had to create that the seed lacks, and a kickoff prompt for a local Claude Code
 session with the `prepcook-repro` skill, in a block to copy whole.
 
-That works because the app comes from the repository, not from Prep Cook. Whoever
+That works because the app comes from the repository, not from Prepcook. Whoever
 picks the ticket up runs the same `.prepcook/scripts.toml`: its `setup`, `build`,
 `start` and `seed`, with the same variables ([scripts.md](scripts.md#environment)).
 The seed gives them the same kind of records and the same login variables the

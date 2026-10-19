@@ -1,6 +1,6 @@
 # Notifications
 
-Prep Cook tells people about the things that need one: a plan waiting for a
+Prepcook tells people about the things that need one: a plan waiting for a
 human, a red pipeline, the daily digest, a Claude seat that ran out. Each of
 these is an **event** with a stable kind and typed data. Events go to every
 configured **target** — Slack, a JSON webhook, Discord, Microsoft Teams, any
@@ -36,7 +36,7 @@ provider's fields):
 
 `events` limits a target to the kinds listed; unset, or `["*"]`, sends it
 everything. Secret fields (tokens, webhook URLs, the signing secret) are best
-kept out of the file: Prep Cook reads them from the secrets store first, under
+kept out of the file: Prepcook reads them from the secrets store first, under
 `<KIND>_<FIELD>` (`SLACK_BOT_TOKEN`, `WEBHOOK_SECRET`, `DISCORD_WEBHOOK_URL`,
 …), then from the config, then from the environment variable of that name.
 

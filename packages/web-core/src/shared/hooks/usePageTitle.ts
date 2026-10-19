@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const BASE_TITLE = 'Prep Cook';
+const BASE_TITLE = 'Prepcook';
 
 /**
  * Sets the document title based on the given parts.

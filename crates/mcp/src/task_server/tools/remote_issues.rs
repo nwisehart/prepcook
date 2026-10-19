@@ -1043,7 +1043,7 @@ impl McpServer {
                 spec.path = Some(path);
             }
             match spec_approved {
-                // An approval Prep Cook already recorded from the channel itself
+                // An approval Prepcook already recorded from the channel itself
                 // (Lavish, a comment, the API) says more about who approved
                 // than the agent can; keep it rather than overwrite it.
                 Some(true)

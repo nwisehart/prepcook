@@ -1,5 +1,5 @@
 //! Background stage orchestrator: polls remote projects and auto-drives the
-//! Prep Cook workflow stages for eligible issues.
+//! Prepcook workflow stages for eligible issues.
 //!
 //! One runner drives several boards (one per repo). Each entry in
 //! `orchestrator.project_defaults` is a board, and every setting a board can
@@ -1839,7 +1839,7 @@ fn reproduction_note(jira_key: &str, harness: &str) -> String {
          description of it. The same source sits under Reproduction in the RCA on \
          this branch; this is the copy you can take without opening it.\n\n\
          It reads the app's address and a test login from the environment \
-         (`PREPCOOK_APP_URL` and the seed's `PREPCOOK_TEST_USER_*` variables), which Prep Cook \
+         (`PREPCOOK_APP_URL` and the seed's `PREPCOOK_TEST_USER_*` variables), which Prepcook \
          sets when it stands the app up from `.prepcook/scripts.toml`. **Substitute \
          your own dev login.** Do not ask anyone for the seeded credentials, and \
          do not paste any into this thread.\n\n\
@@ -4996,7 +4996,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             metadata.work_class = Some(work_class);
         }
 
-        // Later stages only automate tickets that are part of the Prep Cook workflow
+        // Later stages only automate tickets that are part of the Prepcook workflow
         // (imported from the tracker or classified); Planning/Executing
         // additionally require a work class to resolve their playbook.
         let in_workflow = metadata.work_class.is_some() || metadata.jira.is_some();
@@ -6418,7 +6418,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     _ => "the `test` script failed against the running app.",
                 };
                 let prompt = format!(
-                    "Pre-merge verification failed: **{}** (attempt {} of {}).\n\nPrep Cook stood this worktree's app up from `.prepcook/scripts.toml` and {what}\n\n{evidence}\n\nFix it, commit, and end your turn — verification runs again automatically and the card advances when it passes. You can reproduce the run with the `app_restart` tool.",
+                    "Pre-merge verification failed: **{}** (attempt {} of {}).\n\nPrepcook stood this worktree's app up from `.prepcook/scripts.toml` and {what}\n\n{evidence}\n\nFix it, commit, and end your turn — verification runs again automatically and the card advances when it passes. You can reproduce the run with the `app_restart` tool.",
                     outcome.label(),
                     record.attempts,
                     VERIFY_MAX_ATTEMPTS,
@@ -6968,7 +6968,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             None => " Then end your turn.".to_string(),
         };
         let prompt = format!(
-            "A teammate replied in the escalation thread for {jira_key} with guidance to unblock you:\n\n{combined}\n\nIncorporate this into your spec/RCA and update your recorded verdict (open_questions / confidence and summary) via the Prep Cook MCP `update_issue` planning fields.{reopen}"
+            "A teammate replied in the escalation thread for {jira_key} with guidance to unblock you:\n\n{combined}\n\nIncorporate this into your spec/RCA and update your recorded verdict (open_questions / confidence and summary) via the Prepcook MCP `update_issue` planning fields.{reopen}"
         );
 
         let workspace = match self.find_implementation_workspace(client, issue).await {
@@ -8008,7 +8008,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             .collect::<Vec<_>>()
             .join("\n");
         let prompt = format!(
-            "New comment(s) were added to Jira {jira_key} while you were planning:\n\n{combined}\n\nIncorporate anything relevant into your spec/RCA and update your recorded verdict (open_questions / confidence and summary) via the Prep Cook MCP `update_issue` planning fields. Then end your turn."
+            "New comment(s) were added to Jira {jira_key} while you were planning:\n\n{combined}\n\nIncorporate anything relevant into your spec/RCA and update your recorded verdict (open_questions / confidence and summary) via the Prepcook MCP `update_issue` planning fields. Then end your turn."
         );
 
         if let Err(error) = self.start_follow_up(workspace, &prompt, None).await {
@@ -9555,7 +9555,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
              branch. If the branch has fallen behind and cannot fast-forward, \
              say so instead of rewriting history: {rebase_how} \
              once review is settled. Then record the outcome on the linked \
-             Prep Cook issue with `add_issue_comment`, first line exactly \
+             Prepcook issue with `add_issue_comment`, first line exactly \
              `{addressed}`, then one line on what changed.\n\n\
              If instead the feedback rejects the approach itself — the fix is in \
              the wrong place, the root cause was misdiagnosed, the design has to \
@@ -10373,7 +10373,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         for finding in findings {
             let body = format!(
-                "**{}** — {}\n\n{}\n\n---\n_Independent review by Prep Cook. Reply here; the agent reads MR comments._",
+                "**{}** — {}\n\n{}\n\n---\n_Independent review by Prepcook. Reply here; the agent reads MR comments._",
                 match finding.class {
                     FindingClass::Product => "Question for review",
                     FindingClass::Correctness => "Unresolved after the review loop",
@@ -11947,7 +11947,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 if report.outcome.is_branch_fault() {
                     (
                         format!(
-                            "Before this session started, Prep Cook stood this branch's app up from `.prepcook/scripts.toml` and it failed: **{label}**.\n\n{evidence}\n\n`PREPCOOK_APP_URL` is not set for this session. Making the app stand up again is part of this work; once a fix is in the worktree, the `app_restart` tool stands it up and tells you where.\n\n{}",
+                            "Before this session started, Prepcook stood this branch's app up from `.prepcook/scripts.toml` and it failed: **{label}**.\n\n{evidence}\n\n`PREPCOOK_APP_URL` is not set for this session. Making the app stand up again is part of this work; once a fix is in the worktree, the `app_restart` tool stands it up and tells you where.\n\n{}",
                             launch.prompt
                         ),
                         format!(
@@ -11965,7 +11965,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     .await;
                     (
                         format!(
-                            "Prep Cook could not stand the app up for this session ({label} — a problem with the setup, not with this branch), so `PREPCOOK_APP_URL` is not set. Work without a running app.\n\n{}",
+                            "Prepcook could not stand the app up for this session ({label} — a problem with the setup, not with this branch), so `PREPCOOK_APP_URL` is not set. Work without a running app.\n\n{}",
                             launch.prompt
                         ),
                         format!(
@@ -12452,7 +12452,7 @@ impl<C: ContainerService + Send + Sync + 'static> DecisionHost for StageOrchestr
             CardStage::PushedMr => Stage::PushedMr,
             CardStage::Other => {
                 return Err(DecisionError::Failed(
-                    "a decision only moves a card between Prep Cook's own columns".to_string(),
+                    "a decision only moves a card between Prepcook's own columns".to_string(),
                 ));
             }
         };

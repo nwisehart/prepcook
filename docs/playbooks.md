@@ -34,7 +34,7 @@ card, the board's repository and the repository's `.prepcook/scripts.toml`.
 | `{{epic_key}}` | The epic a sub-task belongs to; empty otherwise. |
 | `{{comments}}` | `comment_reply` only: the new tracker comments that started it. |
 | `{{target_branch}}` | The branch work is based on and merged into: the repository's default target branch (else its current branch), as its remote-tracking ref when it has one, e.g. `origin/main`. For `reviewing`, the implementation workspace's target, freshly fetched. |
-| `{{bot_name}}` | The author name the agent's commits carry: the repository's `user.name` (repository config, then the user's), else `Prep Cook`. |
+| `{{bot_name}}` | The author name the agent's commits carry: the repository's `user.name` (repository config, then the user's), else `Prepcook`. |
 | `{{host_cli}}` | `glab` for a GitLab remote, `az repos` for Azure DevOps, otherwise `gh`. |
 | `{{pr_noun}}` | `merge request` for GitLab, otherwise `pull request`. |
 | `{{product.name}}` | `[profile] name`; without one, the repository's name. |
@@ -104,7 +104,7 @@ turn again.
 
 An investigation card has no gate whatever the setting: for it,
 `{{gate_instructions}}` says that posting the `TRIAGE REPORT` comment finishes
-the card, that Prep Cook moves it to Triaged by itself, and that the agent must
+the card, that Prepcook moves it to Triaged by itself, and that the agent must
 not open a review session, set `spec_approved` or plan a fix. Pages that fill
 playbooks themselves get that text as `investigation_gate_instructions` from
 `GET /api/playbooks/context`.
@@ -114,7 +114,7 @@ playbooks themselves get that text as `investigation_gate_instructions` from
 Card tools named below (`update_issue`, `add_issue_comment`,
 `list_issue_comments`, `record_review`, `app_status`, `app_restart`,
 `tracker_add_comment`, `tracker_get_attachments`, `tracker_create_subtasks`,
-`kb_*`, `graph_*`) are the Prep Cook MCP server's.
+`kb_*`, `graph_*`) are the Prepcook MCP server's.
 
 The `tracker_*` tools need a ticket. When no tracker is configured, or the card
 was made on the board and has none, they do nothing and say so in a successful
@@ -124,7 +124,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 
 ### `bug:planning`
 
-- **Launched** when a bug card enters Plan, after Prep Cook has stood the app up in
+- **Launched** when a bug card enters Plan, after Prepcook has stood the app up in
   the card's worktree ([scripts.md](scripts.md)).
 - **Produces** a reproduction harness under `.repro/<ticket_key>/` (never
   committed), a `REPRODUCTION:` comment on the card and, when a tracker is
@@ -165,7 +165,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 
 ### `investigation:planning`
 
-- **Launched** when an investigation card enters Plan, after Prep Cook has
+- **Launched** when an investigation card enters Plan, after Prepcook has
   stood the app up, exactly as for a bug.
 - **Produces** what `bug:planning` produces — the harness, the `REPRODUCTION:`
   comments, the RCA at `{{spec_path}}` and its verdict (`planning.kind =
@@ -269,7 +269,7 @@ board is configured under Settings → Orchestrator) picks what is edited:
 
 Placeholders work the same in an edited text.
 
-A saved config keeps every playbook text it was saved with. When Prep Cook ships a
+A saved config keeps every playbook text it was saved with. When Prepcook ships a
 new stage, its key is added to the saved config on the next start; a text the
 user has not changed is replaced only when the old text is listed in
 `SUPERSEDED_PLAYBOOKS` in `config/versions/v10.rs`.

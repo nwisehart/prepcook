@@ -135,7 +135,7 @@ impl Notifier for TeamsNotifier {
             "version": "1.4",
             "body": [{
                 "type": "TextBlock",
-                "text": "Prep Cook test notification: this webhook works.",
+                "text": "Prepcook test notification: this webhook works.",
                 "wrap": true,
             }],
         }))

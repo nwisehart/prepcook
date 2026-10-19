@@ -24,7 +24,7 @@
 //!   configured user.
 //! - set summary: updates the title. Blocks and remote links are notes.
 //! - add watcher: not supported. The API's way to add someone is a responder
-//!   request, which pages them, and Prep Cook never pages.
+//!   request, which pages them, and Prepcook never pages.
 //! - create issue: a low-urgency incident on the first configured service.
 //! - sub-tasks: not supported. Attachments: none.
 //! - identity: the configured user. Assignable users: the users the
@@ -229,7 +229,7 @@ impl PagerDutyTracker {
             KIND.as_str(),
             "PagerDuty",
             "Incidents mode: open incidents become investigation cards, and the triage report \
-             goes back to the incident as a note. Prep Cook never pages anyone and resolves an \
+             goes back to the incident as a note. Prepcook never pages anyone and resolves an \
              incident only when configured to.",
             vec![
                 Field::new(
@@ -245,7 +245,7 @@ impl PagerDutyTracker {
                     "User id",
                     FieldKind::Text,
                     true,
-                    "The PagerDuty user Prep Cook writes as, e.g. PABC123: a dedicated user, \
+                    "The PagerDuty user Prepcook writes as, e.g. PABC123: a dedicated user, \
                      not on any schedule, so nothing pages it.",
                 ),
                 Field::new(
@@ -937,7 +937,7 @@ mod tests {
             .and(header("Authorization", "Token token=pd-token"))
             .and(header("Accept", ACCEPT))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "user": {"id": "PBOT1", "name": "Prep Cook", "email": "prepcook@acme.test"}
+                "user": {"id": "PBOT1", "name": "Prepcook", "email": "prepcook@acme.test"}
             })))
             .mount(server)
             .await;
@@ -996,7 +996,7 @@ mod tests {
         let message = tracker(&server, config()).test().await.unwrap();
         assert_eq!(
             message,
-            "Signed in to PagerDuty; notes are written as Prep Cook (prepcook@acme.test), \
+            "Signed in to PagerDuty; notes are written as Prepcook (prepcook@acme.test), \
              picking up incidents on PSVC1."
         );
 
@@ -1081,7 +1081,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "notes": [
                 {"id": "N2", "user": {"id": "PONCALL", "summary": "Grace"},
                  "content": "RCA: APPROVED", "created_at": "2026-10-18T10:00:00Z"},
-                {"id": "N1", "user": {"id": "PBOT1", "summary": "Prep Cook"},
+                {"id": "N1", "user": {"id": "PBOT1", "summary": "Prepcook"},
                  "content": "Looking into it.", "created_at": "2026-10-18T09:10:00Z"}
             ]})))
             .mount(&server)
@@ -1099,7 +1099,7 @@ mod tests {
         let pd = tracker(&server, config());
         let notes = pd.comments("Q1ABC").await.unwrap();
         assert_eq!(notes.len(), 2);
-        assert_eq!(notes[0].author, "Prep Cook");
+        assert_eq!(notes[0].author, "Prepcook");
         assert_eq!(notes[1].author_account_id.as_deref(), Some("PONCALL"));
         assert_eq!(notes[1].body_text, "RCA: APPROVED");
         pd.post_comment("Q1ABC", "TRIAGE REPORT\n[~accountid:PONCALL] see above")
@@ -1296,7 +1296,7 @@ mod tests {
                 "escalation_policy": {"escalation_rules": [
                     {"targets": [{"id": "PGRACE", "type": "user_reference", "summary": "Grace"},
                                  {"id": "PSCHED", "type": "schedule_reference"}]},
-                    {"targets": [{"id": "PBOT1", "type": "user_reference", "summary": "Prep Cook"}]}
+                    {"targets": [{"id": "PBOT1", "type": "user_reference", "summary": "Prepcook"}]}
                 ]}
             })))
             .mount(&server)

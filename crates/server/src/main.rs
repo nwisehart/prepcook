@@ -248,7 +248,7 @@ async fn run_server(options: ServeOptions) -> Result<(), PrepCookError> {
 
     if options.print_url {
         println!(
-            "Prep Cook is running at http://127.0.0.1:{actual_main_port} (Ctrl+C to stop it; `prepcook down` stops the board)"
+            "Prepcook is running at http://127.0.0.1:{actual_main_port} (Ctrl+C to stop it; `prepcook down` stops the board)"
         );
     }
     if options.open_browser {

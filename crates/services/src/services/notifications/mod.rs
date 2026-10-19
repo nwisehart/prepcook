@@ -1,4 +1,4 @@
-//! The notifications seam: everything Prep Cook tells a person outside the
+//! The notifications seam: everything Prepcook tells a person outside the
 //! app, and the services it tells them through.
 //!
 //! Callers describe *what happened* as an [`Event`] and hand it to

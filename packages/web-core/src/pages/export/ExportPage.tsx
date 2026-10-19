@@ -47,7 +47,7 @@ export function ExportPage({
         <div className="rounded-sm border border-border bg-secondary p-double space-y-double">
           <header className="space-y-double text-center">
             <div className="flex justify-center">
-              <img src={logoSrc} alt="Prep Cook" className="h-8 w-auto logo" />
+              <img src={logoSrc} alt="Prepcook" className="h-8 w-auto logo" />
             </div>
             <p className="text-sm text-low">
               Download your project and issue data to CSV files.

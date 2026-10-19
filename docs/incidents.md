@@ -1,14 +1,14 @@
 # Incidents
 
-Prep Cook can be a first responder's second pair of hands. In **incidents
+Prepcook can be a first responder's second pair of hands. In **incidents
 mode** its source is an incident tool rather than a ticket tracker: each open
-incident becomes an [investigation](method.md#investigations) card, Prep Cook
+incident becomes an [investigation](method.md#investigations) card, Prepcook
 reproduces the problem and explains it, and the triage report goes back to the
 incident as a note for the people working it.
 
 It is a teammate on the incident, not a pager. The responders stay in charge.
 
-## What Prep Cook does on an incident
+## What Prepcook does on an incident
 
 1. **Picks it up.** The ticket pickup polls the incident tool for open
    incidents (triggered or acknowledged) on the configured services, created
@@ -20,7 +20,7 @@ It is a teammate on the incident, not a pager. The responders stay in charge.
    tag when the board has a tag of that name. The card records where it came
    from: `origin` is `{ "kind": "incident", "ref": "<the incident's page>" }`.
 2. **Acknowledges it.** When planning starts, a triggered incident is
-   acknowledged as the configured Prep Cook user. An incident a responder has
+   acknowledged as the configured Prepcook user. An incident a responder has
    already acknowledged (or resolved) is left as it is.
 3. **Investigates.** Plan runs exactly as for any investigation: the app stood
    up, a reproduction harness, the `REPRODUCTION:` comment, the root-cause
@@ -35,7 +35,7 @@ It is a teammate on the incident, not a pager. The responders stay in charge.
    converted to a bug and carried all the way to **Clean up** (the fix merged
    and the card closed) resolves its incident then.
 
-Notes on the incident are its comments as far as Prep Cook is concerned: a
+Notes on the incident are its comments as far as Prepcook is concerned: a
 plan decision (`RCA: APPROVED`, `RCA: CHANGES — …`, `REPLAN: …` as a note's
 first line) from someone under **Plan approvers** works exactly as on a
 ticket ([approvals.md](approvals.md#the-tracker-ticket)).
@@ -44,7 +44,7 @@ ticket ([approvals.md](approvals.md#the-tracker-ticket)).
 
 - **It never pages anyone.** It does not raise urgency, escalate, or add
   responders — adding one sends a responder request, which pages them, so it
-  is not supported. The Prep Cook user should be on no schedule and in no
+  is not supported. The Prepcook user should be on no schedule and in no
   escalation policy.
 - **It never resolves an incident on its own judgement.** Only
   `resolve_on_triage`, or a fix shipped through the board, resolves one.
@@ -65,8 +65,8 @@ ticket ([approvals.md](approvals.md#the-tracker-ticket)).
 | Field | What to put there |
 | --- | --- |
 | API key (`pagerduty_api_token`) | A REST API key from **Integrations → API Access Keys**, able to read incidents and write notes. It is a secret: put it in the secrets store as `PAGERDUTY_API_TOKEN` (**Settings → Secrets**, or `prepcook secret set PAGERDUTY_API_TOKEN`) rather than in the config. |
-| User id (`user_id`) | A dedicated PagerDuty user for Prep Cook, e.g. `PABC123`, on no schedule and in no escalation policy. Notes and acknowledgements are written as this user (PagerDuty requires a `From` user for writes). Approvers are PagerDuty user ids. |
-| Service ids (`service_ids`) | The services whose incidents Prep Cook should pick up, comma-separated. Blank picks up every service the key can see. |
+| User id (`user_id`) | A dedicated PagerDuty user for Prepcook, e.g. `PABC123`, on no schedule and in no escalation policy. Notes and acknowledgements are written as this user (PagerDuty requires a `From` user for writes). Approvers are PagerDuty user ids. |
+| Service ids (`service_ids`) | The services whose incidents Prepcook should pick up, comma-separated. Blank picks up every service the key can see. |
 | Pickup filter (`pickup_filter`) | Optional terms narrowing the pickup: `service:PSVC1,PSVC2`, `urgency:high`, `status:triggered,acknowledged`, `assigned:@me`, `team:PTEAM1`. Default: `status:triggered,acknowledged`. |
 
 **Test connection** reads the user, which proves the key and the user id.

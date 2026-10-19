@@ -1,11 +1,11 @@
 # Configuration
 
-Every setting Prep Cook keeps, grouped the way **Settings** groups them, with its
+Every setting Prepcook keeps, grouped the way **Settings** groups them, with its
 default. Settings are stored in `config.json` in the app data directory
 (`~/.local/share/prepcook` on Linux, `~/Library/Application Support/ai.bloop.prepcook`
 on macOS), currently in its `v10` shape. The Settings pages write that file; a
 setting marked *file only* has no control on a page and is changed by editing
-the file while Prep Cook is stopped. The orchestrator re-reads its settings on every
+the file while Prepcook is stopped. The orchestrator re-reads its settings on every
 poll, so a change made in Settings applies without a restart.
 
 Defaults below are what a new config starts with. "Unset" means the key is
@@ -32,7 +32,7 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.eob_at_local` | unset (off) | *File only.* Local `HH:MM` at which each in-flight ticket gets its daily update on the tracker ([working-alongside-people.md](working-alongside-people.md#the-daily-update)). |
 | `orchestrator.daily_timezone` | unset (`America/Los_Angeles`) | *File only.* IANA zone the two times above are read in. |
 | `orchestrator.project_defaults` | empty | **Automated projects**: the boards the orchestrator scans, keyed by board id, each with its repositories and overrides. A board needs at least one repository. |
-| `orchestrator.seat_monitor` | `false` | *File only.* Probe the Claude subscription seat with a headless `claude -p` every six hours and notify the global [notification targets](#notifications) when its login has expired, for a shared runner. Off, Prep Cook never runs `claude` on its own; **Settings → Claude → Re-check now** still probes on demand. |
+| `orchestrator.seat_monitor` | `false` | *File only.* Probe the Claude subscription seat with a headless `claude -p` every six hours and notify the global [notification targets](#notifications) when its login has expired, for a shared runner. Off, Prepcook never runs `claude` on its own; **Settings → Claude → Re-check now** still probes on demand. |
 | `executor_profile` | Claude Code, default variant | **Settings → Agents → Default profile** (also **Settings → General → Default Coding Agent**): the profile every stage starts from ([Agents](#agents)). |
 
 ## Agents
@@ -78,7 +78,7 @@ credentials.
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `ticketing.mode` | `tickets` | **Source**. `tickets` takes tickets from a tracker (`jira`, `github_issues`); `incidents` takes open incidents from an incident tool (`pagerduty`) as investigation cards. A kind that does not serve the mode leaves no tracker configured, and Prep Cook logs why. |
+| `ticketing.mode` | `tickets` | **Source**. `tickets` takes tickets from a tracker (`jira`, `github_issues`); `incidents` takes open incidents from an incident tool (`pagerduty`) as investigation cards. A kind that does not serve the mode leaves no tracker configured, and Prepcook logs why. |
 | `ticketing.kind` | `jira` | The provider: `jira`, `github_issues`, `pagerduty`, or `linear` (named, not implemented: every call to it says so). Its own fields are in [Ticketing providers](#ticketing-providers). |
 | `ticketing.import_filter` | unset (by kind: Jira's open-sprint `To Do` tickets assigned to you, by priority; GitHub's `state:open assignee:@me`; PagerDuty's open incidents) | **Import filter**: the query the import dialog runs, in the provider's syntax. `{project_key}` is substituted. |
 | `ticketing.enabled` | `false` | **Pick up new tickets automatically** for the board below. |
@@ -208,7 +208,7 @@ Generated from the providers' descriptors. A secret field is read from the secre
 | | `webhook_url` | no | `SLACK_WEBHOOK_URL` | **Incoming webhook URL**. A Slack incoming-webhook URL (https://hooks.slack.com/services/…). Needed unless a bot token and channel are set. |
 | | `bot_token` | no | `SLACK_BOT_TOKEN` | **Bot token**. A bot token (xoxb-…) with chat:write, channels:history (or groups:history) and canvases:write; the bot must be in the channel. With a channel, escalations open a thread whose replies reach the blocked agent. |
 | | `channel` | no |  | **Channel ID**. The channel the bot posts to, e.g. C0123456. |
-| `webhook` (Webhook) | | | | POSTs every event as signed JSON to a URL you run, for wiring Prep Cook into anything else. |
+| `webhook` (Webhook) | | | | POSTs every event as signed JSON to a URL you run, for wiring Prepcook into anything else. |
 | | `url` | yes |  | **URL**. Where events are POSTed. A 5xx or timeout is retried three times. |
 | | `secret` | no | `WEBHOOK_SECRET` | **Signing secret**. Signs each body with HMAC-SHA256 in the X-PrepCook-Signature header. Unset sends unsigned requests. |
 | `discord` (Discord) | | | | Posts each event as an embed to a Discord channel through its webhook. |
@@ -251,9 +251,9 @@ Generated from the providers' descriptors. A secret field is read from the secre
 | `linear` (Linear) — not implemented | | | | Linear is not implemented — contributions welcome. It can be named, and every call to it says it is not supported. |
 | | `linear_api_key` | yes | `LINEAR_API_KEY` | **API key**. A Linear personal API key. |
 | | `team_key` | yes |  | **Team key**. The team issues come from, e.g. ENG. |
-| `pagerduty` (PagerDuty) | | | | Incidents mode: open incidents become investigation cards, and the triage report goes back to the incident as a note. Prep Cook never pages anyone and resolves an incident only when configured to. |
+| `pagerduty` (PagerDuty) | | | | Incidents mode: open incidents become investigation cards, and the triage report goes back to the incident as a note. Prepcook never pages anyone and resolves an incident only when configured to. |
 | | `pagerduty_api_token` | yes | `PAGERDUTY_API_TOKEN` | **API key**. A REST API key (Integrations → API Access Keys) that can read incidents and write notes. |
-| | `user_id` | yes |  | **User id**. The PagerDuty user Prep Cook writes as, e.g. PABC123: a dedicated user, not on any schedule, so nothing pages it. |
+| | `user_id` | yes |  | **User id**. The PagerDuty user Prepcook writes as, e.g. PABC123: a dedicated user, not on any schedule, so nothing pages it. |
 | | `service_ids` | no |  | **Service ids**. Comma-separated services whose incidents are picked up, e.g. PSVC123. Blank picks up every service the key can see. |
 | | `pickup_filter` | no |  | **Pickup filter**. Which incidents are picked up: service:PSVC123, urgency:high\|low, status:triggered,acknowledged, assigned:@me, team:PTEAM12. Default: status:triggered,acknowledged. |
 | | `import_filter` | no |  | **Import filter**. Incidents the import dialog lists, in the same terms. Default: status:triggered,acknowledged. |
@@ -262,10 +262,10 @@ Generated from the providers' descriptors. A secret field is read from the secre
 
 ## Agent MCP servers and skills
 
-Not settings, but where they end up. The agent sessions Prep Cook launches get
+Not settings, but where they end up. The agent sessions Prepcook launches get
 the `prepcook` MCP server (the `prepcook-mcp` binary beside the server, or in
 `~/.local/bin` or `/usr/local/bin`) and the MCP server of every evidence source
-that has one (Sentry's, for each Sentry source with a token). Prep Cook writes
+that has one (Sentry's, for each Sentry source with a token). Prepcook writes
 them to `agent-mcp.json` in the app data directory at startup and when the
 evidence sources change, and hands that file to each session:
 Claude Code through `--mcp-config`, which adds the servers to the user's own
@@ -274,14 +274,14 @@ only). The other agents have no per-session mechanism and get the servers only
 from their own config.
 
 The skills in `assets/agent-skills/` reach Claude Code sessions the same way:
-Prep Cook writes them under `agent-skills/.claude/skills/` in the app data
+Prepcook writes them under `agent-skills/.claude/skills/` in the app data
 directory, refreshing them as each session starts, and passes that directory
 with `--add-dir`, which loads its skills for that session only. Nothing is
 written into the worktree.
 
-Prep Cook never writes to an agent's own config (Claude Code's user config and
+Prepcook never writes to an agent's own config (Claude Code's user config and
 `~/.claude/skills`, `~/.codex/config.toml` and the like) on its own, so
-sessions outside Prep Cook load only what their user installed. **Settings →
+sessions outside Prepcook load only what their user installed. **Settings →
 MCP Servers** edits that config when you save there, and the toolkit's
 `setup.sh` registers `prepcook` in Claude Code's user config and links the
 `prepcook-*` skills into `~/.claude/skills` when you run it
@@ -330,7 +330,7 @@ The board reads no sign-in or OAuth settings: `SELF_HOST_LOCAL_AUTH_EMAIL`,
 
 **Settings → Secrets**, or `prepcook secret set|list|unset`. Not part of
 `config.json`: values live in `~/.config/prepcook/secrets.env` (mode `0600`).
-`PREPCOOK_SECRETS_FILE` points Prep Cook at another file, and an environment variable
+`PREPCOOK_SECRETS_FILE` points Prepcook at another file, and an environment variable
 `PREPCOOK_SECRET_<NAME>` overrides an entry. A repository's `[secrets] requires`
 names the ones its scripts need ([scripts.md](scripts.md#secrets)).
 
@@ -339,7 +339,7 @@ names the ones its scripts need ([scripts.md](scripts.md#secrets)).
 | Key | Default | What it does |
 | --- | --- | --- |
 | `playbooks` | the shipped texts | **Settings → Playbooks**, scope Global: the prompt each stage's agent starts from, keyed `<work_class>:<stage>` (`investigation:planning` among them) plus `pattern:planning`, `reviewing`, `comment_reply` and `rca_analysis` ([playbooks.md](playbooks.md)). |
-| `playbook_keys` | `1` | *Kept by Prep Cook.* Which key names `playbooks` uses. A config without it was saved before `investigation:planning` (the pattern review's text) became `pattern:planning` and `triage` became `comment_reply`; both are renamed, globally and in every board's overrides, the first time it is read. |
+| `playbook_keys` | `1` | *Kept by Prepcook.* Which key names `playbooks` uses. A config without it was saved before `investigation:planning` (the pattern review's text) became `pattern:planning` and `triage` became `comment_reply`; both are renamed, globally and in every board's overrides, the first time it is read. |
 
 ## Per-board overrides
 
@@ -375,7 +375,7 @@ empty inherits the global value.
 
 ## Everything else
 
-**Settings → General**, and state Prep Cook keeps for itself.
+**Settings → General**, and state Prepcook keeps for itself.
 
 | Key | Default | What it does |
 | --- | --- | --- |

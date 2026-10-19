@@ -64,7 +64,7 @@ pub(crate) fn embed(event: &Event) -> Value {
         "title": clip(&event.headline(), TITLE_MAX),
         "description": clip(&event.body(), DESCRIPTION_MAX),
         "color": color(event.severity()),
-        "footer": { "text": format!("Prep Cook · {}", event.kind()) },
+        "footer": { "text": format!("Prepcook · {}", event.kind()) },
     });
     if let Some(link) = event.link() {
         embed["url"] = json!(link);
@@ -80,7 +80,7 @@ impl Notifier for DiscordNotifier {
 
     async fn send(&self, event: &Event) -> Result<Delivery, NotifyError> {
         let body = redact_value(json!({
-            "username": "Prep Cook",
+            "username": "Prepcook",
             "embeds": [embed(event)],
             // Event text quotes people and tickets; it must never ping anyone.
             "allowed_mentions": { "parse": [] },

@@ -2,7 +2,7 @@
 
 The `remote` crate is the board service: issues, comments, tags, pull-request
 links, the knowledge store and the root-cause graph, kept in Postgres and
-streamed to the UI through ElectricSQL. It runs in Docker; the native Prep Cook
+streamed to the UI through ElectricSQL. It runs in Docker; the native Prepcook
 server serves the UI and talks to it.
 
 ## Run

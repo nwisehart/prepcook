@@ -48,7 +48,7 @@ BOARD_ONLY = [
     "on the card",
     "push gate",
     "spec_approved",
-    "Prep Cook has already",
+    "Prepcook has already",
     "Executing when ready",
     "{{",
     "}}",

@@ -3,7 +3,7 @@
 A reproduction harness shows that a failure happens; where it ran for real
 there is usually more: an error tracker grouping the exceptions, a log service
 holding the request that failed, the log file the app wrote while the harness
-drove it. Prep Cook calls each of these places an **evidence source**. Every
+drove it. Prepcook calls each of these places an **evidence source**. Every
 configured source
 
 - gets a paragraph in the planning playbooks (`{{product.evidence_tools}}`),
@@ -44,7 +44,7 @@ Every source takes three optional fields besides its provider's own:
 - `notes` — a sentence or two appended to the source's paragraph: what is
   logged there, how long it is kept, which fields matter.
 
-Secret fields (tokens and keys) are best kept out of the file: Prep Cook reads
+Secret fields (tokens and keys) are best kept out of the file: Prepcook reads
 them from the secrets store first, under `<KIND>_<FIELD>`
 (`SENTRY_ACCESS_TOKEN`, `DATASET_READ_TOKEN`, `DATADOG_API_KEY`,
 `DATADOG_APPLICATION_KEY`), then from the config, then from the environment
@@ -140,11 +140,11 @@ linked to the same search in Datadog's log explorer.
 ### CloudWatch Logs
 
 Needs `log_group`; `region` and `profile` choose the AWS CLI's region and
-profile. Prep Cook drives the `aws` CLI rather than linking the AWS SDK, the
+profile. Prepcook drives the `aws` CLI rather than linking the AWS SDK, the
 way the GitHub Issues tracker drives `gh`: the CLI's own configuration (a
 profile, SSO, an instance role) supplies the credentials, so there is nothing
 to enter, and the SDK's dependency tree stays out of the build. The CLI must be
-installed and signed in on the machine Prep Cook runs on. Each hit carries the
+installed and signed in on the machine Prepcook runs on. Each hit carries the
 event's message, `log_stream` and `event_id`, linked to its log stream in the
 console when the region is set. Test connection looks the log group up.
 
@@ -236,7 +236,7 @@ secrets redaction every log line does.
    implements `EvidenceSource` (`kind`, `label`, `describe`, `mcp_server`,
    `search`, `test`) and a `descriptor()` whose fields start and end with
    `with_common_fields`. `search` returns `Ok(None)` when the provider has no
-   API Prep Cook drives as configured.
+   API Prepcook drives as configured.
 2. A variant in `EvidenceKind` (its config string, display name and
    descriptor) and in `EvidenceProvider`, and its arm in `build_provider`.
 3. Tests against recorded responses (`wiremock`, or a recorded runner for a

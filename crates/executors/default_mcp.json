@@ -56,8 +56,8 @@
   },
   "meta": {
     "prepcook": {
-      "name": "Prep Cook",
-      "description": "Create, update and delete Prep Cook tasks",
+      "name": "Prepcook",
+      "description": "Create, update and delete Prepcook tasks",
       "url": "https://github.com/nwisehart/prepcook",
       "icon": "favicon-vk-light.svg"
     },

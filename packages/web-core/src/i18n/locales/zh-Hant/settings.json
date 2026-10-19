@@ -87,7 +87,7 @@
           "host": {
             "label": "遠端 SSH 主機（選填）",
             "placeholder": "例如：主機名稱或 IP 位址",
-            "helper": "若 Prep Cook 在遠端伺服器上執行，請設定此項。設定後，點擊在編輯器中開啟將產生 URL 以透過 SSH 開啟編輯器，而非執行本機指令。"
+            "helper": "若 Prepcook 在遠端伺服器上執行，請設定此項。設定後，點擊在編輯器中開啟將產生 URL 以透過 SSH 開啟編輯器，而非執行本機指令。"
           },
           "user": {
             "label": "遠端 SSH 使用者（選填）",
@@ -213,7 +213,7 @@
       },
       "privacy": {
         "title": "隱私",
-        "description": "透過分享匿名使用資料來協助改善 Prep Cook。",
+        "description": "透過分享匿名使用資料來協助改善 Prepcook。",
         "telemetry": {
           "label": "啟用遙測",
           "helper": "啟用匿名使用事件追蹤以協助改善應用程式。不會收集提示或專案資訊。"
@@ -425,7 +425,7 @@
     },
     "repos": {
       "title": "儲存庫設定",
-      "description": "Repository details, and the scripts Prep Cook reads from the repository's .prepcook/scripts.toml.",
+      "description": "Repository details, and the scripts Prepcook reads from the repository's .prepcook/scripts.toml.",
       "loading": "載入儲存庫中...",
       "loadError": "載入儲存庫失敗。",
       "addRepo": {
@@ -473,14 +473,14 @@
       },
       "scripts": {
         "title": "Scripts",
-        "description": "Read from .prepcook/scripts.toml at the repository root. Prep Cook never edits that file: change the scripts there and reload.",
+        "description": "Read from .prepcook/scripts.toml at the repository root. Prepcook never edits that file: change the scripts there and reload.",
         "reload": "Reload",
         "standUp": "Test stand-up",
         "loading": "Reading .prepcook/scripts.toml…",
         "loadError": "Could not read the scripts manifest.",
         "missingTitle": "This repository has no .prepcook/scripts.toml",
         "invalidTitle": "This repository's .prepcook/scripts.toml cannot be read",
-        "hint": "Prep Cook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
+        "hint": "Prepcook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
         "steps": {
           "title": "App steps",
           "timeout": "timeout {{seconds}}s",
@@ -528,11 +528,11 @@
       },
       "remove": {
         "title": "移除儲存庫",
-        "description": "從 Prep Cook 取消關聯此儲存庫。磁碟上的檔案不會被刪除。",
+        "description": "從 Prepcook 取消關聯此儲存庫。磁碟上的檔案不會被刪除。",
         "button": "移除",
         "confirm": "移除儲存庫",
         "dialogTitle": "移除「{{name}}」？",
-        "dialogDescription": "這將從 Prep Cook 取消關聯此儲存庫。您磁碟上的檔案不受影響。您可以稍後重新加入。",
+        "dialogDescription": "這將從 Prepcook 取消關聯此儲存庫。您磁碟上的檔案不受影響。您可以稍後重新加入。",
         "success": "儲存庫移除成功。",
         "error": "移除儲存庫失敗。"
       },
@@ -547,12 +547,12 @@
     },
     "secrets": {
       "title": "Secrets",
-      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prep Cook redacts the values from logs, comments and messages. Values are never shown here.",
+      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prepcook redacts the values from logs, comments and messages. Values are never shown here.",
       "loading": "Loading secrets…",
       "loadError": "Failed to load the secrets store.",
       "file": {
         "label": "Secrets file",
-        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prep Cook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
+        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prepcook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
       },
       "list": {
         "label": "Stored secrets",

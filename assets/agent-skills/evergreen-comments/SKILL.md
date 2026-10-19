@@ -3,7 +3,7 @@ name: evergreen-comments
 description: Write and review code comments so they are evergreen — explaining non-obvious code succinctly at the point it occurs, never narrating history, changes, fixes, or regressions, never restating a design doc, and matching the voice of the surrounding codebase rather than sounding machine-written. Use whenever writing, editing, or reviewing comments and docstrings in any language.
 ---
 
-<!-- Shipped by Prep Cook from assets/agent-skills/. Edits made
+<!-- Shipped by Prepcook from assets/agent-skills/. Edits made
      here are overwritten on the next start; change the repo copy instead. -->
 
 # Evergreen comments

@@ -187,7 +187,7 @@ export function AgentUsersCard({ organizationId }: { organizationId: string }) {
           <SettingsInput
             value={name}
             onChange={setName}
-            placeholder={t('agents.namePlaceholder', 'Prep Cook')}
+            placeholder={t('agents.namePlaceholder', 'Prepcook')}
           />
           <SettingsInput
             value={email}

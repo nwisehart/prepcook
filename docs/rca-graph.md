@@ -1,12 +1,12 @@
 # The knowledge store and the root-cause graph
 
-One RCA explains one bug. Fifty RCAs say where bugs come from. Prep Cook keeps every
+One RCA explains one bug. Fifty RCAs say where bugs come from. Prepcook keeps every
 bug RCA in a knowledge store and links each one into a graph of product areas,
 components and root-cause classes, so a cause that keeps coming back becomes
 visible and can be reviewed as a pattern rather than fixed once more as a
 symptom.
 
-The store lives on the board, so every teammate's Prep Cook reads and writes the
+The store lives on the board, so every teammate's Prepcook reads and writes the
 same one. The board's **Knowledge** menu shows it: a ranking of root-cause
 classes, the graph as a web, and an export.
 

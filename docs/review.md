@@ -1,6 +1,6 @@
 # The independent review
 
-When a card enters Review, Prep Cook starts a new agent in a fresh workspace
+When a card enters Review, Prepcook starts a new agent in a fresh workspace
 branched from the implementation branch. It has not seen the plan, the RCA or
 the session that wrote the fix. That is the point: the implementing agent knows
 why every line is there, and a reviewer who knows the same reasons reads the
@@ -99,7 +99,7 @@ misleading comment is the one readability finding that earns a round.
 
 The reviewer records the outcome twice: the `record_review` tool call with the
 verdict and every finding (class, severity, path, line, title, body), which is
-what Prep Cook routes on; then one `REVIEW: APPROVE` or `REVIEW: REQUEST CHANGES`
+what Prepcook routes on; then one `REVIEW: APPROVE` or `REVIEW: REQUEST CHANGES`
 comment for people. When the two disagree, the recorded severities win.
 
 ## Fix rounds and the cap

@@ -191,7 +191,7 @@
   "workspacesGuide": {
     "welcome": {
       "title": "欢迎",
-      "content": "欢迎使用 Workspaces，这是 Prep Cook 的全新设计界面。我们正在向部分用户推出以获取早期反馈。您可以随时通过导航栏中的反馈图标分享您的想法。"
+      "content": "欢迎使用 Workspaces，这是 Prepcook 的全新设计界面。我们正在向部分用户推出以获取早期反馈。您可以随时通过导航栏中的反馈图标分享您的想法。"
     },
     "commandBar": {
       "title": "命令栏",
@@ -430,7 +430,7 @@
     "projectsGuide": {
       "intro": {
         "title": "Welcome",
-        "content": "Welcome to Prep Cook. Use the help sections in this panel to learn how things work, then create your first issue. You can re-open this help dialog or give feedback anytime from the navbar."
+        "content": "Welcome to Prepcook. Use the help sections in this panel to learn how things work, then create your first issue. You can re-open this help dialog or give feedback anytime from the navbar."
       },
       "welcome": {
         "title": "Projects",

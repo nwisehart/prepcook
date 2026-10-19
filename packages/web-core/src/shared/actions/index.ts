@@ -444,7 +444,7 @@ export const Actions = {
     label: 'Give Feedback',
     icon: MegaphoneIcon,
     requiresTarget: ActionTargetType.NONE,
-    // Opens a prefilled GitHub issue on the Prep Cook repo. Anchor click, not
+    // Opens a prefilled GitHub issue on the Prepcook repo. Anchor click, not
     // window.open — the latter is popup-blocked when the triggering
     // menu/popover closes and drops the user-activation.
     execute: () => {

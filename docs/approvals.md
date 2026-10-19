@@ -32,7 +32,7 @@ the card in its metadata as `approvals`: one record per decision with
 
 ### Lavish
 
-The Approve button in a Lavish review session. Prep Cook relays the reviewer's
+The Approve button in a Lavish review session. Prepcook relays the reviewer's
 feedback to the planning agent, and records an Approve as a decision from
 `lavish`. The agent then records the spec approval itself, which is what moves
 the card on.
@@ -60,13 +60,13 @@ card or through the API, which work the same with or without one.
 Case does not matter; reasons can continue on the lines below. Only the people
 ticked under **Settings → Ticketing → Plan approvers** can decide this way, and
 the orchestrator's own account never can. Anyone else gets a reply on the
-ticket saying the comment was not acted on. Prep Cook answers every decision on the
+ticket saying the comment was not acted on. Prepcook answers every decision on the
 ticket, so the person who made it sees what happened without opening the
 board. Comments are read every two minutes or so.
 
 ### The card
 
-A comment on the Prep Cook card whose **first line** is one of:
+A comment on the Prepcook card whose **first line** is one of:
 
 ```
 APPROVE
@@ -148,7 +148,7 @@ secret unset PREPCOOK_API_TOKEN`) to turn token access off again.
 
 A decision made by a person is explicit intent, so it takes effect the same
 way in **Chef mode** (orchestrator Auto, autonomy Off: a person moves cards
-between columns) and **Prep mode** (autonomy Full: Prep Cook moves them itself).
+between columns) and **Prep mode** (autonomy Full: Prepcook moves them itself).
 
 | Decision | From the tracker, the card or the API | From Lavish |
 | --- | --- | --- |
@@ -157,6 +157,6 @@ between columns) and **Prep mode** (autonomy Full: Prep Cook moves them itself).
 | Re-plan | The card's claim is cleared and it moves back to Plan, where a fresh planning agent starts on the next tick with the reasons in its prompt. A tracker comment's reasons reach that agent the way every new tracker comment does. | — |
 
 Approve and request changes are refused once the card has left Plan; re-plan
-is refused outside Plan, Execute, Review and Push MR. A decision Prep Cook cannot
+is refused outside Plan, Execute, Review and Push MR. A decision Prepcook cannot
 carry out is answered once — on the ticket for a tracker comment, on the card
 otherwise — and not retried.

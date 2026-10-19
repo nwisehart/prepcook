@@ -1,5 +1,5 @@
 //! The Claude Code skills this repo ships (`assets/agent-skills/`), given to
-//! the agent sessions Prep Cook launches and to nothing else.
+//! the agent sessions Prepcook launches and to nothing else.
 //!
 //! They are written to `<app data>/agent-skills/.claude/skills/<name>/`, and
 //! the Claude executor passes that directory with `--add-dir`: Claude Code

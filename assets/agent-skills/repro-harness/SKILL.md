@@ -1,9 +1,9 @@
 ---
 name: repro-harness
-description: Build the Playwright harness that reproduces a reported bug against the app Prep Cook stood up for this worktree (at $PREPCOOK_APP_URL) and later proves a fix. Use whenever a planning or executing session needs to make a failure happen in the running application, capture evidence, or re-run a reproduction against a change — it fixes where the script lives, how it logs in, how it reports, how it is handed to someone else's machine, and what it must never do.
+description: Build the Playwright harness that reproduces a reported bug against the app Prepcook stood up for this worktree (at $PREPCOOK_APP_URL) and later proves a fix. Use whenever a planning or executing session needs to make a failure happen in the running application, capture evidence, or re-run a reproduction against a change — it fixes where the script lives, how it logs in, how it reports, how it is handed to someone else's machine, and what it must never do.
 ---
 
-<!-- Shipped by Prep Cook from assets/agent-skills/. Edits made
+<!-- Shipped by Prepcook from assets/agent-skills/. Edits made
      here are overwritten on the next start; change the repo copy instead. -->
 
 # Reproduction harness
@@ -38,7 +38,7 @@ embedded.
 
 ## Environment and login
 
-Prep Cook has already built this worktree's version of the app and started it, from
+Prepcook has already built this worktree's version of the app and started it, from
 the repository's `.prepcook/scripts.toml`. It listens at `$PREPCOOK_APP_URL`, seeded with
 the project's test data. `app_status` says what is running; `app_restart` rebuilds
 and restarts it from the worktree's current files, which is how a harness is run

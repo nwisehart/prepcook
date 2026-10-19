@@ -6,7 +6,7 @@ param(
     [string]$Message,
     
     [Parameter(Mandatory=$false)]
-    [string]$AppName = "Prep Cook"
+    [string]$AppName = "Prepcook"
 )
 
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null

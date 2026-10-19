@@ -2141,7 +2141,7 @@ mod tests {
             .on(
                 "GET",
                 "user",
-                json!({"login": "PrepCook-Bot", "name": "Prep Cook"}),
+                json!({"login": "PrepCook-Bot", "name": "Prepcook"}),
             )
             .on("POST", "repos/acme/widgets/issues/6/assignees", json!({}));
         tracker(&runner)
@@ -2374,7 +2374,7 @@ mod tests {
             .on(
                 "GET",
                 "user",
-                json!({"login": "PrepCook-Bot", "name": "Prep Cook"}),
+                json!({"login": "PrepCook-Bot", "name": "Prepcook"}),
             )
             .on(
                 "GET",
@@ -2393,7 +2393,7 @@ mod tests {
         let gh = tracker(&runner);
         let me = gh.identity().await.unwrap();
         assert_eq!(me.account_id, "prepcook-bot");
-        assert_eq!(me.display_name, "Prep Cook");
+        assert_eq!(me.display_name, "Prepcook");
         let users = gh.assignable_users("ignored").await.unwrap();
         assert_eq!(
             users,

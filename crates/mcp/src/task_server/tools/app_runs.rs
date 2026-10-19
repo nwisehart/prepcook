@@ -1,4 +1,4 @@
-//! The app Prep Cook stood up for the agent's worktree (see `docs/scripts.md`):
+//! The app Prepcook stood up for the agent's worktree (see `docs/scripts.md`):
 //! where it is, and a way to restart it after a change.
 
 use rmcp::{ErrorData, model::CallToolResult, tool, tool_router};
@@ -7,7 +7,7 @@ use serde_json::Value;
 use super::{McpServer, ToolError};
 
 impl McpServer {
-    /// The worktree this agent works in: `$PREPCOOK_WORKTREE` when Prep Cook set it,
+    /// The worktree this agent works in: `$PREPCOOK_WORKTREE` when Prepcook set it,
     /// else the directory the MCP server was started in.
     pub(super) fn app_worktree() -> Result<String, ToolError> {
         if let Some(worktree) = std::env::var_os("PREPCOOK_WORKTREE").filter(|w| !w.is_empty()) {
@@ -28,7 +28,7 @@ impl McpServer {
 #[tool_router(router = app_runs_tools_router, vis = "pub")]
 impl McpServer {
     #[tool(
-        description = "Show the app Prep Cook stood up for this worktree from .prepcook/scripts.toml — served on this machine, or deployed with [app.remote] when the board reproduces against a remote target: its URL, target_kind, port (local only), the names of the variables the seed script wrote (values are in your environment), when it started, and health (whether it answers now). Returns running: false when no app is up."
+        description = "Show the app Prepcook stood up for this worktree from .prepcook/scripts.toml — served on this machine, or deployed with [app.remote] when the board reproduces against a remote target: its URL, target_kind, port (local only), the names of the variables the seed script wrote (values are in your environment), when it started, and health (whether it answers now). Returns running: false when no app is up."
     )]
     async fn app_status(&self) -> Result<CallToolResult, ErrorData> {
         let worktree = match Self::app_worktree() {

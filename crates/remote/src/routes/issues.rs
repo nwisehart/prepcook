@@ -42,7 +42,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/issues/bulk", post(bulk_update_issues))
 }
 
-/// Rejects status moves that violate the Prep Cook workflow stage order (see
+/// Rejects status moves that violate the Prepcook workflow stage order (see
 /// `crate::workflow`), including the Planning → Executing gate that requires
 /// a passing planning verdict in the issue's `extension_metadata`. Only
 /// route handlers call this; internal automation that updates issues through

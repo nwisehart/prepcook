@@ -3,7 +3,7 @@
 // Contract (see SKILL.md): logs in once and reuses the session; waits for the page to
 // settle before looking; prints exactly one JSON line per case on stdout; screenshots
 // every case; exits non-zero when any case fails. Diagnostics go to stderr only.
-// The app's address and the test login come from the environment Prep Cook sets when it
+// The app's address and the test login come from the environment Prepcook sets when it
 // stands the app up (PREPCOOK_APP_URL, PREPCOOK_TEST_USER_EMAIL, PREPCOOK_TEST_USER_PASSWORD) and
 // are never written anywhere.
 

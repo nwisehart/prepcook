@@ -15,7 +15,7 @@ Five concerns, and every rule belongs to one:
                skill has instead: `$ARGUMENTS`, `<KEY>`, `<target>`, plain words.
                The `{{product.*}}` placeholders are not rules: generate.py
                fills them from a manifest's `[profile]` after the table runs.
-  environment  the app Prep Cook stood up for the worktree (`app_status`,
+  environment  the app Prepcook stood up for the worktree (`app_status`,
                `app_restart`) → the app the engineer stood up from the same
                `.prepcook/scripts.toml`, with the same `PREPCOOK_*` variables
   board        the card's tools (`update_issue`, `add_issue_comment`,
@@ -76,7 +76,7 @@ SKILLS = [
         "With the failure in hand, find the mechanism:",
         "from",
         "Write the root-cause analysis for a bug you have reproduced locally, post it to the ticket and file "
-        "it in the Prep Cook knowledge store. Usage: /prepcook-rca <KEY>",
+        "it in the Prepcook knowledge store. Usage: /prepcook-rca <KEY>",
     ),
     Skill(
         "prepcook-fix",
@@ -119,12 +119,12 @@ RULES: list[Rule] = [
     # --------------------------------------------------------- environment
     Rule(
         "environment", "bug:planning",
-        "Prep Cook has already built this worktree's version of the app and started it; it listens at "
+        "Prepcook has already built this worktree's version of the app and started it; it listens at "
         "`$PREPCOOK_APP_URL`, seeded with the project's test data.",
         "You stood the app up yourself on this machine from the repository's `.prepcook/scripts.toml` — the "
         "manifest the orchestrator runs: `setup`, `build`, `start`, then `seed` — with `<target>` checked "
         "out; it listens at `$PREPCOOK_APP_URL`, seeded with the project's test data.",
-        "On the board Prep Cook stands the app up before the agent starts; on a laptop the engineer does, from "
+        "On the board Prepcook stands the app up before the agent starts; on a laptop the engineer does, from "
         "the same manifest.",
     ),
     Rule(
@@ -134,7 +134,7 @@ RULES: list[Rule] = [
         "The test login is in `$PREPCOOK_TEST_USER_EMAIL` and `$PREPCOOK_TEST_USER_PASSWORD`, plus whatever else "
         "the seed wrote to `$PREPCOOK_ENV_OUT` — the engineer exports those lines into the shell Claude Code "
         "runs in: read them from the environment, and never ask for them, print, log, upload or commit them.",
-        "Prep Cook hands the seed's variables to the session; locally the engineer exports them, and the skill "
+        "Prepcook hands the seed's variables to the session; locally the engineer exports them, and the skill "
         "must not ask for them in chat instead.",
     ),
     Rule(
@@ -143,7 +143,7 @@ RULES: list[Rule] = [
         "current files, which is how to test a candidate change.",
         "Rebuilding and restarting the app from the worktree's current files — the manifest's `build`, then "
         "`start` — is how to test a candidate change.",
-        "`app_status` and `app_restart` are tools of the agent-mode MCP and act on apps Prep Cook started; the "
+        "`app_status` and `app_restart` are tools of the agent-mode MCP and act on apps Prepcook started; the "
         "engineer's app is restarted with the manifest's own commands.",
     ),
     Rule(
@@ -373,7 +373,7 @@ RULES: list[Rule] = [
     ),
     Rule(
         "runner", "bug:executing",
-        "Prep Cook reruns the project's scripts and tests on this branch before the {{pr_noun}} opens; you still "
+        "Prepcook reruns the project's scripts and tests on this branch before the {{pr_noun}} opens; you still "
         "run the tests that cover your change.",
         "Your app is the acceptance environment: rebuild and restart it from this branch and run the harness "
         "from `.repro/<KEY>/` against it until it passes, then run the manifest's `test` command once before "
@@ -509,14 +509,14 @@ COPIED_FILES = {
 }
 
 SHIPPED_NOTE = (
-    "<!-- Shipped by Prep Cook from assets/agent-skills/. Edits made\n"
+    "<!-- Shipped by Prepcook from assets/agent-skills/. Edits made\n"
     "     here are overwritten on the next start; change the repo copy instead. -->\n\n"
 )
 
 COPIED_RULES: list[Rule] = [
     Rule(
         "runner", "repro-harness/SKILL.md", SHIPPED_NOTE, "",
-        "Prep Cook overwrites its installed copy on start; this copy says how it is made in the generated note.",
+        "Prepcook overwrites its installed copy on start; this copy says how it is made in the generated note.",
     ),
     Rule(
         "runner", "evergreen-comments/SKILL.md", SHIPPED_NOTE, "",
@@ -524,7 +524,7 @@ COPIED_RULES: list[Rule] = [
     ),
     Rule(
         "environment", "repro-harness/SKILL.md",
-        "against the app Prep Cook stood up for this worktree (at $PREPCOOK_APP_URL) and later proves a fix.",
+        "against the app Prepcook stood up for this worktree (at $PREPCOOK_APP_URL) and later proves a fix.",
         "against the app you stood up from .prepcook/scripts.toml (at $PREPCOOK_APP_URL) and later proves a fix.",
         "The skill's one-line description names who started the app.",
     ),
@@ -539,7 +539,7 @@ COPIED_RULES: list[Rule] = [
     ),
     Rule(
         "environment", "repro-harness/SKILL.md",
-        "Prep Cook has already built this worktree's version of the app and started it, from\n"
+        "Prepcook has already built this worktree's version of the app and started it, from\n"
         "the repository's `.prepcook/scripts.toml`. It listens at `$PREPCOOK_APP_URL`, seeded with\n"
         "the project's test data. `app_status` says what is running; `app_restart` rebuilds\n"
         "and restarts it from the worktree's current files, which is how a harness is run\n"
@@ -549,7 +549,7 @@ COPIED_RULES: list[Rule] = [
         "orchestrator runs. It listens at `$PREPCOOK_APP_URL`, seeded with the project's test\n"
         "data. Rebuilding and restarting it from the worktree's current files (the\n"
         "manifest's `build`, then `start`) is how a harness is run\nagainst a candidate change.",
-        "The engineer, not Prep Cook, stood the app up; `app_status` and `app_restart` act only on apps Prep Cook started.",
+        "The engineer, not Prepcook, stood the app up; `app_status` and `app_restart` act only on apps Prepcook started.",
     ),
     Rule(
         "environment", "repro-harness/SKILL.md",
@@ -604,13 +604,13 @@ COPIED_RULES: list[Rule] = [
     ),
     Rule(
         "environment", "repro-harness/harness.template.mjs",
-        "// The app's address and the test login come from the environment Prep Cook sets when it\n"
+        "// The app's address and the test login come from the environment Prepcook sets when it\n"
         "// stands the app up (PREPCOOK_APP_URL, PREPCOOK_TEST_USER_EMAIL, PREPCOOK_TEST_USER_PASSWORD) and\n"
         "// are never written anywhere.",
         "// The app's address and the test login come from the environment you exported when you\n"
         "// stood the app up from .prepcook/scripts.toml (PREPCOOK_APP_URL, PREPCOOK_TEST_USER_EMAIL,\n"
         "// PREPCOOK_TEST_USER_PASSWORD) and are never written anywhere.",
-        "The engineer exports the seed's variables; Prep Cook does not.",
+        "The engineer exports the seed's variables; Prepcook does not.",
     ),
     Rule(
         "runner", "repro-harness/harness.template.mjs",

@@ -44,7 +44,7 @@ pub struct PlaybookContext {
     /// The author name the agent's commits carry.
     pub bot_name: String,
     /// The git host, which decides `{{host_cli}}` and `{{pr_noun}}`. `None`
-    /// when the remote is not one Prep Cook recognises.
+    /// when the remote is not one Prepcook recognises.
     pub host: Option<ProviderKind>,
     pub in_app_gate: InAppGate,
 }
@@ -104,7 +104,7 @@ impl PlaybookContext {
     }
 
     /// The command-line client for the git host. GitHub's `gh` is the
-    /// fallback for a host Prep Cook does not recognise.
+    /// fallback for a host Prepcook does not recognise.
     pub fn host_cli(&self) -> &'static str {
         match self.host {
             Some(ProviderKind::GitLab) => "glab",
@@ -408,7 +408,7 @@ mod tests {
             "pantry",
             None,
             "origin/main".to_string(),
-            "Prep Cook".to_string(),
+            "Prepcook".to_string(),
             None,
             InAppGate::None,
         )
@@ -506,7 +506,7 @@ mod tests {
             "pantry",
             Some(&profile),
             "origin/main".to_string(),
-            "Prep Cook".to_string(),
+            "Prepcook".to_string(),
             None,
             InAppGate::None,
         )

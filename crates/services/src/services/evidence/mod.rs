@@ -258,7 +258,7 @@ pub struct SearchResult {
 pub struct SourceReport {
     pub label: String,
     pub kind: String,
-    /// False when the source was skipped (no API Prep Cook drives, or an area
+    /// False when the source was skipped (no API Prepcook drives, or an area
     /// it does not cover); `note` says which.
     pub searched: bool,
     pub hits: usize,
@@ -398,7 +398,7 @@ pub trait EvidenceSource: Send + Sync {
     /// when the provider has none.
     fn mcp_server(&self) -> Option<McpServerEntry>;
 
-    /// Searches the source. `Ok(None)` when Prep Cook drives no API for it as
+    /// Searches the source. `Ok(None)` when Prepcook drives no API for it as
     /// configured (the agent reads it another way, which `describe` says).
     async fn search(&self, query: &SearchQuery) -> Result<Option<SearchResult>, EvidenceError>;
 

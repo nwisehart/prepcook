@@ -45,7 +45,7 @@ impl WebhookNotifier {
         Descriptor::new(
             "webhook",
             "Webhook",
-            "POSTs every event as signed JSON to a URL you run, for wiring Prep Cook into \
+            "POSTs every event as signed JSON to a URL you run, for wiring Prepcook into \
              anything else.",
             vec![
                 Field::new(

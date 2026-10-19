@@ -1,5 +1,5 @@
 //! Which coding agent runs which orchestrator stage, and the `agents`
-//! integration area that lists every agent Prep Cook can drive.
+//! integration area that lists every agent Prepcook can drive.
 //!
 //! A stage's profile resolves, most specific first: the board's
 //! `agents.stages.<stage>`, the global `agents.stages.<stage>`, then the

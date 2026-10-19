@@ -1178,7 +1178,7 @@ mod tests {
             "content": [{
                 "type": "paragraph",
                 "content": [
-                    {"type": "mention", "attrs": {"id": "agent-123", "text": "@Prep Cook"}},
+                    {"type": "mention", "attrs": {"id": "agent-123", "text": "@Prepcook"}},
                     {"type": "text", "text": " any update on this?"}
                 ]
             }]
@@ -1192,7 +1192,7 @@ mod tests {
     fn mentions_survive_the_flattener() {
         assert_eq!(
             adf_to_text(&comment_body()),
-            "@Prep Cook any update on this?"
+            "@Prepcook any update on this?"
         );
     }
 
@@ -1202,11 +1202,11 @@ mod tests {
             "type": "doc",
             "content": [
                 {"type": "paragraph", "content": [
-                    {"type": "mention", "attrs": {"id": "agent-123", "text": "@Prep Cook"}},
+                    {"type": "mention", "attrs": {"id": "agent-123", "text": "@Prepcook"}},
                     {"type": "mention", "attrs": {"id": "human-9", "text": "@Jack"}}
                 ]},
                 {"type": "paragraph", "content": [
-                    {"type": "mention", "attrs": {"id": "agent-123", "text": "@Prep Cook"}}
+                    {"type": "mention", "attrs": {"id": "agent-123", "text": "@Prepcook"}}
                 ]}
             ]
         });
@@ -1221,10 +1221,10 @@ mod tests {
             "type": "paragraph",
             "content": [{
                 "type": "mention",
-                "attrs": {"id": "agent-123", "displayName": "Prep Cook"}
+                "attrs": {"id": "agent-123", "displayName": "Prepcook"}
             }]
         });
-        assert_eq!(adf_to_text(&body), "@Prep Cook");
+        assert_eq!(adf_to_text(&body), "@Prepcook");
     }
 
     #[test]
@@ -1355,7 +1355,7 @@ mod fixture_tests {
     fn myself() -> serde_json::Value {
         serde_json::json!({
             "accountId": "agent-1",
-            "displayName": "Prep Cook",
+            "displayName": "Prepcook",
             "emailAddress": "agent@acme.test"
         })
     }
@@ -1370,7 +1370,7 @@ mod fixture_tests {
             .mount(&server)
             .await;
         let message = tracker(&server).test().await.unwrap();
-        assert_eq!(message, "Signed in to acme.atlassian.net as Prep Cook.");
+        assert_eq!(message, "Signed in to acme.atlassian.net as Prepcook.");
     }
 
     #[tokio::test]

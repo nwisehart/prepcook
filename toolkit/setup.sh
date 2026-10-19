@@ -6,10 +6,10 @@
 #   toolkit/setup.sh --no-mcp                         skills only, no knowledge store
 #   toolkit/setup.sh --uninstall                      remove what this script put in place
 #
-# --backend-url (or PREPCOOK_BACKEND_URL) is the Prep Cook server whose knowledge store
+# --backend-url (or PREPCOOK_BACKEND_URL) is the Prepcook server whose knowledge store
 # the RCAs are filed in. --mcp is the prepcook-mcp binary; without it, the one on
 # PATH. Build it with `cargo build --release --bin prepcook-mcp` (it lands in
-# target/release/) or take it from a GitHub release of Prep Cook.
+# target/release/) or take it from a GitHub release of Prepcook.
 #
 # Idempotent: run it again after a `git pull`. It never touches your app, its
 # manifest or anything the seed wrote.
@@ -83,10 +83,10 @@ fi
 if [ "$register_mcp" = 1 ]; then
   # Resolve everything before changing anything, so a bad argument leaves the
   # machine as it was.
-  [ -n "$backend_url" ] || die "no Prep Cook server named: pass --backend-url URL (or set PREPCOOK_BACKEND_URL) for the server whose knowledge store RCAs are filed in, or --no-mcp to install the skills alone"
+  [ -n "$backend_url" ] || die "no Prepcook server named: pass --backend-url URL (or set PREPCOOK_BACKEND_URL) for the server whose knowledge store RCAs are filed in, or --no-mcp to install the skills alone"
   if [ -z "$mcp_bin" ]; then
     mcp_bin="$(command -v prepcook-mcp || true)"
-    [ -n "$mcp_bin" ] || die "prepcook-mcp is not on PATH: build it with \`cargo build --release --bin prepcook-mcp\` in a Prep Cook checkout (or take it from a GitHub release of Prep Cook) and pass --mcp PATH"
+    [ -n "$mcp_bin" ] || die "prepcook-mcp is not on PATH: build it with \`cargo build --release --bin prepcook-mcp\` in a Prepcook checkout (or take it from a GitHub release of Prepcook) and pass --mcp PATH"
   fi
   [ -x "$mcp_bin" ] || die "$mcp_bin is not an executable file"
   mcp_bin="$(cd "$(dirname "$mcp_bin")" && pwd)/$(basename "$mcp_bin")"

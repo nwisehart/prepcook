@@ -1,7 +1,7 @@
 //! Typed view over the opaque `issues.extension_metadata` JSONB blob.
 //!
 //! The column stays schemaless in the database and syncs to clients
-//! untouched; this module is the single place that defines what the Prep Cook
+//! untouched; this module is the single place that defines what the Prepcook
 //! workflow stores in it. Parse leniently: unknown fields are preserved by
 //! never round-tripping through this struct (read a typed copy, write only
 //! the keys you own).
@@ -319,7 +319,7 @@ pub enum ApprovalSource {
     /// checked against the configured approver list.
     #[serde(alias = "jira_comment")]
     TrackerComment,
-    /// The Approve button in a Lavish review session, relayed by Prep Cook itself
+    /// The Approve button in a Lavish review session, relayed by Prepcook itself
     /// rather than reported by the agent.
     Lavish,
     /// `POST /api/approvals/{issue_id}`, from the signed-in session or a
@@ -358,7 +358,7 @@ pub enum DecisionSource {
     Lavish,
     /// A comment on the tracker ticket (Jira).
     Tracker,
-    /// A comment on the Prep Cook card.
+    /// A comment on the Prepcook card.
     Card,
     /// The approvals endpoint.
     Api,
@@ -1011,7 +1011,7 @@ pub struct AutonomyState {
     pub last_card_comment_at: Option<DateTime<Utc>>,
 }
 
-/// Prep Cook workflow keys inside `extension_metadata`. All optional so blobs
+/// Prepcook workflow keys inside `extension_metadata`. All optional so blobs
 /// written by other tools (or older versions) always deserialize.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 pub struct IssueExtMetadata {

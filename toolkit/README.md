@@ -1,10 +1,10 @@
-# Prep Cook toolkit
+# Prepcook toolkit
 
-A prep cook does the prep so the chef can cook. Prep Cook does the prep on a
+A prep cook does the prep so the chef can cook. Prepcook does the prep on a
 bug — reproduces it, explains it, fixes it, reviews the fix, opens the pull
 request — and the engineer who owns the ticket signs off.
 
-These are Claude Code skills that do on your machine what the Prep Cook
+These are Claude Code skills that do on your machine what the Prepcook
 orchestrator does on a card: reproduce a bug, write the root-cause analysis,
 fix it, review the fix cold, open the pull request. The skills are generated from the orchestrator's own
 stage playbooks (`crates/services/src/services/config/playbooks.rs`), so a ticket
@@ -23,11 +23,11 @@ its MCP.
 Once per machine, with Claude Code, Node, and `gh` or `glab` installed:
 
 ```sh
-cargo build --release --bin prepcook-mcp        # in this checkout; or take prepcook-mcp from a GitHub release of Prep Cook
+cargo build --release --bin prepcook-mcp        # in this checkout; or take prepcook-mcp from a GitHub release of Prepcook
 toolkit/setup.sh --backend-url http://localhost:<port> --mcp target/release/prepcook-mcp
 ```
 
-`--backend-url` is the Prep Cook server whose knowledge store your RCAs are filed in:
+`--backend-url` is the Prepcook server whose knowledge store your RCAs are filed in:
 your own (the port is `BACKEND_PORT`, or the one it printed on start), or your
 team's. `setup.sh --no-mcp` installs the skills without it. The
 script is safe to run again after a `git pull`, and `setup.sh --uninstall`
@@ -39,8 +39,8 @@ server, following Atlassian's instructions).
 ## Standing the app up
 
 A session starts in your repository's checkout with the app already running from
-its manifest and its login in the environment. Prep Cook has no command for that yet,
-so you run the manifest's steps yourself, with the variables Prep Cook would set
+its manifest and its login in the environment. Prepcook has no command for that yet,
+so you run the manifest's steps yourself, with the variables Prepcook would set
 ([docs/scripts.md](../docs/scripts.md#environment) lists them all). For the Pantry
 example in [docs/examples/scripts.toml](../docs/examples/scripts.toml):
 
@@ -175,7 +175,7 @@ Generated from the push half of `bug:executing`.
 ### Supporting skills
 
 `repro-harness` (with `harness.template.mjs`) and `evergreen-comments` are copied
-from `assets/agent-skills/`, the skills Prep Cook gives its own sessions, through a few
+from `assets/agent-skills/`, the skills Prepcook gives its own sessions, through a few
 rules of their own: the app is the one you stood up, the reporting goes to the
 ticket, and the template can show the browser (`HEADED=1`). The stage skills call
 them; you rarely invoke them directly.
@@ -195,7 +195,7 @@ and they name your product instead.
 | All | Claude Code, started from your repository's checkout | you |
 | All | Your tracker's MCP (for Jira, Atlassian's) | you, once |
 | `/prepcook-repro`, `/prepcook-rca`, `/prepcook-fix`, `/prepcook-self-review` | The app up from `.prepcook/scripts.toml`; `PREPCOOK_APP_URL`, `PREPCOOK_TEST_USER_EMAIL`, `PREPCOOK_TEST_USER_PASSWORD` exported | you, per session ([Standing the app up](#standing-the-app-up)) |
-| `/prepcook-rca` | The `prepcook` MCP and a Prep Cook server it can reach | `setup.sh` |
+| `/prepcook-rca` | The `prepcook` MCP and a Prepcook server it can reach | `setup.sh` |
 | `/prepcook-mr` | `gh` or `glab`, logged in to your host | you, once |
 
 ## setup.sh
@@ -219,8 +219,8 @@ Idempotent; prints each step as it does it.
 `--uninstall` removes the symlinks and the `prepcook` MCP entry. A `git pull` that
 changes the skills needs no re-run; the symlinks follow.
 
-`setup.sh` is the only part of Prep Cook that changes your Claude Code config
-or puts skills in `~/.claude/skills`, and only when you run it. The Prep Cook
+`setup.sh` is the only part of Prepcook that changes your Claude Code config
+or puts skills in `~/.claude/skills`, and only when you run it. The Prepcook
 app never writes to either: the agent sessions the app launches get the
 `prepcook` server through `claude --mcp-config`, and the skills in
 `assets/agent-skills/` through `claude --add-dir`, both pointing into the app
@@ -250,7 +250,7 @@ lets a board-only word through, or is not regenerated fails the build.
 
 ### With your own manifest
 
-A team regenerates the skills for its own product in its clone of Prep Cook:
+A team regenerates the skills for its own product in its clone of Prepcook:
 
 ```sh
 python3 toolkit/generator/generate.py --manifest ~/code/your-app/.prepcook/scripts.toml
@@ -260,7 +260,7 @@ python3 toolkit/generator/generate.py --manifest ~/code/your-app/.prepcook/scrip
 The `[profile]` of that manifest fills the product name, summary, areas, seed
 error patterns and evidence: its `[[profile.evidence]]` log files are described
 the way the orchestrator describes them, followed by its `evidence_tools`.
-Evidence sources configured in Prep Cook's Settings are not in the skills;
+Evidence sources configured in Prepcook's Settings are not in the skills;
 `evidence_search` searches them. Nothing else changes. The skills `setup.sh`
 linked pick the regeneration up at once.
 

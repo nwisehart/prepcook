@@ -84,7 +84,7 @@ export function CreateModeRepoPickerBar({
   const [setupHintDismissed, setSetupHintDismissed] = useState(false);
   const isBusy = pendingAction !== null;
 
-  // A repository is set up for Prep Cook when its `.prepcook/scripts.toml` parses;
+  // A repository is set up for Prepcook when its `.prepcook/scripts.toml` parses;
   // one whose manifest response has not arrived yet is not flagged.
   const repoIds = useMemo(() => repos.map((repo) => repo.id), [repos]);
   const { byRepoId: scriptsByRepo } = useReposScripts(repoIds);

@@ -253,7 +253,7 @@
       "prMerged": "PR #{{number}} is already merged",
       "loginRequired": {
         "title": "Sign in to manage git actions",
-        "description": "Sign in to Prep Cook so you can push branches, merge changes, or open pull requests for this task.",
+        "description": "Sign in to Prepcook so you can push branches, merge changes, or open pull requests for this task.",
         "action": "Sign in"
       }
     },

@@ -1,6 +1,6 @@
 # Remote Crate — Agent Guidelines
 
-The `remote` crate is the board service: an Axum HTTP API over Postgres with real-time read sync via ElectricSQL. It runs in Docker next to the native Prep Cook server, which serves the UI and proxies writes to it.
+The `remote` crate is the board service: an Axum HTTP API over Postgres with real-time read sync via ElectricSQL. It runs in Docker next to the native Prepcook server, which serves the UI and proxies writes to it.
 
 > See also: [root AGENTS.md](../../AGENTS.md) for repo-wide conventions.
 
@@ -24,7 +24,7 @@ ElectricSQL (port 3000, internal)
 # (from the repo root)
 pnpm run remote:dev
 
-# Run the Prep Cook server against it
+# Run the Prepcook server against it
 export PREPCOOK_SHARED_API_BASE=http://localhost:4110
 pnpm run dev
 ```
@@ -56,7 +56,7 @@ Multi-stage Docker build: Rust (server) → Debian slim runtime. No frontend is 
 
 ## ElectricSQL Integration
 
-Prep Cook uses [ElectricSQL](https://electric-sql.com) as a read-path sync engine: Postgres → ElectricSQL → clients over HTTP shapes. Writes go through the REST API.
+Prepcook uses [ElectricSQL](https://electric-sql.com) as a read-path sync engine: Postgres → ElectricSQL → clients over HTTP shapes. Writes go through the REST API.
 
 ### How It Works
 

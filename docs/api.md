@@ -1,6 +1,6 @@
 # The HTTP API
 
-Prep Cook's server is the board's own backend; most of its routes exist for
+Prepcook's server is the board's own backend; most of its routes exist for
 the board's pages and change without notice. The endpoints on this page are the
 ones meant for scripts and other services — a support agent that files cards,
 an incident tool, a CI job — and they are kept stable.
@@ -142,7 +142,7 @@ GET /api/cards/{id}
 
 `status` is where the card is in the workflow — `backlog`, `planning`,
 `triaged`, `executing`, `reviewing`, `pushed_mr`, `closed`, `cleanup`, or
-`other` for a column Prep Cook does not know — and `column` is the column's name
+`other` for a column Prepcook does not know — and `column` is the column's name
 as the board shows it. `report`, `confidence` and `harness` are `null` until an
 investigation has posted its report; `rca_id` is `null` until an RCA is filed
 for the card. `404` for no such card.

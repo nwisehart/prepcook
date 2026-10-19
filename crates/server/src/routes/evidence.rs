@@ -38,7 +38,7 @@ pub struct EvidenceSearchRequest {
     pub project_id: Option<Uuid>,
     /// The agent's worktree, where relative log file paths resolve and whose
     /// manifest's `[[profile.evidence]]` is read. Ignored unless it is inside
-    /// a workspace or a repository Prep Cook knows.
+    /// a workspace or a repository Prepcook knows.
     #[serde(default)]
     pub worktree: Option<String>,
     /// Text to find, as a literal phrase.

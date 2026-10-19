@@ -1,10 +1,10 @@
-//! The MCP servers the agent sessions Prep Cook launches get, kept in one file
+//! The MCP servers the agent sessions Prepcook launches get, kept in one file
 //! in the app data directory that each executor points its agent at per
 //! invocation (see `executors::mcp_config::session_mcp_config_path`).
 //!
 //! The user's own agent config is never written: an entry there would load in
 //! every agent session on the machine, including the user's own work in other
-//! repositories, not just the ones Prep Cook launched. Settings → MCP servers
+//! repositories, not just the ones Prepcook launched. Settings → MCP servers
 //! edits that config only when the user asks it to.
 
 use executors::mcp_config::{
@@ -27,7 +27,7 @@ pub fn write_session_config(config: &Config) {
     if !servers.contains_key("prepcook") {
         tracing::warn!(
             "No prepcook-mcp binary next to this server or in ~/.local/bin; agent \
-             sessions will run without the Prep Cook tools until one is installed."
+             sessions will run without the Prepcook tools until one is installed."
         );
     }
     let path = session_mcp_config_path();

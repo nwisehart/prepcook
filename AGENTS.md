@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Naming
-- The product is **Prep Cook** (two words) in prose, UI strings, i18n and titles.
+- The product is **Prepcook** (one word, only the P capitalised) in prose, UI strings, i18n (every locale), aria-labels, titles and the wordmark. Lowercase and two words, "prep cook" is the kitchen job the name comes from, never the product.
 - In code and on disk it is `prepcook` (one word): the binaries `prepcook` and `prepcook-mcp` (`crates/mcp/src/bin/prepcook_mcp.rs`), the npm scope `@prepcook/*` and the `prepcook` npx package, the `prepcook` MCP server key, the app data directory, `~/.config/prepcook/secrets.env`, and each repository's `.prepcook/scripts.toml`.
 - Identifiers follow the case of their language: `PrepCook…` types, `prepcook…` / `prepcook_…` names, and the `PREPCOOK_` prefix for every environment variable (`PREPCOOK_PORT`, `PREPCOOK_APP_URL`, `PREPCOOK_SECRET_<NAME>`, …).
 - The toolkit skills are `prepcook-repro`, `prepcook-rca`, `prepcook-fix`, `prepcook-self-review`, `prepcook-review` and `prepcook-mr`.

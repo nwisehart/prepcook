@@ -1,10 +1,10 @@
 # The method
 
-A prep cook does the prep so the chef can cook. Prep Cook does the prep on a
+A prep cook does the prep so the chef can cook. Prepcook does the prep on a
 bug — reproduces it, explains it, fixes it, reviews the fix, opens the pull
 request — and the engineer who owns the ticket signs off.
 
-Prep Cook works a bug the way a careful engineer would, in a fixed order: make it
+Prepcook works a bug the way a careful engineer would, in a fixed order: make it
 happen, explain it, fix the mechanism, have someone else check the fix, then
 ship it. Each step is a stage, each stage is a column on the board, and a card
 moves through them left to right:
@@ -62,7 +62,7 @@ session, so it can change variant but never agent.
 
 ## Investigations
 
-An investigation is a reported problem Prep Cook reproduces and explains but
+An investigation is a reported problem Prepcook reproduces and explains but
 does not fix — typically filed by a support agent from a customer conversation,
 which then translates the answer for the customer.
 
@@ -99,7 +99,7 @@ cards do not execute; convert to a bug first"), and so does the board.
 New boards get the Triaged column between Plan and Execute. A board made before
 it existed does not: an investigation that finishes there stays in Plan, tagged
 `needs-column`, and the orchestrator logs it once. Add a column named
-`Triaged` and the card moves on the next tick; Prep Cook never adds a column to
+`Triaged` and the card moves on the next tick; Prepcook never adds a column to
 a board by itself.
 
 Stories, epics and sub-tasks take the same columns. In Plan a story gets an
@@ -113,14 +113,14 @@ a bug, and an investigation in Plan, stands the app up.
 The same stages run in two modes. The mode is **Settings → Orchestrator →
 Autonomy mode**, global or per board.
 
-**Chef mode** (autonomy off, the default). Prep Cook works your tickets and you move
+**Chef mode** (autonomy off, the default). Prepcook works your tickets and you move
 them. You import tickets from the tracker or make cards on the board, drag them
 between columns, and approve plans in Lavish, the review page each plan opens
 in (the **Review plan** button on the card). Stories and epics get a spec or a
 breakdown the way bugs get an RCA. A review's `REQUEST CHANGES` still starts a
 fix round on its own; advancing an approved card is yours.
 
-**Prep mode** (autonomy on). Prep Cook works on its own, on the machine meant to
+**Prep mode** (autonomy on). Prepcook works on its own, on the machine meant to
 run unattended. Tickets the tracker's pickup filters select are imported as
 they arrive. Cards move themselves: a plan that clears the bar (an RCA at high
 confidence, a spec with no open questions) approves itself and goes to Execute;
@@ -129,7 +129,7 @@ decision comes from the tracker ticket, the card or the approvals API
 ([approvals.md](approvals.md)). A finished, verified fix goes to Review, and an
 approved review goes to Push MR.
 
-Either way a person merges. When an engineer takes a ticket over, Prep Cook steps
+Either way a person merges. When an engineer takes a ticket over, Prepcook steps
 aside ([working-alongside-people.md](working-alongside-people.md)).
 
 ## Without a tracker
@@ -152,8 +152,8 @@ Stages show on the ticket as the statuses (on GitHub, the labels) that
 `status_mapping` names.
 
 **Incidents.** The source is an incident tool — PagerDuty. Every open incident
-on the configured services becomes an **investigation** card in Plan: Prep
-Cook acknowledges it, reproduces and explains the problem, and adds the
+on the configured services becomes an **investigation** card in Plan: Prepcook
+acknowledges it, reproduces and explains the problem, and adds the
 triage report to the incident as a note. It never pages anyone and resolves
 the incident only when configured to ([incidents.md](incidents.md)).
 
@@ -161,10 +161,10 @@ The two modes above (Chef and Prep) apply in either.
 
 ## More
 
-- [scripts.md](scripts.md): how Prep Cook installs, starts, seeds and tests the app.
+- [scripts.md](scripts.md): how Prepcook installs, starts, seeds and tests the app.
 - [playbooks.md](playbooks.md): the prompt each stage's agent starts from.
 - [approvals.md](approvals.md): every way a plan is decided.
-- [incidents.md](incidents.md): Prep Cook as a first responder on PagerDuty
+- [incidents.md](incidents.md): Prepcook as a first responder on PagerDuty
   incidents.
 - [api.md](api.md): filing, reading and converting cards, and the other HTTP
   endpoints scripts use.

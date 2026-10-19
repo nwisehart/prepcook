@@ -50,7 +50,7 @@ export function useAgentDescriptors(): AgentDescriptor[] {
 }
 
 /**
- * Which coding agent runs which stage, and every agent Prep Cook can run: what
+ * Which coding agent runs which stage, and every agent Prepcook can run: what
  * it needs, how it signs in, whether this machine has it, and a probe.
  */
 export function CodingAgentsSettingsSection() {

@@ -160,10 +160,7 @@ impl McpServer {
             .send()
             .await
             .map_err(|e| {
-                ToolError::new(
-                    "Failed to connect to the Prep Cook API",
-                    Some(e.to_string()),
-                )
+                ToolError::new("Failed to connect to the Prepcook API", Some(e.to_string()))
             })?;
         let status = response.status();
         let envelope = response

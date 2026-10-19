@@ -1,4 +1,4 @@
-//! Prep Cook kanban workflow transition rules.
+//! Prepcook kanban workflow transition rules.
 //!
 //! Enforced only at the HTTP route layer (`routes/issues.rs`). Internal
 //! automation calls repository functions directly and is intentionally
@@ -11,7 +11,7 @@
 use api_types::issue_ext::{ConfidenceLevel, IssueExtMetadata, WorkClass};
 use serde_json::Value;
 
-/// Ordered Prep Cook workflow stages (first alias matches `DEFAULT_STATUSES` in
+/// Ordered Prepcook workflow stages (first alias matches `DEFAULT_STATUSES` in
 /// `db/project_statuses.rs`; later aliases are earlier column names kept so
 /// existing projects keep validating until they're renamed). Columns with
 /// other names are not subject to transition validation — Triaged among them:
@@ -41,7 +41,7 @@ fn stage_index(name: &str) -> Option<usize> {
 /// Returns true when moving an issue from `from_name` to `to_name` is allowed.
 ///
 /// Rules (stage names are matched case-insensitively):
-/// - Either name outside the Prep Cook stage list => allowed (non-workflow project
+/// - Either name outside the Prepcook stage list => allowed (non-workflow project
 ///   or hidden/custom columns).
 /// - Same stage (no-op) or any backward move => allowed.
 /// - Forward moves are only allowed to the immediately next stage.
@@ -80,7 +80,7 @@ fn confidence_label(level: ConfidenceLevel) -> &'static str {
     }
 }
 
-/// Planning → Executing gate: Prep Cook workflow issues need BOTH a passing
+/// Planning → Executing gate: Prepcook workflow issues need BOTH a passing
 /// planning verdict AND a human Lavish approval (`spec.approved_at`) recorded
 /// in `extension_metadata` before execution may start. Specs require
 /// `open_questions == 0`; RCAs require `confidence == high`.
@@ -100,7 +100,7 @@ pub fn planning_gate_error(
     }
 
     let metadata = IssueExtMetadata::from_value(extension_metadata);
-    // Generic tickets never went through the Prep Cook planning flow.
+    // Generic tickets never went through the Prepcook planning flow.
     if metadata.work_class.is_none() && metadata.planning.is_none() {
         return None;
     }

@@ -122,7 +122,7 @@ impl ClaudeCode {
         // Project specific
         descriptions.extend(Self::scan_base_path(&current_dir.join(".claude"), None).await);
 
-        // The shipped skills every Prep Cook session adds
+        // The shipped skills every Prepcook session adds
         descriptions.extend(
             Self::scan_base_path(
                 &crate::agent_skills::session_skills_root().join(".claude"),

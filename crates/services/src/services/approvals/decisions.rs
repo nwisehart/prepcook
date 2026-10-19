@@ -41,7 +41,7 @@ pub enum CardStage {
     Executing,
     Reviewing,
     PushedMr,
-    /// Any other column: To Do, Clean-up, Close, or one Prep Cook does not drive.
+    /// Any other column: To Do, Clean-up, Close, or one Prepcook does not drive.
     Other,
 }
 
@@ -52,7 +52,7 @@ impl CardStage {
             Self::Executing => "Execute",
             Self::Reviewing => "Review",
             Self::PushedMr => "Push MR",
-            Self::Other => "a column Prep Cook does not drive",
+            Self::Other => "a column Prepcook does not drive",
         }
     }
 }
@@ -263,7 +263,7 @@ pub async fn apply_decision(
             let prompt = format!(
                 "{by} asked for changes to your plan on {}, via {via}:\n\n{reasons}\n\n\
                  Revise the spec/RCA accordingly and update your recorded verdict \
-                 (open_questions / confidence and summary) via the Prep Cook MCP `update_issue` \
+                 (open_questions / confidence and summary) via the Prepcook MCP `update_issue` \
                  planning fields. Then end your turn.",
                 card.reference
             );

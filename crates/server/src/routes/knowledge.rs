@@ -35,7 +35,7 @@ pub struct LinkJiraResponse {
     pub failed: Vec<String>,
 }
 
-/// Backfills a "RCA — Prep Cook" remote link onto every kb
+/// Backfills a "RCA — Prepcook" remote link onto every kb
 /// document's Jira ticket. Idempotent: links carry a stable globalId, so
 /// Jira upserts instead of duplicating. New RCAs are linked automatically
 /// when filed; this covers everything filed before that hook existed.
@@ -104,7 +104,7 @@ async fn link_jira(
                     jira_key,
                     services::services::tracker::RemoteLink {
                         id: &format!("prepcook-rca-{}", doc.id),
-                        title: &format!("RCA — Prep Cook ({jira_key})"),
+                        title: &format!("RCA — Prepcook ({jira_key})"),
                         url: &url,
                     },
                 )

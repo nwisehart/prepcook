@@ -5,7 +5,7 @@
 [app]
 setup = "npm ci"
 build = "npm run build"
-# Express reads PORT; Prep Cook sets it (and PREPCOOK_PORT) to the port it allocated.
+# Express reads PORT; Prepcook sets it (and PREPCOOK_PORT) to the port it allocated.
 # Each worktree gets its own database file, so parallel cards never share data.
 start = "DATABASE_PATH=.prepcook/pantry.sqlite node dist/server.js"
 ready = { url = "/healthz", timeout_secs = 60 }
@@ -22,7 +22,7 @@ start = 30
 seed = 60
 test = 900
 
-# For a board whose reproduction target is `remote`, Prep Cook deploys the branch
+# For a board whose reproduction target is `remote`, Prepcook deploys the branch
 # instead of serving it here. The commands still run in the worktree; `start`
 # deploys and exits, reporting the URL as PREPCOOK_APP_URL=<url> in
 # $PREPCOOK_ENV_OUT (or as its last http(s) line on stdout). See

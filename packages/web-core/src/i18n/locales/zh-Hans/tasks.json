@@ -173,7 +173,7 @@
       "prMerged": "PR #{{number}} 已合并",
       "loginRequired": {
         "title": "登录以管理 git 操作",
-        "description": "登录 Prep Cook，以便您可以推送分支、合并更改或为此任务打开拉取请求。",
+        "description": "登录 Prepcook，以便您可以推送分支、合并更改或为此任务打开拉取请求。",
         "action": "登录"
       }
     },

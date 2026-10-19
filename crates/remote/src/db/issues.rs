@@ -529,7 +529,7 @@ impl IssueRepository {
             return Ok(());
         };
 
-        // First name is the Prep Cook workflow column; the rest are upstream
+        // First name is the Prepcook workflow column; the rest are upstream
         // defaults kept as fallbacks for projects created before the fork.
         let target_status_names: &[&str] = match signal {
             IssueWorkflowSignal::ReviewStarted => &["Push MR", "Pushed MR", "In review"],
@@ -619,7 +619,7 @@ impl IssueRepository {
         };
 
         let name = current_status.name.to_lowercase();
-        // "unassigned" is the Prep Cook workflow pending column; "backlog"/"to do"
+        // "unassigned" is the Prepcook workflow pending column; "backlog"/"to do"
         // remain for projects created with upstream defaults.
         if name == "unassigned" || name == "backlog" || name == "to do" {
             Self::update(
@@ -659,7 +659,7 @@ impl IssueRepository {
                 return Ok(());
             };
 
-            // Prep Cook workflow: first workspace on a pending issue moves it to
+            // Prepcook workflow: first workspace on a pending issue moves it to
             // Planning; "In progress" is the upstream-default fallback.
             let mut in_progress_status = None;
             for name in ["Plan", "Planning", "In progress"] {

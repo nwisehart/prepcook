@@ -453,7 +453,7 @@ impl Notifier for SlackNotifier {
             ));
         }
         // An incoming webhook has nothing to read; posting is the only check.
-        self.post("Prep Cook test notification: this webhook works.", None)
+        self.post("Prepcook test notification: this webhook works.", None)
             .await?;
         Ok("Posted a test message through the webhook".to_string())
     }
@@ -574,20 +574,20 @@ pub fn escape_cell(text: &str) -> String {
 fn render_text(event: &Event) -> String {
     match event {
         Event::SeatLimitHit { window, minutes } => format!(
-            ":hourglass: *Prep Cook: Claude seat {window} limit hit.* Agent launches are \
+            ":hourglass: *Prepcook: Claude seat {window} limit hit.* Agent launches are \
              paused for ~{minutes}m, until the window reopens."
         ),
         Event::SeatExhausted { rounds, report } => format!(
-            ":rotating_light: *Prep Cook: the Claude seat keeps running out.* {rounds} \
+            ":rotating_light: *Prepcook: the Claude seat keeps running out.* {rounds} \
              windows in a row exhausted with nothing getting through between them, so no \
              board is advancing — that needs less burn or more budget, not more waiting.\n\
              The seat reported: `{report}`"
         ),
         Event::SeatExpired {} => {
-            format!(":warning: *Prep Cook: Claude seat expired.* {SEAT_EXPIRED_BODY}")
+            format!(":warning: *Prepcook: Claude seat expired.* {SEAT_EXPIRED_BODY}")
         }
         Event::SeatRecovered {} => {
-            ":white_check_mark: *Prep Cook: Claude seat is healthy again.*".to_string()
+            ":white_check_mark: *Prepcook: Claude seat is healthy again.*".to_string()
         }
         Event::TicketClosedWithOpenMrs { issue, mr_numbers } => format!(
             ":warning: *{} was closed in the tracker with {} still open.* The card has been \
@@ -763,7 +763,7 @@ fn escalation_blocks(escalation: &PlanningEscalation, threaded: bool) -> Value {
         }));
     }
     let mut context = match &issue.card_url {
-        Some(url) => format!("<{url}|Open ticket in Prep Cook>"),
+        Some(url) => format!("<{url}|Open ticket in Prepcook>"),
         None => String::new(),
     };
     if let (Some(url), Some(tracker)) = (&issue.url, &escalation.tracker) {

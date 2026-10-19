@@ -66,7 +66,7 @@
     },
     "board": {
       "title": "Board",
-      "description": "Prep Cook signs its requests to the board with the board's secret; there is nothing to sign in to. prepcook up reads the secret from the .env of the board it starts; for a board on another machine, set PREPCOOK_BOARD_SECRET to that board's PREPCOOK_JWT_SECRET.",
+      "description": "Prepcook signs its requests to the board with the board's secret; there is nothing to sign in to. prepcook up reads the secret from the .env of the board it starts; for a board on another machine, set PREPCOOK_BOARD_SECRET to that board's PREPCOOK_JWT_SECRET.",
       "url": "URL",
       "noUrl": "not set",
       "connected": "Connected",
@@ -134,7 +134,7 @@
           "host": {
             "label": "Remote SSH Host (Optional)",
             "placeholder": "e.g., hostname or IP address",
-            "helper": "Set this if Prep Cook is running on a remote server. When set, clicking \"Open in Editor\" will generate a URL to open your editor via SSH instead of spawning a local command."
+            "helper": "Set this if Prepcook is running on a remote server. When set, clicking \"Open in Editor\" will generate a URL to open your editor via SSH instead of spawning a local command."
           },
           "user": {
             "label": "Remote SSH User (Optional)",
@@ -260,7 +260,7 @@
       },
       "privacy": {
         "title": "Privacy",
-        "description": "Help improve Prep Cook by sharing anonymous usage data.",
+        "description": "Help improve Prepcook by sharing anonymous usage data.",
         "telemetry": {
           "label": "Enable Telemetry",
           "helper": "Enables anonymous usage events tracking to help improve the application. No prompts or project information are collected."
@@ -424,7 +424,7 @@
       },
       "agentsCard": {
         "title": "Coding agents",
-        "description": "Every agent Prep Cook can run. Whether each is signed in is read from its own files when this page opens; Test runs its command with --version, for 10 seconds at most."
+        "description": "Every agent Prepcook can run. Whether each is signed in is read from its own files when this page opens; Test runs its command with --version, for 10 seconds at most."
       },
       "command": "Command",
       "signIn": "Signs in",
@@ -485,7 +485,7 @@
     "ticketing": {
       "source": {
         "title": "Source",
-        "description": "Where cards come from. Prep Cook reads tickets, posts updates and takes plan decisions through this service. Remove it to make every card on the board."
+        "description": "Where cards come from. Prepcook reads tickets, posts updates and takes plan decisions through this service. Remove it to make every card on the board."
       },
       "mode": {
         "tickets": {
@@ -499,7 +499,7 @@
       },
       "incidents": {
         "resolveLabel": "Resolve the incident when it is triaged",
-        "resolveHelper": "Off, the incident stays with its responders and only gets the triage report as a note. Prep Cook never pages anyone either way."
+        "resolveHelper": "Off, the incident stays with its responders and only gets the triage report as a note. Prepcook never pages anyone either way."
       },
       "watcher": {
         "title": "Ticket pickup",
@@ -517,7 +517,7 @@
         "title": "Workflow",
         "description": "How the board's stages show on the ticket, which statuses mean the work shipped, and which priorities are blockers.",
         "statusLabel": "Stage statuses",
-        "statusHelper": "The status (a label on GitHub Issues) a ticket moves to when Prep Cook starts each stage. Blank leaves the ticket where it is (Planning falls back to In Progress).",
+        "statusHelper": "The status (a label on GitHub Issues) a ticket moves to when Prepcook starts each stage. Blank leaves the ticket where it is (Planning falls back to In Progress).",
         "stageColumn": "Stage",
         "statusColumn": "Tracker status",
         "stages": {
@@ -786,7 +786,7 @@
     },
     "repos": {
       "title": "Repository Configuration",
-      "description": "Repository details, and the scripts Prep Cook reads from the repository's .prepcook/scripts.toml.",
+      "description": "Repository details, and the scripts Prepcook reads from the repository's .prepcook/scripts.toml.",
       "loading": "Loading repositories...",
       "loadError": "Failed to load repositories.",
       "addRepo": {
@@ -834,14 +834,14 @@
       },
       "scripts": {
         "title": "Scripts",
-        "description": "Read from .prepcook/scripts.toml at the repository root. Prep Cook never edits that file: change the scripts there and reload.",
+        "description": "Read from .prepcook/scripts.toml at the repository root. Prepcook never edits that file: change the scripts there and reload.",
         "reload": "Reload",
         "standUp": "Test stand-up",
         "loading": "Reading .prepcook/scripts.toml…",
         "loadError": "Could not read the scripts manifest.",
         "missingTitle": "This repository has no .prepcook/scripts.toml",
         "invalidTitle": "This repository's .prepcook/scripts.toml cannot be read",
-        "hint": "Prep Cook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
+        "hint": "Prepcook installs, builds, starts, seeds and tests a repository with the commands in .prepcook/scripts.toml at its root, and only [app] start is required. docs/scripts.md describes every key, the environment the scripts receive and a full example. A minimal file:",
         "target": {
           "title": "Reproduction target",
           "hint": "The board this repository belongs to chooses it in Settings → Reproduction. Test stand-up and every Test run below run on it."
@@ -893,11 +893,11 @@
       },
       "remove": {
         "title": "Remove Repository",
-        "description": "Unlink this repository from Prep Cook. Files on disk will not be deleted.",
+        "description": "Unlink this repository from Prepcook. Files on disk will not be deleted.",
         "button": "Remove",
         "confirm": "Remove Repository",
         "dialogTitle": "Remove \"{{name}}\"?",
-        "dialogDescription": "This will unlink the repository from Prep Cook. Your files on disk will not be affected. You can re-add it later.",
+        "dialogDescription": "This will unlink the repository from Prepcook. Your files on disk will not be affected. You can re-add it later.",
         "success": "Repository removed successfully.",
         "error": "Failed to remove repository."
       },
@@ -912,12 +912,12 @@
     },
     "secrets": {
       "title": "Secrets",
-      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prep Cook redacts the values from logs, comments and messages. Values are never shown here.",
+      "description": "Values the repository scripts need that must not be committed. Every script receives each one as $NAME and $PREPCOOK_SECRET_NAME, and Prepcook redacts the values from logs, comments and messages. Values are never shown here.",
       "loading": "Loading secrets…",
       "loadError": "Failed to load the secrets store.",
       "file": {
         "label": "Secrets file",
-        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prep Cook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
+        "helper": "NAME=VALUE lines, written with mode 0600. PREPCOOK_SECRETS_FILE points Prepcook at a different file, and an environment variable PREPCOOK_SECRET_<NAME> overrides the file's entry."
       },
       "list": {
         "label": "Stored secrets",
@@ -1057,7 +1057,7 @@
     },
     "notifications": {
       "title": "Notification targets",
-      "description": "Where Prep Cook sends the events that need a person: planning escalations, review and pipeline escalations, blocker merge requests, the daily digest and Claude seat alerts. Every target gets every event unless its events list names some. A Slack target with a bot token and channel also carries replies to an escalation back to the blocked agent.",
+      "description": "Where Prepcook sends the events that need a person: planning escalations, review and pipeline escalations, blocker merge requests, the daily digest and Claude seat alerts. Every target gets every event unless its events list names some. A Slack target with a bot token and channel also carries replies to an escalation back to the blocked agent.",
       "eventsLabel": "Events",
       "eventsHelper": "Comma-separated event kinds this target receives, e.g. planning_escalated, daily_digest. Blank or * sends every event.",
       "save": {

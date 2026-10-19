@@ -9,7 +9,7 @@ use super::get_txid;
 /// Default statuses that are created for each new project (name, color, sort_order, hidden)
 /// Colors are in HSL format: "H S% L%"
 ///
-/// Prep Cook workflow columns (see docs/plans/team-workflow-plan.md).
+/// Prepcook workflow columns (see docs/plans/team-workflow-plan.md).
 /// Automation matchers in issues.rs accept these names with fallbacks to the
 /// upstream defaults, so pre-existing projects keep working.
 pub const DEFAULT_STATUSES: &[(&str, &str, i32, bool)] = &[

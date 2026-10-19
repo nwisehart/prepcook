@@ -299,7 +299,7 @@ async fn start_app_run(
         })
     else {
         return Ok(ResponseJson(ApiResponse::error(
-            "this path is not inside a Prep Cook workspace",
+            "this path is not inside a Prepcook workspace",
         )));
     };
     let process = agent_process_for(pool, workspace.id).await?;

@@ -54,7 +54,7 @@ def load(repo: Path = REPO) -> dict[str, str]:
 
 
 def load_skill(name: str, file: str = "SKILL.md", repo: Path = REPO) -> str:
-    """One file of one of the agent skills Prep Cook ships to its sessions."""
+    """One file of one of the agent skills Prepcook ships to its sessions."""
     return (repo / SKILLS_DIR / name / file).read_text()
 
 
