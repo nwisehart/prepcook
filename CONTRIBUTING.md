@@ -28,6 +28,9 @@ request, so keep changes focused and say what they are for.
    came from.
 6. Describe in the pull request what changed, why, and how you verified it.
 
+Before a release, run [docs/manual-testing.md](docs/manual-testing.md): a
+cold start and every integration, by hand, on a real machine.
+
 ## Adding a coding agent
 
 An agent is an executor, and adding one is an enum edit in three places:

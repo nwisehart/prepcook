@@ -259,6 +259,8 @@ rather than the published image, use `pnpm run remote:dev`, or
 `prepcook up --compose crates/remote/docker-compose.yml`;
 [crates/remote/README.md](crates/remote/README.md) has the details.
 [AGENTS.md](AGENTS.md) describes the repository layout and conventions.
+Before a release, run [docs/manual-testing.md](docs/manual-testing.md), the
+end-to-end check by hand.
 
 ## License
 
