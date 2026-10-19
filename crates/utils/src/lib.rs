@@ -51,11 +51,9 @@ pub fn is_wsl2() -> bool {
 
 pub fn cache_dir() -> std::path::PathBuf {
     let proj = if cfg!(debug_assertions) {
-        ProjectDirs::from("", "", "prepcook-dev")
-            .expect("OS didn't give us a home directory")
+        ProjectDirs::from("", "", "prepcook-dev").expect("OS didn't give us a home directory")
     } else {
-        ProjectDirs::from("", "", "prepcook")
-            .expect("OS didn't give us a home directory")
+        ProjectDirs::from("", "", "prepcook").expect("OS didn't give us a home directory")
     };
 
     // ✔ macOS → ~/Library/Caches/MyApp

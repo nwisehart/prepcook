@@ -7,13 +7,12 @@
 
 use std::collections::BTreeMap;
 
+use api_types::WorkClass;
 use db::models::repo::Repo;
 use git::GitService;
 use git_host::{GitHostProvider, GitHostService, ProviderKind};
 use sqlx::SqlitePool;
 use uuid::Uuid;
-
-use api_types::WorkClass;
 
 use crate::services::{
     config::{

@@ -29,6 +29,7 @@ use std::{
     time::Duration,
 };
 
+use api_types::{CardOrigin, HarnessOutcome, TriageReport, WorkClass};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use enum_dispatch::enum_dispatch;
@@ -41,8 +42,6 @@ use uuid::Uuid;
 use self::{
     discord::DiscordNotifier, slack::SlackNotifier, teams::TeamsNotifier, webhook::WebhookNotifier,
 };
-use api_types::{CardOrigin, HarnessOutcome, TriageReport, WorkClass};
-
 use crate::services::{
     config::{Config, NotificationTarget, TargetOrigin},
     integrations::{Descriptor, FieldKind, SecretPrecedence, resolve_secret, secret_name},
