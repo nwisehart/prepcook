@@ -8,14 +8,10 @@
 - The two orchestrator modes are **Chef mode** (autonomy off) and **Prep mode** (autonomy on).
 
 ## Project Structure & Module Organization
-- `crates/`: Rust workspace crates — `server` (API + bins), `db` (SQLx models/migrations), `executors`, `services`, `utils`, `git` (Git operations), `api-types` (shared API types for local + remote), `review` (PR review tool), `deployment`, `local-deployment`, `remote`.
-- `packages/local-web/`: Local React + TypeScript app entrypoint (Vite, Tailwind). Shell source in `packages/local-web/src`.
-- `packages/web-core/`: Shared React + TypeScript frontend library used by the web app (`packages/web-core/src`).
-- `shared/`: Generated TypeScript types (`shared/types.ts`, `shared/remote-types.ts`) and agent tool schemas (`shared/schemas/`). Do not edit generated files directly.
-- `assets/`, `dev_assets_seed/`, `dev_assets/`: Packaged and local dev assets.
-- `npx-cli/`: Files published to the npm CLI package.
-- `scripts/`: Dev helpers (ports, DB preparation).
-- `docs/`: Documentation files.
+[docs/developing.md](docs/developing.md) describes the architecture, the
+repository layout (every crate and package), the build and CI checks, and how
+to add an integration provider or a coding agent. This file holds the
+conventions to follow while editing.
 
 ### Crate-specific guides
 - [`crates/remote/AGENTS.md`](crates/remote/AGENTS.md) — Remote server architecture, ElectricSQL integration, mutation patterns, environment variables.

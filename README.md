@@ -7,22 +7,68 @@
 
 A prep cook does the prep so the chef can cook. Prepcook does the prep on a
 bug — reproduces it, explains it, fixes it, reviews the fix, opens the pull
-request — and the engineer who owns the ticket signs off. When they take the
-ticket over, Prepcook steps aside. Each ticket is a card on a local board,
-and each stage of the card is worked by a coding agent (Claude Code) in its
-own git worktree.
+request — and the engineer who owns the ticket signs off. Each ticket is a card
+on a local board, each stage of the card is worked by a coding agent in its own
+git worktree, and when a person takes the ticket over, Prepcook steps aside.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/board-dark.png">
+    <img src="docs/images/board.png" alt="The Pantry board in Prepcook: one card in each of To Do, Plan, Triaged, Execute, Review and Close" width="880">
+  </picture>
+</p>
+
+## What it does
+
+A card moves through five stages, left to right across the board.
+
+**Plan.** Prepcook stands the app up in the card's worktree and an agent
+reproduces the bug first, with a harness that fails for the reported reason.
+Only then does it write the root-cause analysis (RCA): what happens, why, and
+how sure it is. A person approves it, asks for changes, or sends it back.
+
+**Execute.** A new session makes the smallest fix for the mechanism the RCA
+isolated and keeps at it until the reproduction passes, adding regression
+tests. It commits on a branch rebased onto the target branch and does not push.
+
+**Review.** A separate agent reviews the change in a fresh worktree, with the
+diff, the code around it and the reproduction, and none of the planning
+context. When it asks for changes, its findings go back to the implementing
+agent to fix or rebut, for up to three rounds.
+
+**Push MR.** Prepcook pushes the branch and opens the pull request (GitHub) or
+merge request (GitLab), then feeds review comments on it back to the
+implementing agent.
+
+**Clean up.** Prepcook runs the repository's clean-up script, archives the
+card's worktrees and closes the ticket. Every approved RCA stays in a knowledge
+store, linked into a graph of root causes, so a cause that keeps coming back
+becomes visible and opens a pattern review of its own.
+
+Prepcook runs in one of two modes. In **Chef mode** it works your tickets and
+you move the cards and approve each plan. In **Prep mode** it works on its
+own: new tickets are picked up as they arrive, cards move themselves, and plans
+are approved from the ticket or through the API.
+
+Not every card is a fix. An **investigation** card, filed through
+`POST /api/cards` by a support tool or opened from an incident, runs Plan
+exactly as a bug does, then posts a triage report (what happens, where, why,
+scope, workaround, confidence) and stops in **Triaged**; an engineer who wants
+it fixed converts it to a bug, and the RCA and harness become the plan.
+[Tammy](https://github.com/nwisehart/tammy) is the Slack agent built on this:
+she answers customers from your product's docs, files an investigation when
+something looks broken, and explains the triage report back in plain English.
 
 ## Quickstart
 
 This takes a bug from report to pull request on Pantry, a small demo app, with
 no tracker: the card is the only record. You need macOS or Linux with Docker
 (and Compose), Node 20 or later, git, Claude Code installed and signed in
-(`claude` on your `PATH`), and the GitHub CLI signed in (`gh auth login`, which
-also lets git push over HTTPS) for the pull request at the end.
+(`claude` on your `PATH`), and the GitHub CLI signed in (`gh auth login`) for
+the pull request at the end.
 
 Your own steps take about 20 minutes. The agents' working time comes on top,
-most of it in Plan, and varies with the model and the machine; expect 30 to 60
-minutes end to end.
+most of it in Plan; expect 30 to 60 minutes end to end.
 
 ### 1. Install and start Prepcook (about 10 minutes)
 
@@ -34,233 +80,165 @@ put `prepcook` and `prepcook-mcp` on your `PATH`:
 ```sh
 tar -xzf prepcook-<version>-macos-arm64.tar.gz
 cp prepcook-<version>-macos-arm64/prepcook prepcook-<version>-macos-arm64/prepcook-mcp ~/.local/bin/
-```
-
-Building from a checkout instead (Rust and pnpm as well) takes well over the
-budget on most laptops:
-
-```sh
-pnpm install
-pnpm -C packages/local-web build      # the server embeds the built UI
-cargo build --release --bin prepcook --bin prepcook-mcp
-```
-
-Then:
-
-```sh
 prepcook up
 ```
 
-`prepcook up` writes the board's Docker Compose file and a generated `.env` into
-the app data directory and starts the board. The first time, Docker pulls the
-board's images (Postgres, ElectricSQL and `ghcr.io/nwisehart/prepcook-board`):
-several hundred megabytes, a few minutes on a typical connection, and the step
-most likely to blow the budget. `prepcook up` then waits up to two minutes for the
-board to answer, starts the Prepcook server and opens the UI in your browser.
-There is nothing to sign in to: the server signs each request to the board with
-the board's own secret, `PREPCOOK_JWT_SECRET` in that `.env`, and acts as the
-board's owner. Keep the `.env` private: it holds that secret and the board's
-database passwords. For a board on another machine, set `PREPCOOK_SHARED_API_BASE`
-to its URL and `PREPCOOK_BOARD_SECRET` to its `PREPCOOK_JWT_SECRET`, in the
-environment or with `prepcook secret set PREPCOOK_BOARD_SECRET`.
-
-`prepcook up --no-browser` leaves the browser alone. `prepcook down` stops the board and
-keeps its data (`--volumes` deletes it), and `prepcook status` says what is running
-and whether the board accepts the server's secret.
+`prepcook up` writes the board's Docker Compose file and a generated `.env`
+into the app data directory, starts the board (the first time, Docker pulls
+several hundred megabytes of images, the step most likely to blow the budget),
+then starts the Prepcook server and opens the UI. There is nothing to sign in
+to: the server signs each request to the board with the board's secret, kept
+in that `.env`, so keep the file private. `prepcook status` says what is
+running, `prepcook down` stops the board and keeps its data.
+[docs/developing.md](docs/developing.md#build-run-and-test) covers building from
+a checkout instead, and
+[crates/remote/README.md](crates/remote/README.md) running the board elsewhere.
 
 ### 2. Add the demo repository (about 5 minutes)
 
-Fork [github.com/nwisehart/prepcook-demo](https://github.com/nwisehart/prepcook-demo) on
-GitHub and clone your fork, so that `origin` is the fork:
+Fork [github.com/nwisehart/prepcook-demo](https://github.com/nwisehart/prepcook-demo)
+and clone your fork, so that `origin` is the fork:
 
 ```sh
 git clone https://github.com/<you>/prepcook-demo.git ~/code/prepcook-demo
 ```
 
-In Prepcook, **Settings → Repositories → Add Repository** and pick the clone. The
-**Scripts** card shows what Prepcook read from the repository's
-`.prepcook/scripts.toml`: `npm ci` to set up, `node server.js` to start, `/health`
-as the ready check, `node scripts/seed.js` to seed and `npm test` to test, plus
-Pantry's product profile. [docs/scripts.md](docs/scripts.md) describes the
-file.
+In Prepcook, **Settings → Repositories → Add Repository** and pick the clone.
+The **Scripts** card shows what Prepcook read from the repository's
+`.prepcook/scripts.toml`: how to set Pantry up, start it, tell it is ready,
+seed it and test it ([docs/scripts.md](docs/scripts.md)).
 
-Click **Test stand-up**. Prepcook runs setup, start, the ready check and the seed in
-your clone, on a port from 4200–4299, then stops the app. Success is the outcome
-`ok` with every step at exit code 0; it takes about a minute, most of it
-`npm ci`. Anything else names the failing step and shows its output. The run
-leaves `node_modules/` and `data/` in the clone, both ignored by git.
+Click **Test stand-up**. Prepcook runs setup, start, the ready check and the
+seed in your clone, on a port from 4200–4299, then stops the app. Success is
+the outcome `ok` with every step at exit code 0, in about a minute; anything
+else names the failing step and shows its output.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/quickstart-stand-up-dark.png">
+    <img src="docs/images/quickstart-stand-up.png" alt="Settings, Repositories: the Scripts card for prepcook-demo with a Test stand-up run whose outcome is ok and whose setup, start, ready and seed steps all exited 0" width="720">
+  </picture>
+</p>
 
 ### 3. Plan: reproduce and explain (about 5 minutes, then 10 to 20 waiting)
 
-Make a board for it and turn the orchestrator on:
-
 1. **Settings → Projects → Add Project**, named `Pantry`.
-2. **Settings → Orchestrator**: switch on **Enable automatic agent launches**.
-   Under **Automated projects**, add `Pantry` and tick the `prepcook-demo`
-   repository. Leave autonomy off: this is Chef mode, where you move the cards.
-   Save.
+2. **Settings → Orchestrator**: switch on **Enable automatic agent launches**,
+   add `Pantry` under **Automated projects** and tick the `prepcook-demo`
+   repository. Leave autonomy off (Chef mode). Save.
 
 Open the Pantry board and click **New Issue**. Copy the first line of the
 demo's [BUG.md](https://github.com/nwisehart/prepcook-demo/blob/main/BUG.md)
-(without the `#`) into the title and the rest into the description. Add the
-`bug` tag, which tells Prepcook which playbook the card takes, and make yourself
-the assignee: you and Prepcook are both the board's owner, `owner@localhost`, and
-Prepcook only works cards assigned to it.
-Create it; it lands in **To Do**. Drag it to **Plan**.
+(without the `#`) into the title and the rest into the description, add the
+`bug` tag (it picks the playbook the card takes), and make yourself,
+`owner@localhost`, the assignee: Prepcook only works cards assigned to it.
+Create it and drag it from **To Do** to **Plan**.
 
-Within one poll (15 seconds) Prepcook claims the card, makes a git worktree for it,
-and stands Pantry up there from `.prepcook/scripts.toml`. Then a Claude Code session
-starts with the `bug:planning` playbook. It reproduces the bug first: a
-Playwright harness under `.repro/` in the worktree that shares the Weekend list
-with `Ann@Example.com` and asserts the result, run against the app until it
-fails for the reported reason. The first run downloads Playwright's Chromium.
-The reproduction is posted on the card as a `REPRODUCTION:` comment. Only then
-does the agent look for the cause, and it writes the root-cause analysis (RCA)
-as an HTML page at `docs/specs/<card id>.html` in the worktree, with its
-confidence and open questions recorded on the card. Plan usually takes 10 to
-20 minutes. [docs/reproduce-first.md](docs/reproduce-first.md) explains why it
-works in that order.
+Within one poll (15 seconds) Prepcook makes a git worktree for the card, stands
+Pantry up there and starts a Claude Code session. The agent reproduces the bug
+first, with a Playwright harness that shares the Weekend list with
+`Ann@Example.com` and fails for the reported reason, and posts it as a
+`REPRODUCTION:` comment. Only then does it look for the cause and write the
+RCA, with its confidence and open questions on the card
+([docs/reproduce-first.md](docs/reproduce-first.md)).
 
-When the RCA is ready, the card shows **Review plan**. It opens the RCA in
-Lavish, a review page with **Approve** and **Request changes** buttons; the same
-draft is filed under the board's **Knowledge** menu. Approve it there, or comment
-`APPROVE` on the card. Once the approval is recorded and the RCA's confidence is
-high, the card moves to **Execute** by itself. If the confidence is lower, the
-card says so and stays in Plan; ask for what is missing with a
-`REQUEST CHANGES: <what>` comment. [docs/approvals.md](docs/approvals.md) has
-every way to decide.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/card-rca-dark.png">
+    <img src="docs/images/card-rca.png" alt="The Pantry sharing bug open in Plan, with its REPRODUCTION comment and the RCA: sharing looks the email up case-sensitively, confidence high" width="720">
+  </picture>
+</p>
+
+When the RCA is ready, the card shows **Review plan**, which opens it in
+Lavish, a review page with **Approve** and **Request changes**; commenting
+`APPROVE` on the card works too. Once approved at high confidence, the card
+moves to **Execute** by itself; at lower confidence it stays in Plan and says
+why ([docs/approvals.md](docs/approvals.md)).
 
 ### 4. Execute, Review, Push MR, Clean up (about 5 minutes, then 15 to 30 waiting)
 
-**Execute.** A new session in the same worktree, with the app stood up from the
-fix branch, reads the RCA, runs the harness to watch it fail, and makes the
-smallest change to the mechanism the RCA isolated. It adds regression tests,
-runs them and the harness until both pass, and commits on a branch rebased onto
-`main`. It does not push. Allow 5 to 15 minutes.
-
-When the session has finished, check the branch the way Prepcook checks it before a
-merge: comment `VERIFY:` on the card. Prepcook stands the app up fresh in the fix's
-worktree, runs `npm test`, tears it down, and posts the result on the card. (In
-Prep mode this pre-merge verify runs on its own and gates the move to Review.)
+**Execute.** A new session in the same worktree runs the harness to watch it
+fail, makes the smallest change, adds regression tests and commits on a branch
+rebased onto `main`. When it has finished, comment `VERIFY:` on the card to
+have Prepcook stand the branch up fresh and run `npm test`, the check it makes
+before every merge.
 
 **Review.** Drag the card to **Review**. A new agent reviews the change in a
-fresh worktree, without the RCA or the planning session; it reads only the
-diff, the code around it, and the `REPRODUCTION:` comment. It records its
-findings and posts `REVIEW: APPROVE` or `REVIEW: REQUEST CHANGES` on the card. A
-`REQUEST CHANGES` goes back to the implementing agent as a fix round and is
-reviewed again on its own, up to three rounds. Allow 5 to 10 minutes per round.
-[docs/review.md](docs/review.md) covers what the reviewer weighs.
+fresh worktree and posts `REVIEW: APPROVE` or `REVIEW: REQUEST CHANGES`; a
+request for changes goes back to the implementing agent as a fix round
+([docs/review.md](docs/review.md)).
 
-**Push MR.** After `REVIEW: APPROVE`, drag the card to **Push MR**. Prepcook pushes
-the branch to your fork and opens a pull request there with `gh`, its first
-comment the reproduction, so whoever reviews it can run the harness. The
-implementing agent then writes the pull request's title and description. Merge
-it on GitHub; within a few minutes the card moves to **Close**.
+**Push MR.** After `REVIEW: APPROVE`, drag the card to **Push MR**. Prepcook
+pushes the branch to your fork and opens a pull request there, its first
+comment the reproduction. Merge it on GitHub; within a few minutes the card
+moves to **Close**.
 
-**Clean up.** Drag the card from Close to **Clean up**. Prepcook runs the
-repository's clean-up script, when it has one, and archives the card's
-worktrees. The approved RCA stays in the knowledge store.
+**Clean up.** Drag the card to **Clean up**. Prepcook archives the card's
+worktrees; the approved RCA stays under the board's **Knowledge** menu.
 
-[docs/method.md](docs/method.md) describes the whole method, including Prepcook
-mode, where the cards move themselves.
+[docs/method.md](docs/method.md) describes the whole method, Prep mode
+included.
 
-### 5. Then
+## Integrations
 
-- **Connect a tracker.** **Settings → Integrations → Ticketing** (Jira or
-  GitHub Issues) imports tickets, picks new ones up on its own, and lets
-  approvers decide plans from the ticket. In incidents mode the source is
-  PagerDuty, and open incidents become investigations
-  ([docs/incidents.md](docs/incidents.md)). Every setting is in
-  [docs/configuration.md](docs/configuration.md), and how Prepcook behaves on
-  a shared ticket in
-  [docs/working-alongside-people.md](docs/working-alongside-people.md).
-- **Use the toolkit.** The same loop at your terminal, without the board:
-  [toolkit/README.md](toolkit/README.md).
+Each area is configured under **Settings → Integrations**, rendered from what
+each provider says about itself, with a **Test connection** button per
+provider. Every setting is in [docs/configuration.md](docs/configuration.md).
 
-## How it works
+| Area | Providers |
+| --- | --- |
+| Ticketing | Jira and GitHub Issues (tickets mode); PagerDuty incidents (incidents mode, [docs/incidents.md](docs/incidents.md)) |
+| Notifications | Slack, signed webhook, Discord, Microsoft Teams ([docs/notifications.md](docs/notifications.md)) |
+| Evidence | Sentry, DataSet, Datadog, CloudWatch Logs, log files ([docs/evidence.md](docs/evidence.md)) |
+| Reproduction | Local (this machine), remote (a deploy from `[app.remote]`, [docs/scripts.md](docs/scripts.md#remote-targets)) |
+| Agents | Claude Code, Amp, Gemini CLI, Codex, OpenCode, Cursor Agent, Qwen Code, GitHub Copilot CLI, Droid, chosen per stage ([docs/configuration.md](docs/configuration.md#agents)) |
 
-A card moves through five stages.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-integrations-dark.png">
+    <img src="docs/images/settings-integrations.png" alt="Settings, Integrations, Notifications: one webhook target with its URL, events and Test connection button" width="720">
+  </picture>
+</p>
 
-**Plan.** Prepcook stands the app up in the card's worktree and an agent
-reproduces the bug first, with a harness that fails for the reported reason.
-Only then does it write the root-cause analysis: what happens, why, and how
-sure it is. A person approves the analysis, asks for changes, or sends it back.
+## Working alongside people
 
-**Execute.** A new agent session makes the smallest fix for the mechanism the
-analysis isolated and keeps at it until the reproduction passes, adding
-regression tests. It commits on a branch rebased onto the target branch and
-does not push.
-
-**Review.** A separate agent reviews the change in a fresh workspace, with
-only the diff and the ticket and none of the planning context, and records a
-verdict with its findings. When it asks for changes, the findings go back to
-the implementation agent to fix or rebut.
-
-**Push MR.** Prepcook pushes the branch and opens the pull request (GitHub) or
-merge request (GitLab), then feeds human review comments on it back to the
-implementation agent.
-
-**Clean-up.** Prepcook runs the repository's clean-up scripts, archives the
-card's worktrees and closes the ticket. Every approved root-cause analysis is
-kept in a knowledge store and linked into a graph of root-cause classes, so a
-cause that keeps coming back becomes visible and can open a pattern review of
-its own.
-
-Not every card is a fix. An **investigation** card — one a support agent files
-through `POST /api/cards` for a customer's problem, say — runs Plan exactly as a
-bug does, then posts a fixed-shape triage report (what happens, where, why,
-scope, workaround, confidence) and stops in a **Triaged** column, with no
-approval to wait for; an `investigation_completed` event carries the report
-back to whoever filed it. An engineer who wants it fixed converts the card to a
-bug, and when the investigation's RCA and harness are good enough to be the
-plan, it goes straight to Execute ([docs/method.md](docs/method.md#investigations),
-[docs/api.md](docs/api.md)).
-
-Prepcook runs in one of two modes. In **Chef mode** Prepcook works your own tickets:
-you move cards between columns, approve plans in Lavish (the review page each
-plan opens in), and stories and epics get a spec or a breakdown into
-sub-tasks the same way bugs get a root-cause analysis. In **Prep mode** it
-works on its own: new tickets are picked up and triaged as they arrive, cards
-move themselves, and plan approvals come from the tracker ticket or the
-approvals API. [docs/approvals.md](docs/approvals.md) covers every way a plan
-is decided, and [docs/playbooks.md](docs/playbooks.md) the prompt each stage's
-agent starts from and how to change it. [docs/method.md](docs/method.md) is the
-longer version of this section, with links to the rest of the docs.
-
-Cards live on the board, a separate service (Postgres, ElectricSQL and the
-board server) that `prepcook up` runs in Docker. The Prepcook server reads and
-writes them as the board's single owner: it signs a short-lived owner token
-with the board's secret for every request, so there is no account, sign-in or
-stored session. Agent users, the automation identities an admin creates on the
-board, are separate: each signs in with its own email and secret.
+Prepcook works tickets that people also work on, read and report on. An
+engineer who assigns a ticket to themselves takes it over: what was running
+finishes, nothing new starts, and the card is parked for them. It answers on a ticket
+only when it is its turn, takes plan decisions only from the people listed as
+approvers, and files a follow-up rather than reopening a fix that did not hold
+([docs/working-alongside-people.md](docs/working-alongside-people.md)).
 
 ## The local toolkit
 
-The same method also works without the board. The toolkit is a set of Claude
-Code skills generated from the orchestrator's own stage playbooks, so a ticket
-worked by hand at your terminal gets the same reproduction harness, root-cause
-analysis and pull request as one Prepcook worked, and its analysis is filed in the
-same knowledge store. See [toolkit/README.md](toolkit/README.md).
+The same loop also works at your terminal, without the board: Claude Code
+skills generated from the orchestrator's own playbooks reproduce, explain, fix,
+review and open the pull request on your machine. Their RCAs land in the same
+knowledge store; see [toolkit/README.md](toolkit/README.md).
+
+## Documentation
+
+- [docs/method.md](docs/method.md): the method, stage by stage, investigations and the two modes.
+- [docs/reproduce-first.md](docs/reproduce-first.md): why the harness comes before the explanation, and what it must assert.
+- [docs/approvals.md](docs/approvals.md): every way a plan is approved, changed or sent back.
+- [docs/review.md](docs/review.md): the independent review, its verdicts and the pre-merge verify.
+- [docs/working-alongside-people.md](docs/working-alongside-people.md): takeovers, comments, the daily update and reopened tickets.
+- [docs/playbooks.md](docs/playbooks.md): the prompt each stage starts from, its placeholders, and how to change it.
+- [docs/scripts.md](docs/scripts.md): `.prepcook/scripts.toml`, how Prepcook stands an app up locally or remotely.
+- [docs/configuration.md](docs/configuration.md): every setting, with the provider tables generated from the code.
+- [docs/notifications.md](docs/notifications.md): notification targets and the events they receive.
+- [docs/evidence.md](docs/evidence.md): evidence sources, what the agent is told, and `evidence_search`.
+- [docs/incidents.md](docs/incidents.md): incidents mode with PagerDuty, and the webhook alternative.
+- [docs/rca-graph.md](docs/rca-graph.md): the knowledge store, the root-cause graph and pattern reviews.
+- [docs/api.md](docs/api.md): the stable HTTP API: cards, plan decisions, evidence, scripts and app runs.
+- [docs/manual-testing.md](docs/manual-testing.md): the end-to-end check by hand before every release.
+- [docs/developing.md](docs/developing.md): the architecture, the repository and how to extend Prepcook.
+- [docs/images/README.md](docs/images/README.md): the screenshots and how to regenerate them.
 
 ## Development
 
-```sh
-pnpm install
-pnpm run dev                 # server and web app with hot reload, ports chosen for you
-pnpm run check               # type checks, frontend and Rust
-pnpm run lint                # ESLint and clippy
-pnpm run format              # cargo fmt and Prettier
-cargo test --workspace
-```
-
-The server reads the board's address from `PREPCOOK_SHARED_API_BASE`
-(`prepcook up` sets it to `http://127.0.0.1:4110`). To run the board from source
-rather than the published image, use `pnpm run remote:dev`, or
-`prepcook up --compose crates/remote/docker-compose.yml`;
-[crates/remote/README.md](crates/remote/README.md) has the details.
-[AGENTS.md](AGENTS.md) describes the repository layout and conventions.
-Before a release, run [docs/manual-testing.md](docs/manual-testing.md), the
-end-to-end check by hand.
+[docs/developing.md](docs/developing.md) covers the architecture, building, testing and adding providers.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers how to propose a change.
 
 ## License
 
