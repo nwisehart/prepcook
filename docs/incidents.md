@@ -59,6 +59,13 @@ ticket ([approvals.md](approvals.md#the-tracker-ticket)).
 
 ## Setting up PagerDuty
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/settings-ticketing-dark.png">
+    <img src="images/settings-ticketing.png" alt="Settings → Integrations → Ticketing: the Tickets / Incidents switch, the source provider block and the pickup settings" width="760">
+  </picture>
+</p>
+
 **Settings → Integrations → Ticketing**: choose **Incidents**, add
 **PagerDuty**, and fill in:
 

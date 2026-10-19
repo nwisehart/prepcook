@@ -18,6 +18,13 @@ repository can also name the log files it writes in its own
 
 ## Configuring sources
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/settings-evidence-dark.png">
+    <img src="images/settings-evidence.png" alt="Settings → Integrations → Evidence: the evidence sources list with the Add menu" width="760">
+  </picture>
+</p>
+
 **Settings → Integrations → Evidence**, or `evidence.sources` in `config.json`
 ([configuration.md](configuration.md#evidence) has every provider's fields):
 

@@ -80,6 +80,13 @@ the knowledge store and linked into the root-cause graph
 
 ### Which agent runs which stage
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/settings-agents-dark.png">
+    <img src="images/settings-agents.png" alt="Settings → Integrations → Agents: the default profile and the per-stage overrides for Planning, Executing, Reviewing, comment replies and pattern reviews" width="760">
+  </picture>
+</p>
+
 **Settings → Agents** names the profile each stage runs, globally or per board
 ([configuration.md](configuration.md#agents)). Left unset, Plan runs the
 default coding agent profile and every other stage runs that agent's cheaper
@@ -97,6 +104,13 @@ session, so it can change variant but never agent.
 An investigation is a reported problem Prepcook reproduces and explains but
 does not fix — typically filed by a support agent from a customer conversation,
 which then translates the answer for the customer.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/card-triaged-dark.png">
+    <img src="images/card-triaged.png" alt="A triaged investigation card open on the board, with its TRIAGE REPORT: what happens, where, why, scope, workaround and confidence" width="760">
+  </picture>
+</p>
 
 - **Plan** runs exactly as for a bug, from the `investigation:planning`
   playbook: the app stood up, the harness first, the `REPRODUCTION:` comment,

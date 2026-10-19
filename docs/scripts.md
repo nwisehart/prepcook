@@ -289,6 +289,13 @@ any script runs, with the outcome `secret-missing`.
 
 ## Trying it from Settings
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/settings-repositories-dark.png">
+    <img src="images/settings-repositories.png" alt="Settings → Repositories with the Pantry demo selected: the product profile, the reproduction target and the app steps from .prepcook/scripts.toml, each with a Test run button" width="760">
+  </picture>
+</p>
+
 - `GET /api/repos/{id}/scripts` — the repository's parsed manifest, or the
   error, plus `required_secrets_missing`.
 - `POST /api/repos/{id}/scripts/run` with
