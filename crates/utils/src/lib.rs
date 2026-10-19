@@ -1,4 +1,4 @@
-use std::{env, sync::OnceLock};
+use std::sync::OnceLock;
 
 use directories::ProjectDirs;
 
@@ -51,10 +51,10 @@ pub fn is_wsl2() -> bool {
 
 pub fn cache_dir() -> std::path::PathBuf {
     let proj = if cfg!(debug_assertions) {
-        ProjectDirs::from("ai", "bloop-dev", env!("CARGO_PKG_NAME"))
+        ProjectDirs::from("", "", "prepcook-dev")
             .expect("OS didn't give us a home directory")
     } else {
-        ProjectDirs::from("ai", "bloop", env!("CARGO_PKG_NAME"))
+        ProjectDirs::from("", "", "prepcook")
             .expect("OS didn't give us a home directory")
     };
 

@@ -22,7 +22,7 @@ pub fn asset_dir() -> std::path::PathBuf {
 }
 
 pub fn prod_asset_dir_path() -> std::path::PathBuf {
-    ProjectDirs::from("ai", "bloop", "prepcook")
+    ProjectDirs::from("", "", "prepcook")
         .expect("OS didn't give us a home directory")
         .data_dir()
         .to_path_buf()

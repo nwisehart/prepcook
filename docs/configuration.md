@@ -2,7 +2,7 @@
 
 Every setting Prepcook keeps, grouped the way **Settings** groups them, with its
 default. Settings are stored in `config.json` in the app data directory
-(`~/.local/share/prepcook` on Linux, `~/Library/Application Support/ai.bloop.prepcook`
+(`~/.local/share/prepcook` on Linux, `~/Library/Application Support/prepcook`
 on macOS), currently in its `v10` shape. The Settings pages write that file; a
 setting marked *file only* has no control on a page and is changed by editing
 the file while Prepcook is stopped. The orchestrator re-reads its settings on every

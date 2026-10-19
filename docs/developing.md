@@ -63,7 +63,7 @@ through the native server.
 | Worktrees | `/var/tmp/prepcook/worktrees` on Linux, `$TMPDIR/prepcook/worktrees` on macOS |
 
 The app data directory is `~/.local/share/prepcook` on Linux and
-`~/Library/Application Support/ai.bloop.prepcook` on macOS for a release
+`~/Library/Application Support/prepcook` on macOS for a release
 build, and `dev_assets/` in the checkout for a debug build
 (`crates/utils/src/assets.rs`).
 

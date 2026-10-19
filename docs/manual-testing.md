@@ -45,7 +45,7 @@ export PREPCOOK_SRC=~/code/prepcook
 export PANTRY=~/code/prepcook-demo
 export PC=http://127.0.0.1:4100                                       # the server
 export PC_DATA=~/.local/share/prepcook                                # Linux
-# export PC_DATA="$HOME/Library/Application Support/ai.bloop.prepcook" # macOS
+# export PC_DATA="$HOME/Library/Application Support/prepcook" # macOS
 export PATH="$PREPCOOK_SRC/target/release:$PATH"
 [ -f ~/.config/prepcook/manual-test.env ] && { set -a; . ~/.config/prepcook/manual-test.env; set +a; }
 ```
