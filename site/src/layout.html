@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    <meta name="description" content="{{description}}" />
+    <meta
+      name="theme-color"
+      content="#F7F6F3"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#1E1E21"
+      media="(prefers-color-scheme: dark)"
+    />
+    <script>
+      try {
+        var saved = localStorage.getItem('prepcook-theme');
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved);
+        }
+      } catch (e) {}
+    </script>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="{{root}}assets/brand/prepcook-mark.svg"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+    />
+    <link rel="stylesheet" href="{{root}}static/site.css" />
+    <script src="{{root}}static/site.js" defer></script>
+  </head>
+  <body class="{{bodyClass}}">
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="header-inner">
+        {{menuButton}}
+        <a class="brand" href="{{root}}index.html" data-section="home">
+          <picture>
+            <source
+              media="(prefers-color-scheme: dark)"
+              srcset="{{root}}assets/brand/prepcook-mark-dark.svg"
+            />
+            <img
+              src="{{root}}assets/brand/prepcook-mark.svg"
+              alt=""
+              width="28"
+              height="28"
+            />
+          </picture>
+          <span>Prepcook</span>
+        </a>
+        <nav class="header-nav" aria-label="Site">
+          <a href="{{root}}get-started.html" data-section="docs">Docs</a>
+          <a href="{{root}}tammy.html" data-section="tammy">Tammy</a>
+          <a class="external" href="https://github.com/nwisehart/prepcook"
+            >GitHub</a
+          >
+        </nav>
+        <button
+          class="icon-button theme-toggle"
+          type="button"
+          aria-label="Switch to the dark theme"
+        >
+          <svg
+            class="icon-moon"
+            viewBox="0 0 20 20"
+            width="18"
+            height="18"
+            aria-hidden="true"
+          >
+            <path
+              d="M16.5 12.2A7 7 0 0 1 7.8 3.5a7 7 0 1 0 8.7 8.7Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <svg
+            class="icon-sun"
+            viewBox="0 0 20 20"
+            width="18"
+            height="18"
+            aria-hidden="true"
+          >
+            <circle
+              cx="10"
+              cy="10"
+              r="3.4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <path
+              d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
+    {{main}}
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p>
+          <strong>Prepcook</strong> by Nick Wisehart. Apache License 2.0; a fork
+          of
+          <a href="https://github.com/BloopAI/vibe-kanban"
+            >vibe-kanban by BloopAI</a
+          >
+          (<a href="https://github.com/nwisehart/prepcook/blob/main/NOTICE"
+            >NOTICE</a
+          >).
+        </p>
+        <ul class="footer-links">
+          <li><a href="https://github.com/nwisehart/prepcook">prepcook</a></li>
+          <li>
+            <a href="https://github.com/nwisehart/prepcook-demo"
+              >prepcook-demo</a
+            >
+          </li>
+          <li><a href="https://github.com/nwisehart/tammy">tammy</a></li>
+          <li>
+            <a href="https://github.com/nwisehart/prepcook/releases"
+              >Releases</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://github.com/nwisehart/prepcook/blob/main/CODE_OF_CONDUCT.md"
+              >Code of Conduct</a
+            >
+          </li>
+        </ul>
+      </div>
+    </footer>
+  </body>
+</html>

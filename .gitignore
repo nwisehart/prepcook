@@ -104,3 +104,6 @@ debug-logs/
 
 # Staged Tauri sidecars (see scripts/stage-mcp-sidecar.sh)
 crates/tauri-app/binaries/
+
+# The website build (site/build.mjs)
+site/dist/

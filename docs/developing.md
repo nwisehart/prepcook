@@ -459,3 +459,24 @@ The automated tests cover the pieces; [manual-testing.md](manual-testing.md)
 covers the whole, by hand, from a cold clone: the board, a bug with no tracker,
 investigations, every integration area, Tammy and the clean-up. Run it before
 every release, and the sections a change touches before merging it.
+
+## The website
+
+The project site, `https://nwisehart.github.io/prepcook/`, lives in `site/`
+(`@prepcook/site`). Its pages are generated from `README.md`,
+`CONTRIBUTING.md` and `docs/*.md` by `site/build.mjs`, so a content change goes
+in those files, not in `site/`; only the home page and the Tammy page are
+written by hand (`site/src/`). Build and preview it with:
+
+```sh
+pnpm --filter @prepcook/site run build
+python3 -m http.server -d site/dist    # or: npx serve site/dist
+```
+
+The build ends with a link check (`site/check-links.mjs`) that fails on any
+link, image or `#anchor` that does not resolve; every link it writes is
+relative, because the site is served under `/prepcook/`. A new page in `docs/`
+needs an entry in the sidebar list at the top of `build.mjs`.
+`.github/workflows/pages.yml` publishes the site on every push to `main` that
+touches it, once the repository's **Settings → Pages → Source** is set to
+**GitHub Actions**.

@@ -1,0 +1,319 @@
+<main class="home" id="main">
+  <section class="hero">
+    <h1 class="wordmark">
+      <picture>
+        <source
+          media="(prefers-color-scheme: dark)"
+          srcset="assets/brand/prepcook-logo-dark.svg"
+        />
+        <img
+          src="assets/brand/prepcook-logo.svg"
+          alt="Prepcook"
+          width="318"
+          height="77"
+        />
+      </picture>
+    </h1>
+    <p class="pitch-lead">{{pitchLead}}</p>
+    <p class="pitch">{{pitchRest}}</p>
+    <div class="actions">
+      <a class="button primary" href="get-started.html">Get started</a>
+      <a class="button" href="https://github.com/nwisehart/prepcook">GitHub</a>
+    </div>
+  </section>
+
+  <figure class="shot shot-board">
+    <a
+      href="docs/images/board.png"
+      data-dark-href="docs/images/board-dark.png"
+      aria-label="Open the board screenshot at full size"
+    >
+      <picture>
+        <source
+          media="(prefers-color-scheme: dark)"
+          srcset="docs/images/board-dark.png"
+        />
+        <img
+          src="docs/images/board.png"
+          alt="{{boardAlt}}"
+          width="2880"
+          height="1800"
+        />
+      </picture>
+    </a>
+    <figcaption>{{boardCaption}}</figcaption>
+  </figure>
+
+  <section class="band" aria-labelledby="how">
+    <p class="eyebrow">The board</p>
+    <h2 id="how">How a card moves</h2>
+    <p class="section-lead">
+      A card moves through five stages, left to right across the board.
+    </p>
+    <ol class="stages">
+      {{stages}}
+    </ol>
+  </section>
+
+  <section class="band" aria-labelledby="different">
+    <p class="eyebrow">The method</p>
+    <h2 id="different">What makes it different</h2>
+    <div class="feature-grid">
+      <article class="feature">
+        <h3>Reproduce first</h3>
+        <p>
+          A bug card's Plan stage makes the failure happen, and only then
+          explains it. The planning agent is told not to read code for the cause
+          until it has a script that fails for the reported reason.
+        </p>
+        <a href="docs/reproduce-first.html">Reproduce first</a>
+      </article>
+      <article class="feature">
+        <h3>The RCA and the knowledge graph</h3>
+        <p>
+          Every bug RCA goes into a knowledge store, linked into a graph of
+          product areas, components and root-cause classes, so a cause that
+          keeps coming back becomes visible and opens a pattern review of its
+          own.
+        </p>
+        <a href="docs/rca-graph.html">The knowledge store and the graph</a>
+      </article>
+      <article class="feature">
+        <h3>Fresh-eyes review</h3>
+        <p>
+          A separate agent reviews the change in a fresh worktree, with the
+          diff, the code around it and the reproduction, and none of the
+          planning context. Its findings go back to the implementing agent for
+          up to three rounds.
+        </p>
+        <a href="docs/review.html">The independent review</a>
+      </article>
+      <article class="feature">
+        <h3>Works alongside people</h3>
+        <p>
+          In <strong>Chef mode</strong> it works your tickets and you move the
+          cards and approve each plan; in <strong>Prep mode</strong> it works on
+          its own. An engineer who assigns a ticket to themselves takes it over,
+          and Prepcook steps aside.
+        </p>
+        <a href="docs/working-alongside-people.html"
+          >Working alongside people</a
+        >
+      </article>
+      <article class="feature">
+        <h3>Investigations and incidents</h3>
+        <p>
+          An investigation card runs Plan exactly as a bug does, then posts a
+          triage report and stops until a person converts it to a bug or closes
+          it. In incidents mode, each open incident becomes one, and the report
+          goes back to the incident as a note.
+        </p>
+        <span class="links">
+          <a href="docs/method.html#investigations">Investigations</a>
+          <a href="docs/incidents.html">Incidents</a>
+        </span>
+      </article>
+      <article class="feature">
+        <h3>Integrations as factories</h3>
+        <p>
+          Notifications, ticketing, reproduction, evidence and agents are each
+          configured under <strong>Settings → Integrations</strong>, rendered
+          from what each provider says about itself, with a
+          <strong>Test connection</strong> button per provider.
+        </p>
+        <span class="links">
+          <a href="docs/configuration.html">Configuration</a>
+          <a href="#screens">The settings screens</a>
+        </span>
+      </article>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="screens">
+    <p class="eyebrow">Screens</p>
+    <h2 id="screens">A look around</h2>
+    <div class="gallery">
+      <figure class="shot">
+        <a
+          href="docs/images/card-rca.png"
+          data-dark-href="docs/images/card-rca-dark.png"
+        >
+          <picture>
+            <source
+              media="(prefers-color-scheme: dark)"
+              srcset="docs/images/card-rca-dark.png"
+            />
+            <img
+              src="docs/images/card-rca.png"
+              alt="{{alt:card-rca}}"
+              width="2880"
+              height="1800"
+              loading="lazy"
+            />
+          </picture>
+        </a>
+        <figcaption>{{caption:card-rca}}</figcaption>
+      </figure>
+      <figure class="shot">
+        <a
+          href="docs/images/card-triaged.png"
+          data-dark-href="docs/images/card-triaged-dark.png"
+        >
+          <picture>
+            <source
+              media="(prefers-color-scheme: dark)"
+              srcset="docs/images/card-triaged-dark.png"
+            />
+            <img
+              src="docs/images/card-triaged.png"
+              alt="{{alt:card-triaged}}"
+              width="2880"
+              height="1800"
+              loading="lazy"
+            />
+          </picture>
+        </a>
+        <figcaption>{{caption:card-triaged}}</figcaption>
+      </figure>
+      <figure class="shot">
+        <a
+          href="docs/images/settings-integrations.png"
+          data-dark-href="docs/images/settings-integrations-dark.png"
+        >
+          <picture>
+            <source
+              media="(prefers-color-scheme: dark)"
+              srcset="docs/images/settings-integrations-dark.png"
+            />
+            <img
+              src="docs/images/settings-integrations.png"
+              alt="{{alt:settings-integrations}}"
+              width="2880"
+              height="1800"
+              loading="lazy"
+            />
+          </picture>
+        </a>
+        <figcaption>{{caption:settings-integrations}}</figcaption>
+      </figure>
+      <figure class="shot">
+        <a
+          href="docs/images/settings-agents.png"
+          data-dark-href="docs/images/settings-agents-dark.png"
+        >
+          <picture>
+            <source
+              media="(prefers-color-scheme: dark)"
+              srcset="docs/images/settings-agents-dark.png"
+            />
+            <img
+              src="docs/images/settings-agents.png"
+              alt="{{alt:settings-agents}}"
+              width="2880"
+              height="1800"
+              loading="lazy"
+            />
+          </picture>
+        </a>
+        <figcaption>{{caption:settings-agents}}</figcaption>
+      </figure>
+      <figure class="shot">
+        <a
+          href="docs/images/quickstart-stand-up.png"
+          data-dark-href="docs/images/quickstart-stand-up-dark.png"
+        >
+          <picture>
+            <source
+              media="(prefers-color-scheme: dark)"
+              srcset="docs/images/quickstart-stand-up-dark.png"
+            />
+            <img
+              src="docs/images/quickstart-stand-up.png"
+              alt="{{alt:quickstart-stand-up}}"
+              width="2880"
+              height="1800"
+              loading="lazy"
+            />
+          </picture>
+        </a>
+        <figcaption>{{caption:quickstart-stand-up}}</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="tammy">
+    <div class="tammy-teaser">
+      <picture>
+        <source
+          media="(prefers-color-scheme: dark)"
+          srcset="assets/tammy-mark-dark.svg"
+        />
+        <img src="assets/tammy-mark.svg" alt="" width="56" height="56" />
+      </picture>
+      <div>
+        <p class="eyebrow">The Slack agent</p>
+        <h2 id="tammy">Tammy</h2>
+        <p>
+          If Prepcook is the prep cook, Tammy is the waitress. When a customer
+          reports something that looks broken, she takes the order to the
+          kitchen: she asks the questions an engineer would ask, files an
+          <strong>investigation card</strong> on Prepcook, waits for its triage
+          report, and explains it to the customer in plain English.
+        </p>
+        <a class="button" href="tammy.html">Meet Tammy</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="install">
+    <p class="eyebrow">Install</p>
+    <h2 id="install">Three ways in</h2>
+    <div class="install-grid">
+      <div class="install">
+        <h3>From a release</h3>
+        <p>
+          Download the tarball for your platform from the
+          <a href="https://github.com/nwisehart/prepcook/releases"
+            >releases page</a
+          >
+          (<code>prepcook-&lt;version&gt;-&lt;target&gt;.tar.gz</code>, with
+          <code>SHA256SUMS</code> beside it), unpack it and put
+          <code>prepcook</code> and <code>prepcook-mcp</code> on your
+          <code>PATH</code>:
+        </p>
+        {{installTarball}}
+      </div>
+      <div class="install">
+        <h3>With npx</h3>
+        <p>
+          Run Prepcook without installing it; this launches it locally and opens
+          it in your browser (<a
+            href="https://github.com/nwisehart/prepcook/blob/main/npx-cli/README.md"
+            >npx-cli/README.md</a
+          >):
+        </p>
+        {{installNpx}}
+      </div>
+      <div class="install">
+        <h3>The board image</h3>
+        <p>
+          <code>prepcook up</code> runs the board from the published image
+          <code>ghcr.io/nwisehart/prepcook-board:&lt;version&gt;</code>, the
+          version of the <code>prepcook</code> binary that starts it; there is
+          nothing to pull by hand. To run the board elsewhere, see
+          <a
+            href="https://github.com/nwisehart/prepcook/blob/main/crates/remote/README.md"
+            >crates/remote/README.md</a
+          >; to build from a checkout, see
+          <a href="docs/developing.html#build-run-and-test"
+            >Build, run and test</a
+          >.
+        </p>
+      </div>
+    </div>
+    <p class="install-next">
+      Then follow the <a href="get-started.html#quickstart">Quickstart</a>: a
+      bug from report to pull request on Pantry, the demo app.
+    </p>
+  </section>
+</main>
