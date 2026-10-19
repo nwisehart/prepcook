@@ -278,8 +278,8 @@ In the UI:
    columns **To Do**, **Plan**, **Execute**, **Review** and **Shipped**, and the
    **Clean up** rail folded beside them. Each column's helper line reads, in
    order, "Waiting for you to send it to Plan", "Reproduce it, then explain
-   it", "The smallest fix, with tests", "Fresh eyes on the fix" and "Pull
-   request open, then merged; you clean up".
+   it", "The smallest fix, with tests", "Fresh eyes on the fix" and "PR
+   open or merged; you clean up".
 3. **Settings → Orchestrator**: switch on **Enable automatic agent launches**;
    under **Automated projects**, add `Pantry` and tick `prepcook-demo` under
    **Repositories**. Leave **Autonomy mode** off (Chef mode). **Save**:

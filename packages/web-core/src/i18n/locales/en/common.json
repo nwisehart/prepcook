@@ -747,7 +747,7 @@
       "plan": "Reproduce it, then explain it",
       "execute": "The smallest fix, with tests",
       "review": "Fresh eyes on the fix",
-      "shipped": "Pull request open, then merged; you clean up",
+      "shipped": "PR open or merged; you clean up",
       "close": "Merged; you close it",
       "cleanUp": "Worktrees archived"
     },
