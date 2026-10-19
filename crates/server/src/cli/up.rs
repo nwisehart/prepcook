@@ -263,7 +263,15 @@ pub async fn up(options: &UpOptions) -> Result<(), String> {
         Err(e) => return Err(format!("could not write {}: {e}", env_file.display())),
     }
 
-    run_compose(tool, &env_file, &compose, &["up", "-d"]).await?;
+    // A compose file given with --compose builds the board image from source;
+    // without --build, Compose would keep reusing an image built from an older
+    // checkout and the board would silently run stale code.
+    let up_args: &[&str] = if options.compose.is_some() {
+        &["up", "-d", "--build"]
+    } else {
+        &["up", "-d"]
+    };
+    run_compose(tool, &env_file, &compose, up_args).await?;
     wait_for_board().await
 }
 

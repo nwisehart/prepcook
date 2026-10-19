@@ -41,6 +41,9 @@ checkout instead. Either let `prepcook up` start it:
 prepcook up --compose crates/remote/docker-compose.yml   # same board .env as above
 ```
 
+With `--compose`, `prepcook up` passes `--build`, so the image is rebuilt from
+the checkout on every start rather than reused from an earlier one.
+
 or run it on its own with `crates/remote/.env.remote` (gitignored):
 
 ```env
