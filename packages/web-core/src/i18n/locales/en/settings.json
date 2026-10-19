@@ -521,23 +521,23 @@
         "title": "Workflow",
         "description": "How the board's stages show on the ticket, which statuses mean the work shipped, and which priorities are blockers.",
         "statusLabel": "Stage statuses",
-        "statusHelper": "The status (a label on GitHub Issues) a ticket moves to when Prepcook starts each stage. Blank leaves the ticket where it is (Planning falls back to In Progress).",
+        "statusHelper": "The status (a label on GitHub Issues) a ticket moves to when Prepcook starts each stage. Blank leaves the ticket where it is (Planning falls back to In Progress). The last three follow the card rather than a column: the pull request opening, the triage report, and the pull request merging (or, for a card with none, its clean-up).",
         "stageColumn": "Stage",
         "statusColumn": "Tracker status",
         "stages": {
           "planning": "Planning",
           "executing": "Executing",
           "reviewing": "Reviewing",
-          "pushed_mr": "Pushed MR",
+          "pushed_mr": "Pull request opened",
           "triaged": "Triaged (investigations)",
-          "done": "Clean-up"
+          "done": "Merged or cleaned up"
         },
         "unmapped": "Not moved",
         "shippedLabel": "Shipped statuses",
         "shippedHelper": "Comma-separated status names that mean the work shipped. Comments on these tickets get an automatic reply, and a ticket that leaves them can file a follow-up.",
         "blockerLabel": "Blocker priorities",
         "blockerHelper": "Comma-separated priorities whose merge requests are labelled Blocker and announced to the notification targets.",
-        "incidentsDescription": "An incident moves on its own terms: Plan acknowledges it, Clean-up resolves it, and Triaged resolves it only when the source says to. Blocker priorities still apply."
+        "incidentsDescription": "An incident moves on its own terms: Plan acknowledges it, the merge (or Clean up, for a card with no pull request) resolves it, and a triage report resolves it only when the source says to. Blocker priorities still apply."
       },
       "approvers": {
         "title": "Plan approvers",
@@ -700,7 +700,7 @@
         "agentDefaultLabel": "Default agent",
         "agentDefaultHelper": "This board's profile for every stage it does not set below.",
         "agentInherit": "Inherit",
-        "closeRetentionHelper": "Days in Close before the card moves to Clean up.",
+        "closeRetentionHelper": "Days in an older board's Close column before the card moves to Clean up.",
         "deleteRetentionHelper": "Days in Clean up before the card is deleted (the pull request, the tracker ticket and Knowledge records survive)."
       },
       "workspaceRetention": {
@@ -737,7 +737,7 @@
       },
       "closeRetention": {
         "label": "Auto clean-up after (days in Close)",
-        "helper": "Cards that sit in Close longer than this move to Clean up, which runs the repository's clean-up scripts and archives the card's worktrees. Leave empty to turn it off."
+        "helper": "On a board with the older Close column, cards that sit there longer than this move to Clean up, which runs the repository's clean-up scripts and archives the card's worktrees. A board with Shipped is cleaned up by hand. Leave empty to turn it off."
       },
       "deleteRetention": {
         "label": "Delete after (days in Clean up)",

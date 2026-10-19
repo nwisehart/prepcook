@@ -1,5 +1,11 @@
-import type { IssueExtMetadata, WorkClass } from 'shared/types';
-import { WORKFLOW_STAGES } from '@/shared/lib/workflowTransitions';
+import type { IssueExtMetadata, JsonValue, WorkClass } from 'shared/types';
+import {
+  WORKFLOW_STAGES,
+  cleanupGate,
+  prState,
+  type CleanupGate,
+  type PrState,
+} from '@/shared/lib/workflowTransitions';
 
 /**
  * Board signals derived from what a card already carries (its column, its
@@ -8,13 +14,16 @@ import { WORKFLOW_STAGES } from '@/shared/lib/workflowTransitions';
  * state in both places.
  */
 
-/** The workflow stages, in column order (see `WORKFLOW_STAGES`). */
+/**
+ * The workflow stages, in column order (see `WORKFLOW_STAGES`). `shipped` is
+ * also an older board's Push MR or Done; `close` is only an older board's.
+ */
 export type WorkflowStageKey =
   | 'todo'
   | 'plan'
   | 'execute'
   | 'review'
-  | 'pushMr'
+  | 'shipped'
   | 'close'
   | 'cleanUp';
 
@@ -23,7 +32,7 @@ const STAGE_KEYS: readonly WorkflowStageKey[] = [
   'plan',
   'execute',
   'review',
-  'pushMr',
+  'shipped',
   'close',
   'cleanUp',
 ];
@@ -31,7 +40,7 @@ const STAGE_KEYS: readonly WorkflowStageKey[] = [
 /**
  * The workflow stage a column name stands for, matching every alias in
  * `WORKFLOW_STAGES` case-insensitively. Null for columns outside the
- * workflow (custom columns, Triaged).
+ * workflow (custom columns, a Triaged column a board added).
  */
 export function workflowStageKey(
   statusName: string | null | undefined
@@ -45,7 +54,7 @@ export function workflowStageKey(
 }
 
 /** Column-header dot: hollow for To Do, brand while work runs, green at
- * Close, grey for Clean up. */
+ * Shipped (and an older board's Close), grey for Clean up. */
 export type ColumnDotTone = 'hollow' | 'brand' | 'success' | 'muted';
 
 export function columnDotTone(stage: WorkflowStageKey): ColumnDotTone {
@@ -55,8 +64,8 @@ export function columnDotTone(stage: WorkflowStageKey): ColumnDotTone {
     case 'plan':
     case 'execute':
     case 'review':
-    case 'pushMr':
       return 'brand';
+    case 'shipped':
     case 'close':
       return 'success';
     case 'cleanUp':
@@ -177,27 +186,119 @@ export function latestPullRequest<T extends CardPullRequest>(
   return latest;
 }
 
+/**
+ * An investigation whose triage report is in: it waits for a person to
+ * convert it to a bug or close it. A state of the card, not a column (it
+ * rests in Plan, or in a Triaged column a board added).
+ */
+export function isTriaged(meta: IssueExtMetadata | null): boolean {
+  return meta?.work_class === 'investigation' && isRecord(meta.triage);
+}
+
+/** The card's pull requests taken together; see `prState`. */
+export function cardPrState(
+  pullRequests: readonly CardPullRequest[]
+): PrState | null {
+  return prState(pullRequests);
+}
+
+/** The chip a card in Shipped wears, read from its pull requests. */
+export type ShippedIndicator =
+  | { kind: 'open' }
+  /** Open, and the orchestrator's pipeline watch saw its head pipeline fail
+   * and has not seen it green since. */
+  | { kind: 'ciFailing' }
+  | { kind: 'merged' }
+  | { kind: 'closed' };
+
+/**
+ * The Shipped column's chip: the pull request open (or its CI failing), merged,
+ * or closed without merging. Null for a card with no pull request yet (the
+ * agent is still opening it).
+ */
+export function shippedIndicator(
+  meta: IssueExtMetadata | null,
+  pullRequests: readonly CardPullRequest[]
+): ShippedIndicator | null {
+  switch (prState(pullRequests)) {
+    case 'open': {
+      const failedSha = meta?.autonomy?.pipeline_handled_sha;
+      return typeof failedSha === 'string' && failedSha
+        ? { kind: 'ciFailing' }
+        : { kind: 'open' };
+    }
+    case 'merged':
+      return { kind: 'merged' };
+    case 'closed':
+      return { kind: 'closed' };
+    case null:
+      return null;
+  }
+}
+
+/**
+ * The card's metadata with the discard of its closed, unmerged pull request
+ * confirmed, which Clean up asks for (`discard_confirmed_at`). Every other
+ * key is kept as it is.
+ */
+export function withDiscardConfirmed(
+  metadata: unknown,
+  now: Date = new Date()
+): JsonValue {
+  const base =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, JsonValue>)
+      : {};
+  return { ...base, discard_confirmed_at: now.toISOString() };
+}
+
+/** Whether Clean up takes the card; see `cleanupGate`. */
+export function cardCleanupGate(
+  meta: IssueExtMetadata | null,
+  pullRequests: readonly CardPullRequest[]
+): CleanupGate {
+  return cleanupGate(prState(pullRequests), meta);
+}
+
 /** Why a card waits on a person. */
 export type NeedsYouReason =
   | { kind: 'plan'; gate: PendingPlanGate }
-  | { kind: 'close'; pullRequest: CardPullRequest };
+  /** A triaged investigation: convert it to a bug or close it. */
+  | { kind: 'triaged' }
+  /** Shipped with its pull request merged: clean it up. */
+  | { kind: 'merged'; pullRequest: CardPullRequest }
+  /** Shipped with its pull request closed unmerged: discard it. */
+  | { kind: 'closedUnmerged'; pullRequest: CardPullRequest };
 
 /**
  * A card waits on a person when its plan is ready for a decision in Plan,
- * or when it sits in Close with its pull request merged.
+ * when it is a triaged investigation (in Plan, or a Triaged column a board
+ * added), or when it sits in Shipped (an older board's Close too) with its pull
+ * request merged or closed without merging. An open pull request is the
+ * agent's and the reviewers', not a wait on the board.
  */
 export function needsYouReason(
   stage: WorkflowStageKey | null,
   meta: IssueExtMetadata | null,
   pullRequests: readonly CardPullRequest[]
 ): NeedsYouReason | null {
+  if ((stage === 'plan' || stage === null) && isTriaged(meta)) {
+    return { kind: 'triaged' };
+  }
   if (stage === 'plan') {
     const gate = pendingPlanGate(meta);
     return gate ? { kind: 'plan', gate } : null;
   }
-  if (stage === 'close') {
-    const merged = latestMergedPullRequest(pullRequests);
-    return merged ? { kind: 'close', pullRequest: merged } : null;
+  if (stage === 'shipped' || stage === 'close') {
+    const state = prState(pullRequests);
+    if (state === 'merged') {
+      const merged = latestMergedPullRequest(pullRequests);
+      return merged ? { kind: 'merged', pullRequest: merged } : null;
+    }
+    if (state === 'closed') {
+      const closed = latestPullRequest(pullRequests);
+      return closed ? { kind: 'closedUnmerged', pullRequest: closed } : null;
+    }
   }
   return null;
 }

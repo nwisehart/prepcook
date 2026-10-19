@@ -19,7 +19,10 @@ use super::{
 use crate::{
     AppState,
     auth::RequestContext,
-    db::{get_txid, issues::IssueRepository, project_statuses::ProjectStatusRepository},
+    db::{
+        get_txid, issues::IssueRepository, project_statuses::ProjectStatusRepository,
+        pull_requests::PullRequestRepository,
+    },
     mutation_definition::MutationBuilder,
     workflow,
 };
@@ -44,16 +47,20 @@ pub fn router() -> axum::Router<AppState> {
 
 /// Rejects status moves that violate the Prepcook workflow stage order (see
 /// `crate::workflow`), including the Planning → Executing gate that requires
-/// a passing planning verdict in the issue's `extension_metadata`. Only
-/// route handlers call this; internal automation that updates issues through
-/// the repository directly stays exempt.
+/// a passing planning verdict in the issue's `extension_metadata` and the
+/// Clean up gate that reads the issue's pull requests. Only route handlers
+/// call this; internal automation that updates issues through the repository
+/// directly stays exempt.
 /// Validates the move and returns the (from, to) status names when both
 /// exist and actually differ — callers use them to decide whether the
-/// orchestrator claim marker should be cleared.
+/// orchestrator claim marker should be cleared. `extension_metadata` is the
+/// blob the same request writes, when it writes one: a Clean up move carries
+/// its discard confirmation that way.
 async fn ensure_valid_status_transition(
     state: &AppState,
     issue: &Issue,
     to_status_id: Uuid,
+    extension_metadata: Option<&serde_json::Value>,
 ) -> Result<Option<(String, String)>, ErrorResponse> {
     let from_status_id = issue.status_id;
     if from_status_id == to_status_id {
@@ -99,12 +106,35 @@ async fn ensure_valid_status_transition(
         return Err(ErrorResponse::new(StatusCode::BAD_REQUEST, message));
     }
 
+    if workflow::is_cleanup_stage(&to_status.name) {
+        let pull_requests = PullRequestRepository::list_by_issue(state.pool(), issue.id)
+            .await
+            .map_err(|error| {
+                tracing::error!(?error, issue_id = %issue.id, "failed to load pull requests");
+                ErrorResponse::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to load pull requests",
+                )
+            })?;
+        let statuses: Vec<_> = pull_requests.iter().map(|pr| pr.status).collect();
+        if let Some(message) = workflow::cleanup_gate_error(
+            &to_status.name,
+            &statuses,
+            extension_metadata.unwrap_or(&issue.extension_metadata),
+        ) {
+            return Err(ErrorResponse::new(StatusCode::BAD_REQUEST, message));
+        }
+    }
+
     Ok(Some((from_status.name, to_status.name)))
 }
 
 /// Clears the orchestrator claim marker (`playbook_started_at`) when a
 /// status move enters a column going FORWARD: each forward entry is a fresh
-/// claim opportunity. Backward (or same-stage) moves keep the marker —
+/// claim opportunity. Unless it enters Clean up, the same move clears
+/// `merged_at` (the next Shipped entry watches a new pull request) and a discard
+/// confirmation, which answers for one closed pull request only; Clean up
+/// reads both. Backward (or same-stage) moves keep the marker —
 /// parking a ticket back a column must not re-trigger that column's
 /// automation; re-running a stage on purpose means moving the ticket out and
 /// forward back in. Returns the `extension_metadata` to write (the
@@ -125,6 +155,10 @@ fn metadata_for_status_change(
     let mut metadata = extension_metadata.unwrap_or_else(|| issue.extension_metadata.clone());
     if let serde_json::Value::Object(map) = &mut metadata {
         map.remove("playbook_started_at");
+        if !workflow::is_cleanup_stage(to_name) {
+            map.remove("merged_at");
+            map.remove("discard_confirmed_at");
+        }
     }
     Some(metadata)
 }
@@ -307,7 +341,13 @@ async fn update_issue(
     ensure_project_access(state.pool(), ctx.user.id, issue.project_id).await?;
 
     let transition = if let Some(new_status_id) = payload.status_id {
-        ensure_valid_status_transition(&state, &issue, new_status_id).await?
+        ensure_valid_status_transition(
+            &state,
+            &issue,
+            new_status_id,
+            payload.extension_metadata.as_ref(),
+        )
+        .await?
     } else {
         None
     };
@@ -462,7 +502,13 @@ async fn bulk_update_issues(
         // Reject invalid workflow moves; the error drops `tx`, rolling back
         // any updates already applied in this bulk request.
         let transition = if let Some(new_status_id) = item.changes.status_id {
-            ensure_valid_status_transition(&state, &issue, new_status_id).await?
+            ensure_valid_status_transition(
+                &state,
+                &issue,
+                new_status_id,
+                item.changes.extension_metadata.as_ref(),
+            )
+            .await?
         } else {
             None
         };

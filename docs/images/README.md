@@ -8,9 +8,9 @@ README shows the dark one to readers whose system is in dark mode.
 
 | File | What it must show | Used in |
 | --- | --- | --- |
-| `board.png` | The Pantry board with six cards, one each in To Do, Plan, Triaged, Execute, Review and Close. | [README](../../README.md), under the opening paragraph |
+| `board.png` | The Pantry board's five columns with six cards: one in To Do; two in Plan, a bug waiting at the gate (amber header, **Approve** and **Review**) and a triaged investigation (amber **Needs you**, "Triaged — report ready", **Convert to bug** and **Close**); one each in Execute and Review; and one in Shipped with its pull request merged (the **Merged** chip and the amber **Merged — close card** with **Clean up**). The Clean up rail folded on the right, and the header's "3 need you" pill. | [README](../../README.md), under the opening paragraph |
 | `card-rca.png` | The Plan card ("Sharing a list fails for a user who exists") open, its `REPRODUCTION:` comment and the RCA comment in view. | [README](../../README.md#3-plan-reproduce-and-explain-about-5-minutes-then-10-to-20-waiting), Quickstart step 3 |
-| `card-triaged.png` | The Triaged investigation open, its `TRIAGE REPORT` in view. | Not yet ([method.md](../method.md#investigations)) |
+| `card-triaged.png` | The triaged investigation in Plan open, its amber **Needs you** header ("Triaged — report ready", **Close**) and its `TRIAGE REPORT` in view. | Not yet ([method.md](../method.md#investigations)) |
 | `workspace-review.png` | A workspace with its Review panel open. Needs a workspace, which only a card worked by the orchestrator has. | Not yet ([review.md](../review.md)) |
 | `settings-integrations.png` | Settings → Integrations → Notifications, with one webhook target. | [README](../../README.md#integrations), Integrations |
 | `settings-ticketing.png` | Settings → Integrations → Ticketing. | Not yet ([incidents.md](../incidents.md)) |

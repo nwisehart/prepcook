@@ -58,6 +58,26 @@ export interface KanbanClassLabel {
   actions?: { label: string; onSelect: () => void }[];
 }
 
+/**
+ * A state chip in the card's top row: the Shipped column's pull-request state
+ * ("PR open", "CI failing", "Merged", "PR closed, not merged").
+ */
+export type KanbanCardIndicatorTone = 'brand' | 'error' | 'success' | 'neutral';
+
+export interface KanbanCardIndicator {
+  label: string;
+  tone: KanbanCardIndicatorTone;
+  /** Tooltip with the longer explanation. */
+  title?: string;
+}
+
+const INDICATOR_CHIP_STYLES: Record<KanbanCardIndicatorTone, string> = {
+  brand: 'bg-brand-soft text-brand-soft-foreground',
+  error: 'bg-error-soft text-error',
+  success: 'bg-success-soft text-success',
+  neutral: 'bg-panel text-normal',
+};
+
 /** Who filed the card from outside the board: "Filed by Tammy from thread". */
 export interface KanbanCardOrigin {
   /** "Filed by Tammy from". */
@@ -141,6 +161,8 @@ export type KanbanCardContentProps<TTag extends KanbanTag = KanbanTag> = {
   classLabel?: KanbanClassLabel | null;
   /** A person took the ticket over: automation is hands-off. */
   takenOverLabel?: string | null;
+  /** The card's state chip, after the class chip. */
+  indicator?: KanbanCardIndicator | null;
   statusLine?: KanbanCardStatusLine | null;
   needsYou?: KanbanCardNeedsYou | null;
   diffStats?: KanbanCardDiffStats | null;
@@ -318,6 +340,7 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
   priorityLabel,
   classLabel,
   takenOverLabel,
+  indicator,
   statusLine,
   needsYou,
   diffStats,
@@ -414,6 +437,14 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
               style={epicColor ? { backgroundColor: epicColor } : undefined}
             />
             {epicKey}
+          </span>
+        )}
+        {indicator && (
+          <span
+            className={cn(CHIP, INDICATOR_CHIP_STYLES[indicator.tone])}
+            title={indicator.title}
+          >
+            {indicator.label}
           </span>
         )}
         {takenOverLabel && (

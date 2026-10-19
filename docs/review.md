@@ -120,8 +120,8 @@ default 3, settable per board) a reviewer that still requests changes stops the
 loop: the card waits in Review for a person, with a comment saying so (and a
 Slack post in Prep mode).
 
-An approved review moves the card to Push MR in Prep mode; in Chef mode a person
-moves it. At Push MR the product questions are posted on the pull request, where
+An approved review moves the card to Shipped in Prep mode; in Chef mode a person
+moves it. In Shipped the product questions are posted on the pull request, where
 the person merging answers them. Blocker and major findings are posted there
 only when the loop gave up on them at the cap.
 
@@ -137,7 +137,7 @@ stand-up of the app from `.prepcook/scripts.toml` in the implementation worktree
   output, up to four times. A failure on the setup's side (a missing secret, no
   free port) holds the card, is escalated, and is retried after 15 minutes.
 - In either mode, a comment on the card whose first line is `VERIFY:` runs the
-  same check on demand, in Execute, Review or Push MR, and posts the result on
+  same check on demand, in Execute, Review or Shipped, and posts the result on
   the card and on the pull request.
 
 A repository without `.prepcook/scripts.toml` has no verify.

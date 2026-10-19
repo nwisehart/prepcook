@@ -104,7 +104,8 @@ turn again.
 
 An investigation card has no gate whatever the setting: for it,
 `{{gate_instructions}}` says that posting the `TRIAGE REPORT` comment finishes
-the card, that Prepcook moves it to Triaged by itself, and that the agent must
+the card, that Prepcook marks it triaged by itself (it stays in Plan for a
+person to convert or close), and that the agent must
 not open a review session, set `spec_approved` or plan a fix. Pages that fill
 playbooks themselves get that text as `investigation_gate_instructions` from
 `GET /api/playbooks/context`.
@@ -172,7 +173,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   "rca"`) — without a proposed fix, then a `TRIAGE REPORT` comment on the card:
   `TRIAGE REPORT` alone on the first line, then `## What happens`, `## Where`,
   `## Why`, `## Scope`, `## Workaround` and `## Confidence` (high, medium or low
-  first, then one line why). That comment moves the card to Triaged; there is
+  first, then one line why). That comment marks the card triaged; there is
   no review gate ([method.md](method.md#investigations)).
 - **Tools**: those of `bug:planning`.
 - **Placeholders**: those of `bug:planning`; `gate_instructions` is the

@@ -1,15 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import type { IssueExtMetadata } from 'shared/types';
 import {
+  cardCleanupGate,
   columnDotTone,
   implementationSession,
+  isTriaged,
   isWithinLastWeek,
   latestMergedPullRequest,
   needsYouReason,
   pendingPlanGate,
   priorityChipLabel,
+  shippedIndicator,
+  withDiscardConfirmed,
   workflowStageKey,
 } from './cardSignals';
+import {
+  isTransitionAllowed,
+  planningGateError,
+} from '@/shared/lib/workflowTransitions';
 
 const rcaVerdict = (
   overrides: Partial<NonNullable<IssueExtMetadata['planning']>> = {}
@@ -44,7 +52,10 @@ describe('workflowStageKey', () => {
   it('matches every alias case-insensitively', () => {
     expect(workflowStageKey('Plan')).toBe('plan');
     expect(workflowStageKey('planning')).toBe('plan');
-    expect(workflowStageKey(' Pushed MR ')).toBe('pushMr');
+    expect(workflowStageKey('Shipped')).toBe('shipped');
+    expect(workflowStageKey('Done')).toBe('shipped');
+    expect(workflowStageKey(' Pushed MR ')).toBe('shipped');
+    expect(workflowStageKey('Push MR')).toBe('shipped');
     expect(workflowStageKey('Deployed')).toBe('close');
     expect(workflowStageKey('Clean-up')).toBe('cleanUp');
   });
@@ -60,6 +71,7 @@ describe('columnDotTone', () => {
   it('follows the stage', () => {
     expect(columnDotTone('todo')).toBe('hollow');
     expect(columnDotTone('review')).toBe('brand');
+    expect(columnDotTone('shipped')).toBe('success');
     expect(columnDotTone('close')).toBe('success');
     expect(columnDotTone('cleanUp')).toBe('muted');
   });
@@ -136,16 +148,147 @@ describe('needsYouReason', () => {
     expect(needsYouReason('execute', rcaVerdict(), [])).toBeNull();
   });
 
-  it('asks to close a merged card in Close', () => {
+  it('asks to clean up a merged card in Shipped (and an older Close)', () => {
     const merged = pr({
       number: 208,
       status: 'merged',
       merged_at: '2026-10-18T10:00:00Z',
     });
-    const reason = needsYouReason('close', null, [pr(), merged]);
-    expect(reason?.kind).toBe('close');
-    expect(reason?.kind === 'close' && reason.pullRequest.number).toBe(208);
-    expect(needsYouReason('close', null, [pr()])).toBeNull();
+    for (const stage of ['shipped', 'close'] as const) {
+      const reason = needsYouReason(stage, null, [merged]);
+      expect(reason?.kind).toBe('merged');
+      expect(reason?.kind === 'merged' && reason.pullRequest.number).toBe(208);
+    }
+  });
+
+  it('leaves an open pull request to the agent and its reviewers', () => {
+    const merged = pr({ number: 2, status: 'merged' });
+    expect(needsYouReason('shipped', null, [pr()])).toBeNull();
+    expect(needsYouReason('shipped', null, [pr(), merged])).toBeNull();
+    expect(needsYouReason('shipped', null, [])).toBeNull();
+  });
+
+  it('asks about a pull request closed without merging', () => {
+    const reason = needsYouReason('shipped', null, [
+      pr({ number: 9, status: 'closed' }),
+    ]);
+    expect(reason?.kind).toBe('closedUnmerged');
+  });
+
+  it('asks about a triaged investigation in Plan or a Triaged column', () => {
+    const triaged: IssueExtMetadata = {
+      work_class: 'investigation',
+      triage: {
+        report: {
+          what_happens: '',
+          where: '',
+          why: '',
+          scope: '',
+          workaround: '',
+          confidence: '',
+          markdown: 'TRIAGE REPORT',
+        },
+        recorded_at: '2026-10-18T10:00:00Z',
+      },
+    };
+    expect(isTriaged(triaged)).toBe(true);
+    expect(needsYouReason('plan', triaged, [])?.kind).toBe('triaged');
+    expect(needsYouReason(null, triaged, [])?.kind).toBe('triaged');
+    expect(needsYouReason('cleanUp', triaged, [])).toBeNull();
+    // Still investigating: nothing to decide yet.
+    expect(
+      needsYouReason('plan', { work_class: 'investigation' }, [])
+    ).toBeNull();
+    // Converted: a bug with its triage on record is planned as a bug.
+    expect(isTriaged({ ...triaged, work_class: 'bug' })).toBe(false);
+  });
+});
+
+describe('shippedIndicator', () => {
+  it('reads every pull-request state', () => {
+    expect(shippedIndicator(null, [])).toBeNull();
+    expect(shippedIndicator(null, [pr()])).toEqual({ kind: 'open' });
+    expect(
+      shippedIndicator({ autonomy: { pipeline_handled_sha: 'abc123' } }, [pr()])
+    ).toEqual({ kind: 'ciFailing' });
+    expect(
+      shippedIndicator(null, [
+        pr({ status: 'merged' }),
+        pr({ status: 'closed' }),
+      ])
+    ).toEqual({ kind: 'merged' });
+    expect(shippedIndicator(null, [pr({ status: 'closed' })])).toEqual({
+      kind: 'closed',
+    });
+    // An open request holds the card whatever else merged.
+    expect(
+      shippedIndicator(null, [pr({ status: 'merged' }), pr({ number: 2 })])
+    ).toEqual({ kind: 'open' });
+  });
+});
+
+describe('Clean up gate', () => {
+  it('takes merged and pull-request-less cards', () => {
+    expect(cardCleanupGate(null, [pr({ status: 'merged' })]).kind).toBe(
+      'allowed'
+    );
+    expect(cardCleanupGate(null, []).kind).toBe('allowed');
+  });
+
+  it('refuses an open pull request', () => {
+    const gate = cardCleanupGate(
+      { discard_confirmed_at: '2026-10-18T10:00:00Z' },
+      [pr()]
+    );
+    expect(gate.kind).toBe('refused');
+  });
+
+  it('needs the discard confirmed for a closed, unmerged pull request', () => {
+    const closed = [pr({ status: 'closed' })];
+    expect(cardCleanupGate(null, closed).kind).toBe('confirm');
+    const confirmed = withDiscardConfirmed(
+      { work_class: 'bug', foreign: true },
+      new Date('2026-10-18T10:00:00Z')
+    );
+    expect(confirmed).toEqual({
+      work_class: 'bug',
+      foreign: true,
+      discard_confirmed_at: '2026-10-18T10:00:00.000Z',
+    });
+    expect(cardCleanupGate(confirmed as IssueExtMetadata, closed).kind).toBe(
+      'allowed'
+    );
+  });
+});
+
+describe('workflow transitions', () => {
+  it('moves a current board through Shipped', () => {
+    expect(isTransitionAllowed('Review', 'Shipped')).toBe(true);
+    expect(isTransitionAllowed('Execute', 'Shipped')).toBe(false);
+    expect(isTransitionAllowed('Shipped', 'Clean up')).toBe(true);
+    // Clean up is reachable from every stage; its gate decides.
+    expect(isTransitionAllowed('Plan', 'Clean up')).toBe(true);
+  });
+
+  it('keeps an older board working', () => {
+    expect(isTransitionAllowed('Review', 'Push MR')).toBe(true);
+    expect(isTransitionAllowed('Push MR', 'Close')).toBe(true);
+    expect(isTransitionAllowed('Close', 'Clean up')).toBe(true);
+    // Done is Shipped on a board made while the column was called that.
+    expect(isTransitionAllowed('Review', 'Done')).toBe(true);
+    expect(isTransitionAllowed('Done', 'Clean up')).toBe(true);
+  });
+
+  it('never lets an investigation into Execute', () => {
+    const investigation = { work_class: 'investigation' };
+    for (const from of ['Plan', 'Triaged', 'Planning']) {
+      expect(planningGateError(from, 'Execute', investigation)).toMatch(
+        /convert to a bug/
+      );
+    }
+    expect(planningGateError('Plan', 'Execute', { work_class: 'bug' })).toBe(
+      null
+    );
   });
 });
 

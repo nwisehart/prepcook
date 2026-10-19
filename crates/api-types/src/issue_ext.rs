@@ -19,8 +19,8 @@ use ts_rs::TS;
 pub enum WorkClass {
     Bug,
     /// A reported problem to reproduce and explain but not fix: planning runs
-    /// as for a bug, then the card stops in Triaged with a triage report. An
-    /// engineer converts it to a bug for the fix.
+    /// as for a bug, then the card stops in Plan, triaged, with a triage
+    /// report. An engineer converts it to a bug for the fix or closes it.
     Investigation,
     Story,
     Epic,
@@ -274,6 +274,11 @@ pub struct TriageRecord {
     /// Set once the report is on the tracker ticket.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tracker_posted_at: Option<DateTime<Utc>>,
+    /// Set once the triage finished on the board: the card moved to the
+    /// board's Triaged column when it has one (it stays in Plan otherwise),
+    /// the tracker's `triaged` status was mirrored and the audit line posted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 /// One change of a card's work class, oldest first in
@@ -893,7 +898,7 @@ pub struct AutonomyState {
     /// escalated to Slack, so the escalation fires once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub escalated_at: Option<DateTime<Utc>>,
-    /// High-water mark for the Push MR comment watcher: newest MR comment
+    /// High-water mark for the Shipped-column comment watcher: newest MR comment
     /// already injected into the impl agent (never re-delivered).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mr_last_comment_at: Option<DateTime<Utc>>,
@@ -1063,6 +1068,17 @@ pub struct IssueExtMetadata {
     /// Merge request URL once pushed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mr_url: Option<String>,
+    /// When the orchestrator found the card's merge requests merged with none
+    /// still open. The tracker's `done` transition fires at that moment, once,
+    /// and the merge request watch stops; the card waits in Shipped for a person
+    /// to clean it up. Any forward move but the one into Clean up clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged_at: Option<DateTime<Utc>>,
+    /// When a person confirmed discarding the branch and worktree of a merge
+    /// request that closed without merging. Clean up refuses such a card
+    /// without it (see [`crate::cleanup_block_reason`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discard_confirmed_at: Option<DateTime<Utc>>,
     /// Newest independent-review outcome; see [`ReviewVerdict`]. Overwritten
     /// each round: the prose trail lives in the issue comments, this is what
     /// the current round routes on.
@@ -1089,6 +1105,13 @@ pub struct IssueExtMetadata {
 }
 
 impl IssueExtMetadata {
+    /// An investigation whose triage report is recorded: it waits on a person
+    /// to convert it to a bug or close it. A state of the card rather than a
+    /// column — it holds in Plan, or in a Triaged column a board added.
+    pub fn is_triaged(&self) -> bool {
+        self.work_class == Some(WorkClass::Investigation) && self.triage.is_some()
+    }
+
     /// Lenient parse from the raw blob; returns defaults on any mismatch.
     pub fn from_value(value: &Value) -> Self {
         let mut metadata: Self = serde_json::from_value(value.clone()).unwrap_or_default();

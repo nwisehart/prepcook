@@ -25,7 +25,7 @@ It is a teammate on the incident, not a pager. The responders stay in charge.
 3. **Investigates.** Plan runs exactly as for any investigation: the app stood
    up, a reproduction harness, the `REPRODUCTION:` comment, the root-cause
    analysis, then the `TRIAGE REPORT` ([method.md](method.md#investigations)).
-4. **Reports back.** When the card reaches **Triaged**, the triage report is
+4. **Reports back.** When the card is triaged, the triage report is
    added to the incident as a note — what happens, where, why, scope,
    workaround and confidence — and `investigation_completed` goes to the
    notification targets ([notifications.md](notifications.md)).
@@ -71,8 +71,8 @@ ticket ([approvals.md](approvals.md#the-tracker-ticket)).
 
 **Test connection** reads the user, which proves the key and the user id.
 Then turn on **Pick up new tickets automatically** under **Ticket pickup** and
-choose the board incidents land on. The board needs a **Triaged** column
-between Plan and Execute ([method.md](method.md#investigations)); give it tags
+choose the board incidents land on. A triaged incident's card stays in Plan
+for a person ([method.md](method.md#investigations)); give the board tags
 named after your services to have cards tagged with theirs.
 
 The full field reference is in

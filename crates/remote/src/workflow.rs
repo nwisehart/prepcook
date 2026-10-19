@@ -8,34 +8,55 @@
 //! `packages/web-core/src/shared/lib/workflowTransitions.ts`; keep the two
 //! implementations in sync.
 
-use api_types::issue_ext::{ConfidenceLevel, IssueExtMetadata, WorkClass};
+use api_types::{
+    IssueExtMetadata, PullRequestStatus, cleanup_block_reason,
+    issue_ext::{ConfidenceLevel, WorkClass},
+    pr_state,
+};
 use serde_json::Value;
 
 /// Ordered Prepcook workflow stages (first alias matches `DEFAULT_STATUSES` in
 /// `db/project_statuses.rs`; later aliases are earlier column names kept so
 /// existing projects keep validating until they're renamed). Columns with
-/// other names are not subject to transition validation — Triaged among them:
-/// it sits between Plan and Execute but is a side track, entered from Plan by
-/// an investigation and left for Execute or Plan when one is converted.
+/// other names are not subject to transition validation — a Triaged column a
+/// board added among them: triage is a state of the card, and a board that
+/// keeps a column for it lets cards in and out of it freely.
+///
+/// A current board has one Shipped column where an older one has Push MR and
+/// Close: Shipped shares Push MR's place, and Close keeps its own so an older
+/// board validates exactly as it always did. Done is Shipped's name on a
+/// board made while the column was called that.
 pub const WORKFLOW_STAGES: [&[&str]; 7] = [
     &["To Do", "Unassigned"],
     &["Plan", "Planning"],
     &["Execute", "Executing"],
     &["Review", "Reviewing"],
-    &["Push MR", "Pushed MR"],
+    &["Shipped", "Done", "Push MR", "Pushed MR"],
     &["Close", "Deployed", "Closed"],
     &["Clean up", "Clean-up", "Cleanup"],
 ];
 
-/// Index of "Close" in [`WORKFLOW_STAGES`]; any stage may jump here
-/// directly (manual close).
+/// Index of "Execute" in [`WORKFLOW_STAGES`].
+const EXECUTE_INDEX: usize = 2;
+
+/// Index of "Close" in [`WORKFLOW_STAGES`] (older boards); any stage may
+/// jump here directly (manual close).
 const CLOSED_INDEX: usize = 5;
+
+/// Index of "Clean up" in [`WORKFLOW_STAGES`]; any stage may jump here, and
+/// [`cleanup_gate_error`] decides from the card's pull requests.
+const CLEANUP_INDEX: usize = 6;
 
 fn stage_index(name: &str) -> Option<usize> {
     let name = name.trim();
     WORKFLOW_STAGES
         .iter()
         .position(|aliases| aliases.iter().any(|alias| alias.eq_ignore_ascii_case(name)))
+}
+
+/// Whether `name` is the Clean up column, under any of its names.
+pub fn is_cleanup_stage(name: &str) -> bool {
+    stage_index(name) == Some(CLEANUP_INDEX)
 }
 
 /// Returns true when moving an issue from `from_name` to `to_name` is allowed.
@@ -45,8 +66,9 @@ fn stage_index(name: &str) -> Option<usize> {
 ///   or hidden/custom columns).
 /// - Same stage (no-op) or any backward move => allowed.
 /// - Forward moves are only allowed to the immediately next stage.
-/// - Exception: any stage may move directly to "Closed" (manual close).
-/// - Consequence: "Clean-up" is only reachable from "Closed".
+/// - Exceptions: any stage may move directly to Clean up, where
+///   [`cleanup_gate_error`] reads the card's pull requests, or to an older
+///   board's Close (manual close).
 pub fn validate_transition(from_name: &str, to_name: &str) -> bool {
     let (Some(from), Some(to)) = (stage_index(from_name), stage_index(to_name)) else {
         return true;
@@ -55,7 +77,7 @@ pub fn validate_transition(from_name: &str, to_name: &str) -> bool {
     if to <= from {
         return true;
     }
-    if to == CLOSED_INDEX {
+    if to == CLOSED_INDEX || to == CLEANUP_INDEX {
         return true;
     }
     to == from + 1
@@ -72,6 +94,23 @@ pub fn is_backward_move(from_name: &str, to_name: &str) -> bool {
     }
 }
 
+/// Clean up gate: the card enters Clean up only when its pull requests merged,
+/// it never had one, or — for requests that closed unmerged — a person
+/// confirmed discarding the branch and worktree (`discard_confirmed_at` in
+/// the metadata being written). `None` when the move is allowed, else the
+/// reason, which the board shows as it is.
+pub fn cleanup_gate_error(
+    to_name: &str,
+    pull_requests: &[PullRequestStatus],
+    extension_metadata: &Value,
+) -> Option<String> {
+    if !is_cleanup_stage(to_name) {
+        return None;
+    }
+    let metadata = IssueExtMetadata::from_value(extension_metadata);
+    cleanup_block_reason(pr_state(pull_requests), &metadata).map(str::to_string)
+}
+
 fn confidence_label(level: ConfidenceLevel) -> &'static str {
     match level {
         ConfidenceLevel::Low => "low",
@@ -80,32 +119,43 @@ fn confidence_label(level: ConfidenceLevel) -> &'static str {
     }
 }
 
+/// Why an investigation card never moves into Execute.
+const INVESTIGATION_EXECUTE_REASON: &str =
+    "investigation cards do not execute; convert to a bug first";
+
 /// Planning → Executing gate: Prepcook workflow issues need BOTH a passing
 /// planning verdict AND a human Lavish approval (`spec.approved_at`) recorded
 /// in `extension_metadata` before execution may start. Specs require
 /// `open_questions == 0`; RCAs require `confidence == high`.
 ///
 /// Returns `None` when the move is allowed, or an actionable rejection
-/// message. Only applies to the Planning → Executing move; generic tickets
-/// (metadata with neither `work_class` nor `planning`) are exempt.
+/// message. The verdict and approval apply to the Planning → Executing move;
+/// generic tickets (metadata with neither `work_class` nor `planning`) are
+/// exempt. An investigation is refused on every move into Execute.
 pub fn planning_gate_error(
     from_name: &str,
     to_name: &str,
     extension_metadata: &Value,
 ) -> Option<String> {
+    let metadata = IssueExtMetadata::from_value(extension_metadata);
+    // An investigation ends at its triage report, triaged in Plan; whatever
+    // column it is dragged from, it reaches Execute only by being converted.
+    if stage_index(to_name) == Some(EXECUTE_INDEX)
+        && stage_index(from_name) != Some(EXECUTE_INDEX)
+        && metadata.work_class == Some(WorkClass::Investigation)
+    {
+        return Some(INVESTIGATION_EXECUTE_REASON.to_string());
+    }
+
     let is_planning_to_executing = from_name.trim().eq_ignore_ascii_case("Planning")
         && to_name.trim().eq_ignore_ascii_case("Executing");
     if !is_planning_to_executing {
         return None;
     }
 
-    let metadata = IssueExtMetadata::from_value(extension_metadata);
     // Generic tickets never went through the Prepcook planning flow.
     if metadata.work_class.is_none() && metadata.planning.is_none() {
         return None;
-    }
-    if metadata.work_class == Some(WorkClass::Investigation) {
-        return Some("investigation cards do not execute; convert to a bug first".to_string());
     }
 
     let Some(verdict) = metadata.planning else {
@@ -200,9 +250,21 @@ mod tests {
         assert!(validate_transition("To Do", "Plan"));
         assert!(validate_transition("Plan", "Execute"));
         assert!(validate_transition("Execute", "Review"));
+        assert!(validate_transition("Review", "Shipped"));
+        assert!(validate_transition("Shipped", "Clean up"));
+    }
+
+    #[test]
+    fn an_older_board_keeps_push_mr_and_close() {
         assert!(validate_transition("Review", "Push MR"));
         assert!(validate_transition("Push MR", "Close"));
         assert!(validate_transition("Close", "Clean up"));
+        assert!(!validate_transition("Execute", "Push MR"));
+        // Shipped, Done and Push MR are the same stage under three names.
+        assert!(is_backward_move("Shipped", "Push MR"));
+        assert!(is_backward_move("Shipped", "Done"));
+        assert!(validate_transition("Review", "Done"));
+        assert!(validate_transition("Done", "Clean up"));
     }
 
     #[test]
@@ -222,7 +284,8 @@ mod tests {
         assert!(!validate_transition("To Do", "Review"));
         assert!(!validate_transition("Plan", "Review"));
         assert!(!validate_transition("Plan", "Push MR"));
-        assert!(!validate_transition("Execute", "Push MR"));
+        assert!(!validate_transition("Execute", "Shipped"));
+        assert!(!validate_transition("To Do", "Shipped"));
     }
 
     #[test]
@@ -240,8 +303,10 @@ mod tests {
         assert!(is_backward_move("Pushed MR", "Reviewing")); // legacy names
         assert!(is_backward_move("Execute", "Execute"));
         assert!(is_backward_move("Clean up", "To Do"));
+        assert!(is_backward_move("Shipped", "Review"));
         // Forward moves re-arm automation (marker cleared).
         assert!(!is_backward_move("Review", "Push MR"));
+        assert!(!is_backward_move("Review", "Shipped"));
         assert!(!is_backward_move("Plan", "Execute"));
         // Unknown/custom columns never suppress the clear.
         assert!(!is_backward_move("Backlog", "Review"));
@@ -257,14 +322,34 @@ mod tests {
     }
 
     #[test]
-    fn clean_up_only_reachable_from_closed() {
-        assert!(validate_transition("Close", "Clean up"));
-        for stage in ["To Do", "Plan", "Execute", "Review", "Push MR"] {
-            assert!(
-                !validate_transition(stage, "Clean up"),
-                "{stage} → Clean up"
-            );
+    fn clean_up_is_reachable_from_every_stage() {
+        for aliases in WORKFLOW_STAGES {
+            let stage = aliases[0];
+            assert!(validate_transition(stage, "Clean up"), "{stage} → Clean up");
         }
+        assert!(is_cleanup_stage(" clean-up "));
+        assert!(!is_cleanup_stage("Shipped"));
+    }
+
+    #[test]
+    fn clean_up_gate_reads_the_pull_requests() {
+        use PullRequestStatus::{Closed, Merged, Open};
+        let plain = serde_json::json!({ "work_class": "bug" });
+        // Merged, or no pull request at all: taken.
+        assert_eq!(cleanup_gate_error("Clean up", &[Merged], &plain), None);
+        assert_eq!(cleanup_gate_error("Clean up", &[], &plain), None);
+        // Open: refused, confirmed or not.
+        let confirmed = serde_json::json!({ "discard_confirmed_at": "2026-10-19T00:00:00Z" });
+        for metadata in [&plain, &confirmed] {
+            let message = cleanup_gate_error("Clean up", &[Merged, Open], metadata).unwrap();
+            assert!(message.contains("still open"), "{message}");
+        }
+        // Closed unmerged: only with the discard confirmed.
+        let message = cleanup_gate_error("Cleanup", &[Closed], &plain).unwrap();
+        assert!(message.contains("confirm discarding"), "{message}");
+        assert_eq!(cleanup_gate_error("Clean up", &[Closed], &confirmed), None);
+        // Every other column ignores pull requests.
+        assert_eq!(cleanup_gate_error("Shipped", &[Open], &plain), None);
     }
 
     #[test]
@@ -279,6 +364,7 @@ mod tests {
         assert!(!validate_transition("to do", "EXECUTE"));
         assert!(validate_transition("plan", "execute"));
         assert!(validate_transition(" push mr ", "close"));
+        assert!(validate_transition(" review ", "DONE"));
     }
 
     #[test]
@@ -339,9 +425,16 @@ mod tests {
         });
         let message = planning_gate_error("Planning", "Executing", &metadata).unwrap();
         assert!(message.contains("convert to a bug first"), "{message}");
-        // Triaged is a side track the transition rules leave alone.
+        // Under the current column names and from a Triaged column alike.
+        for from in ["Plan", "Triaged", "Review"] {
+            let message = planning_gate_error(from, "Execute", &metadata).unwrap();
+            assert!(
+                message.contains("convert to a bug first"),
+                "{from}: {message}"
+            );
+        }
+        // A Triaged column a board added is left to the board.
         assert!(validate_transition("Plan", "Triaged"));
-        assert!(validate_transition("Triaged", "Execute"));
         assert!(validate_transition("Triaged", "Plan"));
     }
 

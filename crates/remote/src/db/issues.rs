@@ -518,8 +518,11 @@ impl IssueRepository {
     }
 
     /// Syncs issue status based on a workflow signal.
-    /// - `ReviewStarted` → move issue to "In review"
-    /// - `WorkMerged` → if all linked PRs are merged, move issue to "Done"
+    /// - `ReviewStarted` → move issue to the pull-request column (Shipped on a
+    ///   board with the five Prepcook columns, Push MR or Done on an older one)
+    /// - `WorkMerged` → if all linked PRs are merged, move issue to the merged
+    ///   column (Close on an older board; Shipped, where it already is, on a
+    ///   current one)
     async fn sync_status_from_workflow_signal(
         conn: &mut PgConnection,
         issue_id: Uuid,
@@ -529,10 +532,16 @@ impl IssueRepository {
             return Ok(());
         };
 
-        // First name is the Prepcook workflow column; the rest are upstream
-        // defaults kept as fallbacks for projects created before the fork.
+        // Prepcook workflow columns first — an older board's name ahead of
+        // the current one, since a board has one or the other; the rest are
+        // upstream defaults kept as fallbacks for projects created before the
+        // fork. Done comes after In review: on an upstream board it is the
+        // merged column, and only a board with neither Shipped nor In review
+        // uses it for an open pull request.
         let target_status_names: &[&str] = match signal {
-            IssueWorkflowSignal::ReviewStarted => &["Push MR", "Pushed MR", "In review"],
+            IssueWorkflowSignal::ReviewStarted => {
+                &["Push MR", "Pushed MR", "Shipped", "In review", "Done"]
+            }
             IssueWorkflowSignal::WorkMerged => {
                 let prs = PullRequestRepository::list_by_issue(&mut *conn, issue_id).await?;
                 let all_merged = prs.iter().all(|pr| pr.status == PullRequestStatus::Merged);

@@ -102,7 +102,10 @@ pub struct CardView {
     pub project_id: Uuid,
     /// Where the card is in the workflow: `backlog`, `planning`, `triaged`,
     /// `executing`, `reviewing`, `pushed_mr`, `closed`, `cleanup`, or `other`
-    /// for a column Prepcook does not know.
+    /// for a column Prepcook does not know. Read from the card as well as its
+    /// column (see [`card_status`]): a triaged investigation is `triaged` in
+    /// Plan, and a card in Shipped is `pushed_mr` until its pull request merges
+    /// and `closed` after.
     pub status: String,
     /// The column's name as the board shows it.
     pub column: String,
@@ -191,7 +194,9 @@ pub fn card_url(project_id: Uuid, issue_id: Uuid) -> String {
     )
 }
 
-/// Where a column sits in the workflow, as [`CardView::status`] names it.
+/// Where a column sits in the workflow, as [`CardView::status`] names it. A
+/// Triaged column is one a board added; Shipped, and an older board's Push MR
+/// or Done, hold a card while its pull request is open.
 pub fn status_word(column: &str) -> &'static str {
     let name = column.trim().to_ascii_lowercase();
     match name.as_str() {
@@ -200,10 +205,22 @@ pub fn status_word(column: &str) -> &'static str {
         "triaged" => "triaged",
         "execute" | "executing" => "executing",
         "review" | "reviewing" => "reviewing",
-        "push mr" | "pushed mr" => "pushed_mr",
+        "shipped" | "done" | "push mr" | "pushed mr" => "pushed_mr",
         "close" | "closed" | "deployed" => "closed",
         "clean up" | "clean-up" | "cleanup" => "cleanup",
         _ => "other",
+    }
+}
+
+/// Where the card is, from its column and its own state: triage and a merge
+/// are states of the card rather than columns, so a triaged investigation in
+/// Plan reads `triaged` and a merged card in Shipped reads `closed`, as they
+/// did when each had a column of its own.
+pub fn card_status(column: &str, metadata: &IssueExtMetadata) -> &'static str {
+    match status_word(column) {
+        "planning" if metadata.is_triaged() => "triaged",
+        "pushed_mr" if metadata.merged_at.is_some() => "closed",
+        word => word,
     }
 }
 
@@ -421,7 +438,7 @@ pub async fn view_card(host: &dyn CardHost, issue_id: Uuid) -> Result<Option<Car
         title: issue.title.clone(),
         url: card_url(issue.project_id, issue.id),
         project_id: issue.project_id,
-        status: status_word(&column).to_string(),
+        status: card_status(&column, &metadata).to_string(),
         column,
         work_class,
         report: triage.as_ref().map(|triage| triage.report.clone()),
@@ -697,9 +714,16 @@ mod tests {
 
     const BOARD: Uuid = Uuid::from_u128(0xb0a2d);
 
+    /// Every column name the tests use, for stable ids across both boards.
+    const ALL_COLUMNS: [&str; 10] = [
+        "To Do", "Plan", "Triaged", "Execute", "Review", "Shipped", "Done", "Push MR", "Close",
+        "Clean up",
+    ];
+
     fn status(name: &str, sort_order: i32) -> ProjectStatus {
+        let at = ALL_COLUMNS.iter().position(|known| *known == name).unwrap();
         ProjectStatus {
-            id: Uuid::from_u128(sort_order as u128 + 1),
+            id: Uuid::from_u128(at as u128 + 1),
             project_id: BOARD,
             name: name.to_string(),
             color: "0 0% 50%".to_string(),
@@ -709,14 +733,24 @@ mod tests {
         }
     }
 
+    fn board(names: &[&str]) -> Vec<ProjectStatus> {
+        names
+            .iter()
+            .enumerate()
+            .map(|(at, name)| status(name, at as i32))
+            .collect()
+    }
+
+    /// A new project's columns.
     fn columns() -> Vec<ProjectStatus> {
-        [
+        board(&["To Do", "Plan", "Execute", "Review", "Shipped", "Clean up"])
+    }
+
+    /// A board made before Shipped, with the Triaged column its team added.
+    fn older_columns() -> Vec<ProjectStatus> {
+        board(&[
             "To Do", "Plan", "Triaged", "Execute", "Review", "Push MR", "Close", "Clean up",
-        ]
-        .iter()
-        .enumerate()
-        .map(|(at, name)| status(name, at as i32))
-        .collect()
+        ])
     }
 
     fn issue(metadata: Value, column: &str) -> Issue {
@@ -725,7 +759,7 @@ mod tests {
             project_id: BOARD,
             issue_number: 7,
             simple_id: "PC-7".to_string(),
-            status_id: column_for(&columns(), status_word(column)).unwrap().id,
+            status_id: status(column, 0).id,
             title: "Exports drop a row".to_string(),
             description: None,
             priority: None,
@@ -744,6 +778,8 @@ mod tests {
 
     #[derive(Default)]
     struct FakeBoard {
+        /// Serves [`older_columns`] instead of [`columns`].
+        older: bool,
         default_board: Option<Uuid>,
         card: Mutex<Option<Issue>>,
         created: Mutex<Vec<(CreateIssueRequest, WorkClass)>>,
@@ -758,6 +794,13 @@ mod tests {
             Self {
                 card: Mutex::new(Some(issue(metadata, column))),
                 ..Default::default()
+            }
+        }
+
+        fn older_with_card(metadata: Value, column: &str) -> Self {
+            Self {
+                older: true,
+                ..Self::with_card(metadata, column)
             }
         }
 
@@ -782,7 +825,11 @@ mod tests {
 
         async fn statuses(&self, project_id: Uuid) -> Result<Vec<ProjectStatus>, CardError> {
             if project_id == BOARD {
-                Ok(columns())
+                Ok(if self.older {
+                    older_columns()
+                } else {
+                    columns()
+                })
             } else {
                 Err(CardError::UnknownBoard(project_id))
             }
@@ -986,6 +1033,7 @@ mod tests {
                 recorded_at: Utc::now(),
                 notified_at: Some(Utc::now()),
                 tracker_posted_at: None,
+                completed_at: Some(Utc::now()),
             }),
             ..Default::default()
         })
@@ -997,9 +1045,10 @@ mod tests {
     /// approval, so the gate passes and Planning does not run again.
     #[tokio::test]
     async fn a_converted_investigation_with_a_plan_goes_to_executing() {
+        // Triaged in Plan, as on a new project's board.
         let board = FakeBoard::with_card(
             triaged(ConfidenceLevel::High, Some(".repro/PC-7/repro.mjs")),
-            "Triaged",
+            "Plan",
         );
         let outcome = convert_card(&board, Uuid::from_u128(7), WorkClass::Bug, "Ada")
             .await
@@ -1031,20 +1080,34 @@ mod tests {
         assert_eq!(metadata.conversions.len(), 1);
         assert_eq!(metadata.approvals.len(), 1);
 
-        let events = board.events.lock().unwrap();
+        let event = board.events.lock().unwrap()[0].clone();
         let Event::CardConverted {
             from,
             to,
             column,
             by,
             ..
-        } = &events[0]
+        } = &event
         else {
-            panic!("{:?}", events[0]);
+            panic!("{event:?}");
         };
         assert_eq!((*from, *to), (WorkClass::Investigation, WorkClass::Bug));
         assert_eq!((column.as_str(), by.as_str()), ("Execute", "Ada"));
         assert!(board.comments.lock().unwrap()[0].contains("moved to Execute"));
+
+        // From a Triaged column a board added, the same.
+        let board = FakeBoard::older_with_card(
+            triaged(ConfidenceLevel::High, Some(".repro/PC-7/repro.mjs")),
+            "Triaged",
+        );
+        let outcome = convert_card(&board, Uuid::from_u128(7), WorkClass::Bug, "Ada")
+            .await
+            .unwrap();
+        assert_eq!(outcome.column, "Execute");
+        assert_eq!(
+            *board.moves.lock().unwrap(),
+            [column_for(&older_columns(), "executing").unwrap().id]
+        );
     }
 
     #[tokio::test]
@@ -1053,12 +1116,14 @@ mod tests {
             (ConfidenceLevel::Medium, Some(".repro/PC-7/repro.mjs")),
             (ConfidenceLevel::High, None),
         ] {
-            let board = FakeBoard::with_card(triaged(confidence, harness), "Triaged");
+            let board = FakeBoard::with_card(triaged(confidence, harness), "Plan");
             let outcome = convert_card(&board, Uuid::from_u128(7), WorkClass::Bug, "Ada")
                 .await
                 .unwrap();
             assert!(!outcome.plan_carried_over);
             assert_eq!(outcome.column, "Plan");
+            // Already in Plan: planned again where it stands.
+            assert!(board.moves.lock().unwrap().is_empty());
             let metadata = board.metadata();
             assert_eq!(metadata.work_class, Some(WorkClass::Bug));
             assert!(metadata.spec.unwrap().approved_at.is_none());
@@ -1066,7 +1131,7 @@ mod tests {
             assert!(metadata.playbook_started_at.is_none());
         }
         // A story is always planned again, whatever the investigation found.
-        let board = FakeBoard::with_card(
+        let board = FakeBoard::older_with_card(
             triaged(ConfidenceLevel::High, Some(".repro/PC-7/repro.mjs")),
             "Triaged",
         );
@@ -1085,12 +1150,12 @@ mod tests {
     async fn a_repeated_conversion_finishes_the_move() {
         let board = FakeBoard::with_card(
             triaged(ConfidenceLevel::High, Some(".repro/PC-7/repro.mjs")),
-            "Triaged",
+            "Plan",
         );
         convert_card(&board, Uuid::from_u128(7), WorkClass::Bug, "Ada")
             .await
             .unwrap();
-        // The move did not happen: the card is still in Triaged.
+        // The move did not happen: the card is still in Plan.
         board.moves.lock().unwrap().clear();
         let written = board.metadata();
         let again = convert_card(&board, Uuid::from_u128(7), WorkClass::Bug, "Ada")
@@ -1114,7 +1179,7 @@ mod tests {
             convert_card(&board, Uuid::from_u128(7), WorkClass::Story, "Ada").await,
             Err(CardError::Conflict(_))
         ));
-        let board = FakeBoard::with_card(triaged(ConfidenceLevel::High, Some("x")), "Triaged");
+        let board = FakeBoard::with_card(triaged(ConfidenceLevel::High, Some("x")), "Plan");
         assert!(matches!(
             convert_card(&board, Uuid::from_u128(7), WorkClass::Epic, "Ada").await,
             Err(CardError::Invalid(_))
@@ -1131,13 +1196,24 @@ mod tests {
         let mut metadata = triaged(ConfidenceLevel::Medium, Some(".repro/PC-7/repro.mjs"));
         metadata["triage"]["report"]["why"] = json!("The pager drops the last page.");
         metadata["origin"] = json!({ "kind": "incident", "ref": "INC-4" });
-        let board = FakeBoard::with_card(metadata, "Triaged");
+        // Triaged is the card's state: in Plan on a new project's board…
+        let board = FakeBoard::with_card(metadata.clone(), "Plan");
         let view = view_card(&board, Uuid::from_u128(7))
             .await
             .unwrap()
             .unwrap();
         assert_eq!(view.status, "triaged");
-        assert_eq!(view.column, "Triaged");
+        assert_eq!(view.column, "Plan");
+        // …and in the Triaged column of a board that keeps one.
+        let older = FakeBoard::older_with_card(metadata.clone(), "Triaged");
+        let older_view = view_card(&older, Uuid::from_u128(7))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (older_view.status.as_str(), older_view.column.as_str()),
+            ("triaged", "Triaged")
+        );
         assert_eq!(view.work_class, Some(WorkClass::Investigation));
         assert_eq!(view.report.unwrap().why, "The pager drops the last page.");
         assert_eq!(view.confidence, Some(ConfidenceLevel::Medium));
@@ -1160,7 +1236,36 @@ mod tests {
         assert_eq!(status_word(" Unassigned "), "backlog");
         assert_eq!(status_word("TRIAGED"), "triaged");
         assert_eq!(status_word("Deployed"), "closed");
+        assert_eq!(status_word("Shipped"), "pushed_mr");
+        assert_eq!(status_word("Done"), "pushed_mr");
+        assert_eq!(status_word("Push MR"), "pushed_mr");
         assert_eq!(status_word("Icebox"), "other");
-        assert!(column_for(&columns(), "triaged").is_some());
+        assert!(column_for(&columns(), "triaged").is_none());
+        assert!(column_for(&older_columns(), "triaged").is_some());
+        assert_eq!(column_for(&columns(), "pushed_mr").unwrap().name, "Shipped");
+    }
+
+    #[test]
+    fn a_card_status_reads_triage_and_merge_from_the_card() {
+        let investigating = IssueExtMetadata {
+            work_class: Some(WorkClass::Investigation),
+            ..Default::default()
+        };
+        assert_eq!(card_status("Plan", &investigating), "planning");
+        let triaged = IssueExtMetadata::from_value(&triaged(ConfidenceLevel::High, None));
+        assert_eq!(card_status("Plan", &triaged), "triaged");
+        assert_eq!(card_status("Triaged", &triaged), "triaged");
+        let in_review = IssueExtMetadata {
+            mr_url: Some("https://github.com/acme/pantry/pull/7".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(card_status("Shipped", &in_review), "pushed_mr");
+        let merged = IssueExtMetadata {
+            merged_at: Some(Utc::now()),
+            ..in_review
+        };
+        assert_eq!(card_status("Shipped", &merged), "closed");
+        assert_eq!(card_status("Done", &merged), "closed");
+        assert_eq!(card_status("Close", &merged), "closed");
     }
 }

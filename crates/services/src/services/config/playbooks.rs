@@ -97,7 +97,7 @@ pub fn gate_instructions(gate: InAppGate) -> &'static str {
 
 /// What `{{gate_instructions}}` says for a card of this class: an
 /// investigation has no review gate whatever `approvals.in_app_gate` is, since
-/// its report moves the card to Triaged by itself.
+/// its report marks the card triaged by itself.
 pub fn gate_instructions_for(gate: InAppGate, work_class: Option<WorkClass>) -> &'static str {
     match work_class {
         Some(WorkClass::Investigation) => TRIAGED_GATE,
@@ -113,7 +113,7 @@ const LAVISH_GATE: &str = r#"At the top of the document embed two native buttons
 
 const NO_IN_APP_GATE: &str = r#"Write the document without approval buttons: the reviewer decides outside it. Once the document and your verdict are recorded, END YOUR TURN — do not poll or wait for a decision. The decision arrives as a follow-up message from whichever surface the reviewer uses: a comment on the card, a comment on the ticket, or the approvals API. When a follow-up arrives: if it contains "APPROVED", record the approval via `update_issue` (spec_approved = true) and finish; otherwise apply the feedback and end your turn again. Never set spec_approved without an explicit APPROVED message."#;
 
-const TRIAGED_GATE: &str = r#"There is no review gate for this card: it is an investigation, and posting the TRIAGE REPORT comment is what finishes it. Prepcook reads the report, moves the card to Triaged and sends the report on to whoever filed the card. Do not open a review session, do not set spec_approved, and do not plan or start a fix — an engineer who wants one converts the card to a bug, and the fix starts from your RCA and your harness. Once the report is posted, END YOUR TURN. A follow-up may still arrive, such as a teammate's question on the card: answer it there, and if your conclusions change, re-record the verdict and say so in a comment."#;
+const TRIAGED_GATE: &str = r#"There is no review gate for this card: it is an investigation, and posting the TRIAGE REPORT comment is what finishes it. Prepcook reads the report, marks the card triaged — it stays in Plan, waiting for a person to convert it to a bug or close it — and sends the report on to whoever filed the card. Do not open a review session, do not set spec_approved, and do not plan or start a fix — an engineer who wants one converts the card to a bug, and the fix starts from your RCA and your harness. Once the report is posted, END YOUR TURN. A follow-up may still arrive, such as a teammate's question on the card: answer it there, and if your conclusions change, re-record the verdict and say so in a comment."#;
 
 const BUG_PLANNING: &str = r#"Ticket: {{ticket_key}} — {{title}}
 

@@ -245,7 +245,8 @@ export const KanbanHeader = (props: KanbanHeaderProps) => {
 
 /**
  * The header dot: hollow grey for To Do, brand for the working stages,
- * green for Close, grey for Clean up; custom columns keep their own color
+ * green for Shipped (and an older board's Close), grey for Clean up; custom
+ * columns keep their own color
  * (an HSL triplet, as statuses store it).
  */
 export type KanbanColumnDot =

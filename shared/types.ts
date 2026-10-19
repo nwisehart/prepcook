@@ -478,7 +478,7 @@ export type AutonomyState = {
  */
 escalated_at?: string | null, 
 /**
- * High-water mark for the Push MR comment watcher: newest MR comment
+ * High-water mark for the Shipped-column comment watcher: newest MR comment
  * already injected into the impl agent (never re-delivered).
  */
 mr_last_comment_at?: string | null, 
@@ -849,7 +849,13 @@ notified_at?: string | null,
 /**
  * Set once the report is on the tracker ticket.
  */
-tracker_posted_at?: string | null, };
+tracker_posted_at?: string | null, 
+/**
+ * Set once the triage finished on the board: the card moved to the
+ * board's Triaged column when it has one (it stays in Plan otherwise),
+ * the tracker's `triaged` status was mirrored and the audit line posted.
+ */
+completed_at?: string | null, };
 
 export type ConversionRecord = { from: WorkClass, to: WorkClass, by: string, at: string, };
 
@@ -900,6 +906,19 @@ conversions?: Array<ConversionRecord>, spec?: SpecRef | null,
  * Merge request URL once pushed.
  */
 mr_url?: string | null, 
+/**
+ * When the orchestrator found the card's merge requests merged with none
+ * still open. The tracker's `done` transition fires at that moment, once,
+ * and the merge request watch stops; the card waits in Shipped for a person
+ * to clean it up. Any forward move but the one into Clean up clears it.
+ */
+merged_at?: string | null, 
+/**
+ * When a person confirmed discarding the branch and worktree of a merge
+ * request that closed without merging. Clean up refuses such a card
+ * without it (see [`crate::cleanup_block_reason`]).
+ */
+discard_confirmed_at?: string | null, 
 /**
  * Newest independent-review outcome; see [`ReviewVerdict`]. Overwritten
  * each round: the prose trail lives in the issue comments, this is what
@@ -990,7 +1009,10 @@ export type CardView = { id: string, key: string, title: string, url: string, pr
 /**
  * Where the card is in the workflow: `backlog`, `planning`, `triaged`,
  * `executing`, `reviewing`, `pushed_mr`, `closed`, `cleanup`, or `other`
- * for a column Prepcook does not know.
+ * for a column Prepcook does not know. Read from the card as well as its
+ * column (see [`card_status`]): a triaged investigation is `triaged` in
+ * Plan, and a card in Shipped is `pushed_mr` until its pull request merges
+ * and `closed` after.
  */
 status: string, 
 /**
@@ -1251,19 +1273,26 @@ export type TicketingMode = "tickets" | "incidents";
 
 export type IncidentsConfig = { 
 /**
- * Resolve the incident when its investigation card reaches Triaged.
+ * Resolve the incident when its investigation card is triaged.
  * Off, the incident stays with the responders and only the triage
  * report is added to it.
  */
 resolve_on_triage: boolean, };
 
-export type StatusMapping = { planning: string | null, executing: string | null, reviewing: string | null, pushed_mr: string | null, 
+export type StatusMapping = { planning: string | null, executing: string | null, reviewing: string | null, 
 /**
- * Where an investigation's ticket goes when its card reaches Triaged.
+ * Where the ticket goes when the card's pull request opens (the card is
+ * in Shipped, or Push MR or Done on an older board).
+ */
+pushed_mr: string | null, 
+/**
+ * Where an investigation's ticket goes when its triage report is in (the
+ * card stays in Plan, or moves to a Triaged column the board added).
  */
 triaged: string | null, 
 /**
- * Where the ticket goes when the card reaches Clean-up.
+ * Where the ticket goes when the card's pull request merges, or, for a
+ * card that never had one, when it is cleaned up.
  */
 done: string | null, 
 /**

@@ -12,7 +12,9 @@ describe('resolveSessionStage', () => {
   it('maps column names and legacy aliases case-insensitively', () => {
     expect(resolveSessionStage('Plan')).toBe('plan');
     expect(resolveSessionStage('executing')).toBe('execute');
-    expect(resolveSessionStage(' Push MR ')).toBe('push');
+    expect(resolveSessionStage('Shipped')).toBe('shipped');
+    expect(resolveSessionStage('Done')).toBe('shipped');
+    expect(resolveSessionStage(' Push MR ')).toBe('shipped');
     expect(resolveSessionStage('Deployed')).toBe('close');
     expect(resolveSessionStage('Clean-up')).toBe('cleanup');
   });

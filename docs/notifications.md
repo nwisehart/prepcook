@@ -86,7 +86,7 @@ Shared shapes:
 | `replan_requested` | `warn` | Merge request review rejects the approach; the agent stopped and re-planning is a person's call. | `{ "issue": IssueRef, "reason": string, "mr_url": string \| null }` |
 | `blocker_mr_opened` | `warn` | A merge request was opened for a blocker-priority ticket. | `{ "issue": IssueRef, "mr_url": string, "summary": string }` — `summary` is the title without the key. |
 | `mention_needs_human` | `warn` | The agent was @-mentioned on the tracker and no session is running to answer. | `{ "issue": IssueRef, "mentions": [{ "author": string, "text": string }] }` — each mention's text clipped to 700 characters. |
-| `investigation_completed` | `info` | An investigation card posted its triage report and reached Triaged (once per card). | A completed investigation, below. |
+| `investigation_completed` | `info` | An investigation card posted its triage report and was triaged (once per card). | A completed investigation, below. |
 | `card_converted` | `info` | A card's work class was changed: an investigation converted to a bug or a story. | `{ "issue": IssueRef, "from": "investigation", "to": "bug" \| "story", "by": string, "column": string }` — who converted it, as the caller named them, and the column it moved to (Execute when the RCA and harness carried over as the plan, else Plan). |
 
 ### `daily_digest`

@@ -21,11 +21,11 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.mode` | `off` | **Enable automatic agent launches**. `auto` scans the boards and runs the stages; `off` runs nothing on its own. |
 | `orchestrator.poll_interval_secs` | `15` | **Poll interval**: seconds between scans. |
 | `orchestrator.max_launches_per_tick` | `3` | **Max launches per tick**: new agent sessions started per scan, highest priority first. |
-| `orchestrator.autonomy` | `off` | **Autonomy mode**. `full` is Prep mode: passing plans self-approve, verified fixes go to Review, approved reviews go to Push MR. `off` is Chef mode. |
+| `orchestrator.autonomy` | `off` | **Autonomy mode**. `full` is Prep mode: passing plans self-approve, verified fixes go to Review, approved reviews go to Shipped. `off` is Chef mode. |
 | `orchestrator.autonomy_review_iterations` | `3` | **Review-fix rounds before escalating**: fix rounds before a card that keeps getting REQUEST CHANGES waits for a person. Applies in both modes. |
 | `orchestrator.pattern_threshold` | `5` | **Pattern-review threshold**: linked RCAs on one graph node that file a pattern review ([rca-graph.md](rca-graph.md#pattern-reviews)). Older configs call it `investigation_threshold`, which is still read. |
 | `orchestrator.default_board` | unset (the first board in `project_defaults`) | *File only.* The board `POST /api/cards` files into when the request names none ([api.md](api.md#file-a-card)). |
-| `orchestrator.deployed_retention_days` | unset (off) | **Auto clean-up after**: days a card may sit in Close before it moves to Clean up. |
+| `orchestrator.deployed_retention_days` | unset (off) | **Auto clean-up after**: days a card may sit in an older board's Close column before it moves to Clean up (a card Clean up would refuse stays). A board with Shipped is cleaned up by hand. |
 | `orchestrator.cleanup_retention_days` | unset (keep) | **Delete after**: days a card may sit in Clean up before it is deleted. Cards with a pinned workspace or a takeover are kept. |
 | `orchestrator.workspace_retention_days` | `30` | **Workspace retention**: days after clean-up before a workspace's records, sessions and logs are deleted. Unset keeps them. |
 | `orchestrator.digest_at_local` | unset (off) | *File only.* Local `HH:MM` at which the engineers' digest is sent to each board's [notification targets](#notifications). |
@@ -88,8 +88,8 @@ credentials.
 | `ticketing.poll_secs` | `45` | **Poll interval** of the ticket pickup. |
 | `ticketing.incidents.resolve_on_triage` | `false` | **Resolve the incident when it is triaged** (incidents mode). Off, the incident only gets the triage report as a note. |
 | `ticketing.status_mapping.planning` | unset (`In Progress`) | **Stage statuses**: where a ticket moves when Plan starts (a label on GitHub Issues). Plan also assigns the ticket to the agent. Not used in incidents mode, where Plan acknowledges the incident. |
-| `ticketing.status_mapping.executing`, `.reviewing`, `.pushed_mr`, `.done` | unset (no move) | Where a ticket moves when that stage starts; `done` is Clean up, and on GitHub Issues it also closes the issue. |
-| `ticketing.status_mapping.triaged` | unset (no move) | **Triaged**: where an investigation's ticket moves when its card reaches Triaged ([method.md](method.md#investigations)). |
+| `ticketing.status_mapping.executing`, `.reviewing`, `.pushed_mr`, `.done` | unset (no move) | Where a ticket moves when that stage starts. `pushed_mr` and `done` follow the card's pull request, not a column: `pushed_mr` when it opens, `done` when it merges (or, for a card that never had one, when it is cleaned up); on GitHub Issues `done` also closes the issue. |
+| `ticketing.status_mapping.triaged` | unset (no move) | **Triaged**: where an investigation's ticket moves when its triage report is in; the card stays in Plan ([method.md](method.md#investigations)). |
 | `ticketing.status_mapping.shipped` | `Merged`, `Deployed to Production`, `Done` | **Shipped statuses**: names that mean the work shipped, for reopen detection and the clean-up sweeps. On GitHub Issues a closed issue's status is its `done` label, else `Closed`. |
 | `ticketing.blocker_priorities` | `P0`, `P1` | **Blocker priorities**: their merge requests are labelled `Blocker` and announced to the notification targets. |
 | `ticketing.approvers` | empty (nobody) | **Plan approvers**: who may decide a plan from a ticket comment (account ids; GitHub logins, lower-cased; PagerDuty user ids). |
@@ -104,7 +104,7 @@ credentials.
 | --- | --- | --- |
 | `git_branch_prefix` | `prepcook` | **Branch Prefix** of every branch an agent creates. |
 | `workspace_dir` | unset (the default location) | **Workspace Directory** worktrees are created in. |
-| `pr_auto_description_enabled` | `true` | **Auto-generate PR description**: after Push MR opens a pull request, the implementing agent writes its title and description. |
+| `pr_auto_description_enabled` | `true` | **Auto-generate PR description**: after Shipped opens a pull request, the implementing agent writes its title and description. |
 | `pr_auto_description_prompt` | unset (the shipped prompt) | The prompt for that follow-up. |
 | `commit_reminder_enabled` | `true` | **Commit reminder**: an agent that ends a turn with uncommitted changes is told to commit. |
 | `commit_reminder_prompt` | unset (the shipped prompt) | The reminder's text. |
@@ -356,7 +356,7 @@ empty inherits the global value.
 | `autonomy` | unset (inherit) | Autonomy for this board. |
 | `autonomy_review_iterations` | unset (inherit) | Review-fix rounds for this board. |
 | `pattern_threshold` | unset (inherit) | Pattern-review threshold for this board (`investigation_threshold` in older configs). |
-| `deployed_retention` | `inherit` | `off`, or `{ "days": n }`: days in Close before Clean up. |
+| `deployed_retention` | `inherit` | `off`, or `{ "days": n }`: days in an older board's Close before Clean up. |
 | `cleanup_retention` | `inherit` | `off`, or `{ "days": n }`: days in Clean up before deletion. |
 | `ticketing.watcher_enabled` | unset (on only for `ticketing.project_id`) | **Ticket pickup** for this board. Older configs call the override `tracker` or `jira`; both are read. |
 | `ticketing.jql_filter` | unset (inherit) | **Pickup filter** for this board, in the provider's syntax. |

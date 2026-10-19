@@ -12,6 +12,7 @@ import {
   type CardPullRequest,
   type NeedsYouReason,
   type PendingPlanGate,
+  type ShippedIndicator,
   type WorkflowStageKey,
 } from './cardSignals';
 
@@ -28,10 +29,26 @@ export function needsYouLabel(
   t: KanbanTranslate,
   reason: NeedsYouReason
 ): string {
-  if (reason.kind === 'close') return t('kanban.needsYou.readyToClose');
-  return reason.gate.planKind === 'rca'
-    ? t('kanban.needsYou.rcaReady')
-    : t('kanban.needsYou.planReady');
+  switch (reason.kind) {
+    case 'triaged':
+      return t('kanban.needsYou.triaged');
+    case 'merged':
+      return t('kanban.needsYou.merged');
+    case 'closedUnmerged':
+      return t('kanban.needsYou.closedUnmerged');
+    case 'plan':
+      return reason.gate.planKind === 'rca'
+        ? t('kanban.needsYou.rcaReady')
+        : t('kanban.needsYou.planReady');
+  }
+}
+
+/** The Shipped column's chip ("PR open", "CI failing", "Merged", …). */
+export function shippedIndicatorLabel(
+  t: KanbanTranslate,
+  indicator: ShippedIndicator
+): string {
+  return t(`kanban.shippedIndicator.${indicator.kind}`);
 }
 
 /** "Confidence high · no open questions": what the agent's verdict says. */
@@ -118,7 +135,7 @@ function runningLabel(
           )}`
         : withElapsed(t('kanban.card.status.reviewing'));
     }
-    case 'pushMr':
+    case 'shipped':
       return t('kanban.card.status.openingPr');
     case 'cleanUp':
       return t('kanban.card.status.cleaningUp');
@@ -142,6 +159,9 @@ export function buildStatusLine(
   now: number
 ): KanbanCardStatusLine | null {
   if (input.needsYou?.kind === 'plan') return null;
+  if (input.needsYou?.kind === 'triaged') {
+    return { tone: 'attention', text: t('kanban.card.status.triaged') };
+  }
 
   const pullRequests = input.pullRequests;
   const merged = latestMergedPullRequest(pullRequests);
@@ -153,7 +173,7 @@ export function buildStatusLine(
     }),
   });
 
-  if (input.needsYou?.kind === 'close') {
+  if (input.needsYou?.kind === 'merged') {
     return mergedLine(input.needsYou.pullRequest);
   }
 

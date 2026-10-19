@@ -250,10 +250,11 @@ pub enum TicketStage {
     Planning,
     Executing,
     Reviewing,
+    /// The card's pull request opened.
     PushedMr,
     /// An investigation's report is on the card.
     Triaged,
-    /// Clean-up.
+    /// The card's pull request merged, or a card without one was cleaned up.
     Done,
 }
 

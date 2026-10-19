@@ -109,8 +109,7 @@ const STAGES: { id: string; dot: string }[] = [
   { id: 'plan', dot: 'bg-brand' },
   { id: 'execute', dot: 'bg-brand' },
   { id: 'review', dot: 'bg-brand' },
-  { id: 'pushMr', dot: 'bg-brand' },
-  { id: 'close', dot: 'bg-success' },
+  { id: 'shipped', dot: 'bg-success' },
   { id: 'cleanUp', dot: 'bg-low/50' },
 ];
 

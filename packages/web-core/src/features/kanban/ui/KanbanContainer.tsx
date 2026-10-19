@@ -34,16 +34,20 @@ import {
   PRIORITY_ORDER,
 } from '../model/hooks/useKanbanFilters';
 import {
+  cardCleanupGate,
   columnDotTone,
+  withDiscardConfirmed,
   implementationSession,
   isTakenOver,
   isWithinLastWeek,
   latestPullRequest,
   needsYouReason,
   priorityChipLabel,
+  shippedIndicator,
   workClassChipTone,
   workflowStageKey,
   type NeedsYouReason,
+  type ShippedIndicator,
   type WorkflowStageKey,
 } from '../model/cardSignals';
 import {
@@ -52,6 +56,7 @@ import {
   needsYouLabel,
   planGateDetail,
   pullRequestLabel,
+  shippedIndicatorLabel,
 } from '../model/cardCopy';
 import { postPlanDecision } from '../model/planDecisionsApi';
 import {
@@ -106,6 +111,7 @@ import {
 import {
   KanbanArchivedCardContent,
   KanbanCardContent,
+  type KanbanCardIndicatorTone,
   type KanbanCardNeedsYou,
   type KanbanClassLabel,
 } from '@prepcook/ui/components/KanbanCardContent';
@@ -131,20 +137,28 @@ import {
   DropdownMenuTrigger,
 } from '@prepcook/ui/components/Dropdown';
 import { SearchableTagDropdownContainer } from '@/shared/components/SearchableTagDropdownContainer';
-import type { IssuePriority } from 'shared/remote-types';
+import type { IssuePriority, JsonValue } from 'shared/remote-types';
 import { useIssueMultiSelect } from '@/shared/hooks/useIssueMultiSelect';
 import { useIssueSelectionStore } from '@/shared/stores/useIssueSelectionStore';
 import { BulkActionBarContainer } from './BulkActionBarContainer';
+import { confirmDiscard } from './confirmDiscard';
 
 /** Cleaned-up cards shown before "Show N more". */
 const CLEAN_UP_PAGE_SIZE = 10;
 
 /** Tags the orchestrator sets; the card says them in its status instead. */
-const SYSTEM_TAG_NAMES = new Set([
-  'agent-failed',
-  'taken-over',
-  'needs-column',
-]);
+const SYSTEM_TAG_NAMES = new Set(['agent-failed', 'taken-over']);
+
+/** The Shipped chip's recipe for each pull-request state. */
+const DONE_INDICATOR_TONES: Record<
+  ShippedIndicator['kind'],
+  KanbanCardIndicatorTone
+> = {
+  open: 'brand',
+  ciFailing: 'error',
+  merged: 'success',
+  closed: 'neutral',
+};
 
 const areStringSetsEqual = (left: string[], right: string[]): boolean => {
   if (left.length !== right.length) {
@@ -397,7 +411,8 @@ export function KanbanContainer() {
   }, []);
 
   // Statuses counting as "done" for epic progress: the workflow's terminal
-  // columns when present, otherwise the generic done set.
+  // columns when present, otherwise the generic done set. A merged card in
+  // Shipped counts too (see `epicSummaries`).
   const epicDoneStatusIds = useMemo(() => {
     const terminal = statuses.filter((s) =>
       [
@@ -436,7 +451,9 @@ export function KanbanContainer() {
       const summary = summaries.get(epicKey);
       if (!summary) continue;
       summary.total += 1;
-      if (epicDoneStatusIds.has(issue.status_id)) summary.done += 1;
+      const merged =
+        parseIssueExtMetadata(issue.extension_metadata)?.merged_at != null;
+      if (epicDoneStatusIds.has(issue.status_id) || merged) summary.done += 1;
     }
     return summaries;
   }, [issues, epicDoneStatusIds]);
@@ -465,8 +482,9 @@ export function KanbanContainer() {
   }, [statuses]);
 
   // Why each card in the current view waits on a person: its plan is ready
-  // for a decision in Plan, or it sits in Close with its pull request
-  // merged. The header pill counts these and can filter the board to them.
+  // for a decision in Plan, it is a triaged investigation, or it sits in Shipped
+  // with its pull request merged or closed without merging. The header pill
+  // counts these and can filter the board to them.
   const needsYouByIssueId = useMemo(() => {
     const map = new Map<string, NeedsYouReason>();
     for (const issue of filteredIssues) {
@@ -1039,99 +1057,141 @@ export function KanbanContainer() {
       const destId = destination.droppableId;
       const isCrossColumn = sourceId !== destId;
 
-      // Compute the new layout synchronously from current state. Do NOT
-      // capture it from inside a setItems(prev => …) updater: React only
-      // runs updaters at render time (the setState calls above already
-      // queued work, defeating eager evaluation), so the captured value
-      // stayed empty and the bulk update silently sent zero changes —
-      // cards moved visually while the server never heard about it.
-      // Locate the card by id rather than by index: the Clean up column
-      // lists its cards newest first (and filtered by its own search), so
-      // its visual positions need not match the stored order.
-      const sourceItems = [...(items[sourceId] ?? [])];
-      const sourceIndex = sourceItems.indexOf(draggableId);
-      if (sourceIndex === -1) return;
-      const [moved] = sourceItems.splice(sourceIndex, 1);
-      if (!moved) return;
+      // Applies the move; `movedMetadata` is written with the moved card's
+      // status (a confirmed discard travels that way).
+      const applyMove = (movedMetadata?: JsonValue) => {
+        // Compute the new layout synchronously from current state. Do NOT
+        // capture it from inside a setItems(prev => …) updater: React only
+        // runs updaters at render time (the setState calls above already
+        // queued work, defeating eager evaluation), so the captured value
+        // stayed empty and the bulk update silently sent zero changes —
+        // cards moved visually while the server never heard about it.
+        // Locate the card by id rather than by index: the Clean up column
+        // lists its cards newest first (and filtered by its own search), so
+        // its visual positions need not match the stored order.
+        const sourceItems = [...(items[sourceId] ?? [])];
+        const sourceIndex = sourceItems.indexOf(draggableId);
+        if (sourceIndex === -1) return;
+        const [moved] = sourceItems.splice(sourceIndex, 1);
+        if (!moved) return;
 
-      let newItems: Record<string, string[]>;
-      if (!isCrossColumn) {
-        // Within-column reorder
-        sourceItems.splice(destination.index, 0, moved);
-        newItems = { ...items, [sourceId]: sourceItems };
-      } else {
-        // Cross-column move
-        const destItems = [...(items[destId] ?? [])];
-        destItems.splice(destination.index, 0, moved);
-        newItems = {
-          ...items,
-          [sourceId]: sourceItems,
-          [destId]: destItems,
-        };
-      }
-      setItems(newItems);
+        let newItems: Record<string, string[]>;
+        if (!isCrossColumn) {
+          // Within-column reorder
+          sourceItems.splice(destination.index, 0, moved);
+          newItems = { ...items, [sourceId]: sourceItems };
+        } else {
+          // Cross-column move
+          const destItems = [...(items[destId] ?? [])];
+          destItems.splice(destination.index, 0, moved);
+          newItems = {
+            ...items,
+            [sourceId]: sourceItems,
+            [destId]: destItems,
+          };
+        }
+        setItems(newItems);
 
-      // Build bulk updates for all issues in affected columns
-      const updates: BulkUpdateIssueItem[] = [];
+        // Build bulk updates for all issues in affected columns
+        const updates: BulkUpdateIssueItem[] = [];
 
-      // Always update destination column
-      const destIssueIds = newItems[destId] ?? [];
-      destIssueIds.forEach((issueId, index) => {
-        updates.push({
-          id: issueId,
-          changes: {
-            status_id: destId,
-            sort_order: calculateSortOrder(destId, index),
-          },
-        });
-      });
-
-      // Update source column if cross-column move
-      if (isCrossColumn) {
-        const sourceIssueIds = newItems[sourceId] ?? [];
-        sourceIssueIds.forEach((issueId, index) => {
+        // Always update destination column
+        const destIssueIds = newItems[destId] ?? [];
+        destIssueIds.forEach((issueId, index) => {
           updates.push({
             id: issueId,
             changes: {
-              sort_order: calculateSortOrder(sourceId, index),
+              status_id: destId,
+              sort_order: calculateSortOrder(destId, index),
+              ...(issueId === draggableId && movedMetadata !== undefined
+                ? { extension_metadata: movedMetadata }
+                : {}),
             },
           });
         });
-      }
 
-      // Perform bulk update
-      isSyncingRef.current = true;
-      bulkUpdateIssues(updates)
-        .then(() => {
-          // Offer to start a stage agent when an issue moved into a
-          // Planning/Executing column (never for same-column reorders).
-          const destStatusName = statusNameById.get(destId);
-          if (isCrossColumn && destStatusName) {
-            void maybePromptStageAgent(draggableId, destStatusName);
-          }
-        })
-        .catch((err) => {
-          console.error('Failed to bulk update sort order:', err);
-          // Server rejected the move (e.g. invalid workflow transition).
-          // Roll the optimistic column state back and tell the user.
-          isSyncingRef.current = false;
-          rebuildItems();
+        // Update source column if cross-column move
+        if (isCrossColumn) {
+          const sourceIssueIds = newItems[sourceId] ?? [];
+          sourceIssueIds.forEach((issueId, index) => {
+            updates.push({
+              id: issueId,
+              changes: {
+                sort_order: calculateSortOrder(sourceId, index),
+              },
+            });
+          });
+        }
+
+        // Perform bulk update
+        isSyncingRef.current = true;
+        bulkUpdateIssues(updates)
+          .then(() => {
+            // Offer to start a stage agent when an issue moved into a
+            // Planning/Executing column (never for same-column reorders).
+            const destStatusName = statusNameById.get(destId);
+            if (isCrossColumn && destStatusName) {
+              void maybePromptStageAgent(draggableId, destStatusName);
+            }
+          })
+          .catch((err) => {
+            console.error('Failed to bulk update sort order:', err);
+            // Server rejected the move (e.g. invalid workflow transition).
+            // Roll the optimistic column state back and tell the user.
+            isSyncingRef.current = false;
+            rebuildItems();
+            void ConfirmDialog.show({
+              title: t('common:error'),
+              message:
+                err instanceof Error && err.message
+                  ? err.message
+                  : t('kanban.workflow.moveRejected'),
+              confirmText: t('common:ok'),
+              showCancelButton: false,
+            });
+          })
+          .finally(() => {
+            // Delay clearing flag to let Electric sync complete
+            setTimeout(() => {
+              isSyncingRef.current = false;
+            }, 500);
+          });
+      };
+
+      // Clean up reads the card's pull requests (the server holds the same
+      // gate): an open one is refused with the reason, and a closed, unmerged
+      // one asks before its branch and worktree are discarded.
+      if (isCrossColumn && stageByStatusId.get(destId) === 'cleanUp') {
+        const meta = parseIssueExtMetadata(
+          issuesById.get(draggableId)?.extension_metadata
+        );
+        const gate = cardCleanupGate(
+          meta,
+          getPullRequestsForIssue(draggableId)
+        );
+        if (gate.kind === 'refused') {
           void ConfirmDialog.show({
             title: t('common:error'),
-            message:
-              err instanceof Error && err.message
-                ? err.message
-                : t('kanban.workflow.moveRejected'),
+            message: t('kanban.cleanUpGate.prOpen'),
             confirmText: t('common:ok'),
             showCancelButton: false,
           });
-        })
-        .finally(() => {
-          // Delay clearing flag to let Electric sync complete
-          setTimeout(() => {
-            isSyncingRef.current = false;
-          }, 500);
-        });
+          return;
+        }
+        if (gate.kind === 'confirm') {
+          void confirmDiscard(t).then((confirmed) => {
+            if (confirmed) {
+              applyMove(
+                withDiscardConfirmed(
+                  issuesById.get(draggableId)?.extension_metadata
+                )
+              );
+            }
+          });
+          return;
+        }
+      }
+      applyMove();
     },
     [
       kanbanFilters.sortField,
@@ -1140,6 +1200,9 @@ export function KanbanContainer() {
       maybePromptStageAgent,
       rebuildItems,
       items,
+      stageByStatusId,
+      issuesById,
+      getPullRequestsForIssue,
       t,
     ]
   );
@@ -1295,7 +1358,7 @@ export function KanbanContainer() {
 
   // --- Needs-you actions on the card face ---------------------------------
 
-  // Approve and Close card in flight, so their buttons cannot double-fire.
+  // Approve and Clean up in flight, so their buttons cannot double-fire.
   const [pendingCardActions, setPendingCardActions] = useState<Set<string>>(
     () => new Set()
   );
@@ -1361,8 +1424,11 @@ export function KanbanContainer() {
     [getWorkspacesForIssue, localWorkspaceIds, openIssueWorkspace, openIssue]
   );
 
-  // Close card moves a merged card from Close to Clean up, the same status
-  // change the Move to… menu makes; the server runs the clean-up from there.
+  // Clean up (a merged or closed card in Shipped) and Close (a triaged
+  // investigation) move the card to Clean up, the same status change the
+  // Move to… menu makes; the server runs the clean-up from there. Clean up's
+  // gate is asked first: a closed, unmerged pull request is discarded only
+  // once confirmed, and an open one is refused with the reason.
   const cleanUpStatusId = useMemo(
     () =>
       sortedStatuses.find(
@@ -1370,19 +1436,46 @@ export function KanbanContainer() {
       )?.id ?? null,
     [sortedStatuses]
   );
-  const handleCloseCard = useCallback(
+  const handleCleanUp = useCallback(
     async (issueId: string) => {
       if (!cleanUpStatusId) return;
+      const issue = issuesById.get(issueId);
+      const gate = cardCleanupGate(
+        parseIssueExtMetadata(issue?.extension_metadata),
+        getPullRequestsForIssue(issueId)
+      );
+      if (gate.kind === 'refused') {
+        await showActionError(null, t('kanban.cleanUpGate.prOpen'));
+        return;
+      }
+      if (gate.kind === 'confirm' && !(await confirmDiscard(t))) return;
       setCardActionPending(issueId, true);
       try {
-        await updateIssue(issueId, { status_id: cleanUpStatusId }).persisted;
+        await updateIssue(issueId, {
+          status_id: cleanUpStatusId,
+          ...(gate.kind === 'confirm'
+            ? {
+                extension_metadata: withDiscardConfirmed(
+                  issue?.extension_metadata
+                ),
+              }
+            : {}),
+        }).persisted;
       } catch (err) {
         await showActionError(err, t('kanban.workflow.moveRejected'));
       } finally {
         setCardActionPending(issueId, false);
       }
     },
-    [cleanUpStatusId, setCardActionPending, showActionError, t, updateIssue]
+    [
+      cleanUpStatusId,
+      issuesById,
+      getPullRequestsForIssue,
+      setCardActionPending,
+      showActionError,
+      t,
+      updateIssue,
+    ]
   );
 
   // --- Header facts ----------------------------------------------------------
@@ -1528,10 +1621,10 @@ export function KanbanContainer() {
       ? epicSummaries.get(cardJiraKey)
       : undefined;
     const mrUrl = typeof meta?.mr_url === 'string' ? meta.mr_url : null;
-    // MR publication state in the Push MR column: claimed-without-url =
+    // MR publication state in the Shipped column: claimed-without-url =
     // pushing, mr_url = pushed, agent-failed tag without url = failed.
     const pushState =
-      stage === 'pushMr'
+      stage === 'shipped'
         ? mrUrl
           ? ('pushed' as const)
           : agentFailed
@@ -1554,7 +1647,7 @@ export function KanbanContainer() {
       (stage === 'plan' ||
         stage === 'execute' ||
         stage === 'review' ||
-        stage === 'pushMr' ||
+        stage === 'shipped' ||
         stage === 'cleanUp') &&
       meta?.playbook_started_at == null &&
       (meta?.jira != null || meta?.work_class != null) &&
@@ -1611,21 +1704,63 @@ export function KanbanContainer() {
           },
         ],
       };
-    } else if (needsYou?.kind === 'close') {
+    } else if (needsYou?.kind === 'triaged') {
+      needsYouProps = {
+        label: needsYouLabel(t, needsYou),
+        actions: [
+          {
+            label: t('kanban.workClassActions.convertToBug'),
+            variant: 'primary',
+            disabled: isActionPending,
+            onClick: () => void handleConvertCard(issue.id, 'bug'),
+          },
+          ...(cleanUpStatusId
+            ? [
+                {
+                  label: t('kanban.triaged.close'),
+                  variant: 'secondary' as const,
+                  disabled: isActionPending,
+                  onClick: () => void handleCleanUp(issue.id),
+                },
+              ]
+            : []),
+        ],
+      };
+    } else if (
+      needsYou?.kind === 'merged' ||
+      needsYou?.kind === 'closedUnmerged'
+    ) {
       needsYouProps = {
         label: needsYouLabel(t, needsYou),
         actions: cleanUpStatusId
           ? [
               {
-                label: t('kanban.closeCard'),
+                label: t('kanban.cleanUpAction'),
                 variant: 'secondary',
                 disabled: isActionPending,
-                onClick: () => void handleCloseCard(issue.id),
+                onClick: () => void handleCleanUp(issue.id),
               },
             ]
           : [],
       };
     }
+
+    // Shipped (an older board's Push MR, Done and Close too) wears its pull
+    // request's state as a chip.
+    const indicatorKind =
+      stage === 'shipped' || stage === 'close'
+        ? shippedIndicator(meta, cardPullRequests)
+        : null;
+    const indicator = indicatorKind
+      ? {
+          label: shippedIndicatorLabel(t, indicatorKind),
+          tone: DONE_INDICATOR_TONES[indicatorKind.kind],
+          title:
+            indicatorKind.kind === 'ciFailing'
+              ? t('kanban.shippedIndicator.ciFailingHint')
+              : undefined,
+        }
+      : null;
 
     const diffSession = currentSession ?? runningSession ?? null;
 
@@ -1649,6 +1784,7 @@ export function KanbanContainer() {
           priorityLabel={priorityChipLabel(issue.priority)}
           classLabel={buildClassLabel(issue.id, workClass)}
           takenOverLabel={takenOver ? t('kanban.card.takenOver') : null}
+          indicator={indicator}
           statusLine={statusLine}
           needsYou={needsYouProps}
           diffStats={

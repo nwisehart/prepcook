@@ -14,7 +14,7 @@ export type SessionStage =
   | 'plan'
   | 'execute'
   | 'review'
-  | 'push'
+  | 'shipped'
   | 'close'
   | 'cleanup';
 
@@ -24,7 +24,7 @@ const STAGE_KEYS: readonly SessionStage[] = [
   'plan',
   'execute',
   'review',
-  'push',
+  'shipped',
   'close',
   'cleanup',
 ];
@@ -186,7 +186,8 @@ export function elapsedSince(
   return { unit: 'days', count: Math.floor(hours / 24) };
 }
 
-/** True when the stage is past the agent's work: Close and Clean up. */
+/** True when the stage is past the agent's work: an older board's Close,
+ * and Clean up. */
 export function isFinishedStage(stage: SessionStage | null): boolean {
   return stage === 'close' || stage === 'cleanup';
 }

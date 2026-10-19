@@ -18,7 +18,8 @@
 //! - comments: notes. Posting a comment adds a note.
 //! - transition: `acknowledged` acknowledges, `resolved` resolves; any other
 //!   name is a no-op. Entering Planning acknowledges a triggered incident,
-//!   Triaged resolves it only with `incidents.resolve_on_triage`, Clean-up
+//!   Triaged resolves it only with `incidents.resolve_on_triage`, Done (the
+//!   card's pull request merging, or Clean up for a card without one)
 //!   resolves it; the other stages leave it alone.
 //! - assignee: the first assignment; assigning to self reassigns to the
 //!   configured user.
@@ -702,8 +703,9 @@ impl Tracker for PagerDutyTracker {
     }
 
     /// Planning acknowledges (and never reassigns: the responders keep the
-    /// incident), Triaged resolves only with `resolve_on_triage`, Clean-up
-    /// resolves, and the rest leave the incident alone.
+    /// incident), Triaged resolves only with `resolve_on_triage`, Done (the
+    /// merge, or Clean up for a card without a pull request) resolves, and
+    /// the rest leave the incident alone.
     async fn enter_stage(&self, key: &str, stage: TicketStage) -> TrackerResult<()> {
         match stage {
             TicketStage::Planning => self.transition_to_in_progress(key).await,

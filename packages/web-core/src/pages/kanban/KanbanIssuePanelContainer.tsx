@@ -41,13 +41,17 @@ import {
 } from '@/shared/lib/stagePlaybooks';
 import { cardWorkClass } from '@/shared/lib/workClass';
 import {
+  cardCleanupGate,
   columnDotTone,
   latestMergedPullRequest,
+  latestPullRequest,
   needsYouReason,
   priorityChipLabel,
+  withDiscardConfirmed,
   workClassChipTone,
   workflowStageKey,
 } from '@/features/kanban/model/cardSignals';
+import { confirmDiscard } from '@/features/kanban/ui/confirmDiscard';
 import {
   needsYouLabel,
   planGateDetail,
@@ -297,14 +301,14 @@ export function KanbanIssuePanelContainer({
     [stagePlaybookArgs]
   );
 
-  // Push MR stage detection (alias-aware, mirrors KanbanContainer's chip
-  // matcher) for the Review-MR-comments action.
+  // Shipped stage detection (alias-aware: an older board's Push MR or Done
+  // too) for the Review-MR-comments action.
   const isPushMrStage = useMemo(() => {
     if (!selectedIssue) return false;
     const statusName =
       statuses.find((status) => status.id === selectedIssue.status_id)?.name ??
       '';
-    return ['push mr', 'pushed mr'].includes(statusName.trim().toLowerCase());
+    return workflowStageKey(statusName) === 'shipped';
   }, [selectedIssue, statuses]);
 
   // Newest non-reviewer workspace linked to the issue that exists on this
@@ -1433,7 +1437,7 @@ export function KanbanIssuePanelContainer({
       (selectedStage === 'plan' ||
         selectedStage === 'execute' ||
         selectedStage === 'review' ||
-        selectedStage === 'pushMr')
+        selectedStage === 'shipped')
     ) {
       properties.push({
         key: 'playbook',
@@ -1527,6 +1531,46 @@ export function KanbanIssuePanelContainer({
     [selectedKanbanIssueId, updateIssue, showDecisionError, t]
   );
 
+  // Moves the card to Clean up through Clean up's gate: an open pull
+  // request is refused with the reason, and a closed, unmerged one is
+  // discarded only once confirmed.
+  const cleanUpSelectedIssue = useCallback(
+    async (statusId: string) => {
+      if (!selectedIssue) return;
+      const gate = cardCleanupGate(selectedMeta, selectedPullRequests);
+      if (gate.kind === 'refused') {
+        await showDecisionError(null, t('kanban.cleanUpGate.prOpen'));
+        return;
+      }
+      if (gate.kind === 'confirm' && !(await confirmDiscard(t))) return;
+      setIsDecisionSubmitting(true);
+      try {
+        await updateIssue(selectedIssue.id, {
+          status_id: statusId,
+          ...(gate.kind === 'confirm'
+            ? {
+                extension_metadata: withDiscardConfirmed(
+                  selectedIssue.extension_metadata
+                ),
+              }
+            : {}),
+        }).persisted;
+      } catch (error) {
+        await showDecisionError(error, t('kanban.workflow.moveRejected'));
+      } finally {
+        setIsDecisionSubmitting(false);
+      }
+    },
+    [
+      selectedIssue,
+      selectedMeta,
+      selectedPullRequests,
+      updateIssue,
+      showDecisionError,
+      t,
+    ]
+  );
+
   const statusIdForStage = useCallback(
     (stage: 'close' | 'cleanUp') =>
       sortedStatuses.find((status) => workflowStageKey(status.name) === stage)
@@ -1585,8 +1629,26 @@ export function KanbanIssuePanelContainer({
       };
     }
     const cleanUpStatusId = statusIdForStage('cleanUp');
-    const merged = latestMergedPullRequest(selectedPullRequests);
     if (!cleanUpStatusId) return null;
+    const onClose = () => void cleanUpSelectedIssue(cleanUpStatusId);
+    if (reason.kind === 'triaged') {
+      return {
+        kind: 'close',
+        label: needsYouLabel(t, reason),
+        statusLine: {
+          tone: 'attention',
+          text: t('kanban.card.status.triaged'),
+        },
+        closeLabel: t('kanban.triaged.close'),
+        onClose,
+        isSubmitting: isDecisionSubmitting,
+      };
+    }
+    const merged = latestMergedPullRequest(selectedPullRequests);
+    const closed =
+      reason.kind === 'closedUnmerged'
+        ? latestPullRequest(selectedPullRequests)
+        : null;
     return {
       kind: 'close',
       label: needsYouLabel(t, reason),
@@ -1604,9 +1666,19 @@ export function KanbanIssuePanelContainer({
               ),
             }),
           }
-        : null,
-      closeLabel: t('kanban.closeCard'),
-      onClose: () => void moveSelectedIssueTo(cleanUpStatusId),
+        : closed
+          ? {
+              tone: 'idle',
+              icon: 'pullRequest',
+              link: {
+                label: pullRequestLabel(t, closed.number),
+                url: closed.url,
+              },
+              text: t('kanban.card.status.prClosed'),
+            }
+          : null,
+      closeLabel: t('kanban.cleanUpAction'),
+      onClose,
       isSubmitting: isDecisionSubmitting,
     };
   }, [
@@ -1619,26 +1691,33 @@ export function KanbanIssuePanelContainer({
     openPlan,
     isDecisionSubmitting,
     statusIdForStage,
-    moveSelectedIssueTo,
+    cleanUpSelectedIssue,
     t,
   ]);
 
-  // Footer "Close card": a card in Close moves on to Clean up; any other
-  // workflow card can be closed by hand (the workflow allows a move to
-  // Close from every stage).
+  // Footer "Close card": any workflow card can be closed by hand. An older
+  // board closes it into its Close column (and a card already there moves on
+  // to Clean up); a current board has no Close, so the card goes to Clean up
+  // through its gate.
   const closeCardAction = useMemo(() => {
     if (mode !== 'edit' || !selectedIssue || decision?.kind === 'close') {
       return null;
     }
     if (!selectedStage || selectedStage === 'cleanUp') return null;
-    const targetStatusId =
-      selectedStage === 'close'
-        ? statusIdForStage('cleanUp')
-        : statusIdForStage('close');
-    if (!targetStatusId) return null;
+    const closeStatusId =
+      selectedStage === 'close' ? null : statusIdForStage('close');
+    const cleanUpStatusId = statusIdForStage('cleanUp');
+    if (closeStatusId) {
+      return {
+        label: t('kanban.closeCard'),
+        onClick: () => void moveSelectedIssueTo(closeStatusId),
+        disabled: isDecisionSubmitting,
+      };
+    }
+    if (!cleanUpStatusId) return null;
     return {
       label: t('kanban.closeCard'),
-      onClick: () => void moveSelectedIssueTo(targetStatusId),
+      onClick: () => void cleanUpSelectedIssue(cleanUpStatusId),
       disabled: isDecisionSubmitting,
     };
   }, [
@@ -1648,6 +1727,7 @@ export function KanbanIssuePanelContainer({
     selectedStage,
     statusIdForStage,
     moveSelectedIssueTo,
+    cleanUpSelectedIssue,
     isDecisionSubmitting,
     t,
   ]);

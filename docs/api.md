@@ -114,7 +114,7 @@ GET /api/cards/{id}
     "url": "http://localhost:4100/projects/7d0c6a0e-…/issues/3f1e9b52-…",
     "project_id": "7d0c6a0e-0000-4000-8000-000000000001",
     "status": "triaged",
-    "column": "Triaged",
+    "column": "Plan",
     "work_class": "investigation",
     "report": {
       "what_happens": "Exports over 500 rows stop one row short.",
@@ -143,7 +143,11 @@ GET /api/cards/{id}
 `status` is where the card is in the workflow — `backlog`, `planning`,
 `triaged`, `executing`, `reviewing`, `pushed_mr`, `closed`, `cleanup`, or
 `other` for a column Prepcook does not know — and `column` is the column's name
-as the board shows it. `report`, `confidence` and `harness` are `null` until an
+as the board shows it. Triage and the merge are states of the card, so
+`status` reads them from the card as well as its column: a triaged
+investigation is `triaged` in Plan (or in a Triaged column a board added), and
+a card in Shipped is `pushed_mr` while its pull request is open and `closed` once
+it merged ([method.md](method.md#shipped)). `report`, `confidence` and `harness` are `null` until an
 investigation has posted its report; `rca_id` is `null` until an RCA is filed
 for the card. `404` for no such card.
 

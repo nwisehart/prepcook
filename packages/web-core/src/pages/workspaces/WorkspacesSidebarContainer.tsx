@@ -284,7 +284,7 @@ function runningLabel(
         : t('workspaces.status.implementing');
     case 'review':
       return t('workspaces.status.reviewing');
-    case 'push':
+    case 'shipped':
       return t('workspaces.status.updatingPr');
     default:
       return t('workspaces.status.working');
@@ -374,7 +374,11 @@ function toSessionRow(
     name: workspace.name,
     cardKey: card?.key ?? workspace.branch,
     stageLabel: card?.stageName ?? undefined,
-    stageTone: isDone ? 'neutral' : stage === 'close' ? 'success' : 'brand',
+    stageTone: isDone
+      ? 'neutral'
+      : stage === 'shipped' || stage === 'close'
+        ? 'success'
+        : 'brand',
     statusLabel: sessionStatusLabel(status, workspace, card, now, t),
     statusTone: status.tone,
     group,

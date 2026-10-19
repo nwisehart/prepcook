@@ -210,7 +210,7 @@ describe('resolveStagePlaybook', () => {
     });
     const context = {
       gate_instructions: 'open the review gate',
-      investigation_gate_instructions: 'the card moves to Triaged',
+      investigation_gate_instructions: 'the card is marked triaged',
     };
     const planning = resolveStagePlaybook({
       issue,
@@ -222,7 +222,7 @@ describe('resolveStagePlaybook', () => {
       },
       context,
     });
-    expect(planning?.prompt).toBe('Triage VK-7. the card moves to Triaged');
+    expect(planning?.prompt).toBe('Triage VK-7. the card is marked triaged');
     expect(
       resolveStagePlaybook({
         issue,

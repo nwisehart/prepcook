@@ -19,20 +19,21 @@
 //!   locally (spec: `open_questions == 0`; rca: `confidence == high`; plus a
 //!   Lavish approval in `spec.approved_at`) — the remote server enforces the
 //!   same gate, so ineligible issues are skipped silently.
-//! - **Pushed MR**: opens the MR ready for review, then keeps polling the MR's
-//!   review comments (claimed or not) and injecting new human ones into the
-//!   implementation agent as follow-ups.
 //! - **Reviewing**: launches an *independent* review session — a brand-new
 //!   workspace branched off the implementation branch, driven by the
 //!   `"reviewing"` playbook, which sees only the diff vs the target branch
 //!   and the ticket (deliberately not the spec/RCA). Findings are posted as
 //!   issue comments; a human moves the ticket onward.
-//! - **Pushed MR**: pushes the implementation branch and creates the MR via
-//!   the repo's git host (GitHub or GitLab), recording `mr_url` in
-//!   `extension_metadata`.
+//! - **Shipped** (Push MR or Done on an older board): pushes the
+//!   implementation branch and creates the MR via the repo's git host (GitHub
+//!   or GitLab), recording `mr_url` in `extension_metadata`; then, while the
+//!   MR is open, keeps polling its review comments (claimed or not) and
+//!   injecting new human ones into the implementation agent as follow-ups.
+//!   Once it merges the tracker ticket goes to done and the card waits for a
+//!   person to clean it up (an older board moves it to Close).
 //! - **Clean-up**: runs per-repo cleanup scripts, archives the linked
 //!   workspaces (orphan cleanup later returns pooled worktrees), and
-//!   transitions the Jira ticket to Done.
+//!   transitions the Jira ticket to Done when the merge has not already.
 //!
 //! Claims merge `playbook_started_at` into `extension_metadata` so teammates'
 //! orchestrators skip the issue; launches go through the same internal path
@@ -49,10 +50,10 @@ use std::{
 use api_types::{
     AskAudience, ConfidenceLevel, CreateIssueAssigneeRequest, CreateIssueRequest,
     CreateIssueTagRequest, CreateWorkspaceRequest, FindingClass, HumanTakeover, Issue,
-    IssueExtMetadata, IssuePriority, IssueSortField, JiraRef, PreMrVerify, PullRequestStatus,
-    ReopenState, ReviewFinding, ReviewVerdict, SearchIssuesRequest, SortDirection, SpecRef,
-    StampKbNodeInvestigationRequest, UpdateIssueRequest, UpsertPullRequestRequest, VerifyState,
-    WorkClass, Workspace as RemoteWorkspace,
+    IssueExtMetadata, IssuePriority, IssueSortField, JiraRef, PrState, PreMrVerify,
+    PullRequestStatus, ReopenState, ReviewFinding, ReviewVerdict, SearchIssuesRequest,
+    SortDirection, SpecRef, StampKbNodeInvestigationRequest, UpdateIssueRequest,
+    UpsertPullRequestRequest, VerifyState, WorkClass, Workspace as RemoteWorkspace, pr_state,
 };
 use chrono::{NaiveDate, Utc};
 use db::{
@@ -179,11 +180,6 @@ const TAKEN_OVER_TAG_NAME: &str = "taken-over";
 /// Board tag applied when MR review feedback rejects the approach rather than
 /// asking for changes within it, i.e. the ticket needs re-planning by a human.
 const NEEDS_REPLAN_TAG_NAME: &str = "needs-replan";
-
-/// Tag on an investigation card whose report is in but whose board has no
-/// Triaged column to move it to. The column is never created on a board's
-/// behalf: adding one is the board owner's call.
-const NEEDS_COLUMN_TAG_NAME: &str = "needs-column";
 
 /// How long a ticket's answer may stay identical before the duration becomes
 /// the news.
@@ -800,13 +796,14 @@ enum StageOrchestratorError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Stage {
     Planning,
-    /// Where an investigation card stops with its triage report. Terminal: the
-    /// orchestrator does nothing to a card here; converting it to a bug moves
-    /// it on.
-    Triaged,
     Executing,
     Reviewing,
-    PushedMr,
+    /// The Shipped column, Push MR or Done on an older board: the pull request
+    /// is opened here and the card stays until a person cleans it up. What
+    /// runs is read from the card's pull requests, not from the column — none
+    /// yet opens one, an open one is watched (review comments, CI, rebases), a
+    /// merged one fires the tracker's `done` transition once and nothing else.
+    Shipped,
     Cleanup,
 }
 
@@ -815,10 +812,9 @@ impl Stage {
     fn key(self) -> &'static str {
         match self {
             Stage::Planning => "planning",
-            Stage::Triaged => "triaged",
             Stage::Executing => "executing",
             Stage::Reviewing => "reviewing",
-            Stage::PushedMr => "pushed_mr",
+            Stage::Shipped => "pushed_mr",
             Stage::Cleanup => "cleanup",
         }
     }
@@ -826,14 +822,17 @@ impl Stage {
     fn title(self) -> &'static str {
         match self {
             Stage::Planning => "Planning",
-            Stage::Triaged => "Triaged",
             Stage::Executing => "Executing",
             Stage::Reviewing => "Reviewing",
-            Stage::PushedMr => "Pushed MR",
+            Stage::Shipped => "Shipped",
             Stage::Cleanup => "Clean-up",
         }
     }
 
+    /// The stage a column stands for. Shipped is also read under its older
+    /// names, Done and Push MR; an older board's Close is not a stage (see
+    /// [`is_close_column`]) and a Triaged column a board added is not either:
+    /// triage is a state of the card ([`IssueExtMetadata::is_triaged`]).
     fn from_status_name(name: &str) -> Option<Self> {
         let matches = |aliases: &[&str]| {
             aliases
@@ -842,20 +841,23 @@ impl Stage {
         };
         if matches(&["plan", "planning"]) {
             Some(Stage::Planning)
-        } else if matches(&["triaged"]) {
-            Some(Stage::Triaged)
         } else if matches(&["execute", "executing"]) {
             Some(Stage::Executing)
         } else if matches(&["review", "reviewing"]) {
             Some(Stage::Reviewing)
-        } else if matches(&["push mr", "pushed mr"]) {
-            Some(Stage::PushedMr)
+        } else if matches(&["shipped", "done", "push mr", "pushed mr"]) {
+            Some(Stage::Shipped)
         } else if matches(&["clean up", "clean-up", "cleanup"]) {
             Some(Stage::Cleanup)
         } else {
             None
         }
     }
+}
+
+/// A Triaged column a board added for its triaged investigations.
+fn is_triaged_column(name: &str) -> bool {
+    name.trim().eq_ignore_ascii_case("triaged")
 }
 
 fn is_close_column(name: &str) -> bool {
@@ -872,8 +874,10 @@ fn is_cleanup_column(name: &str) -> bool {
         || name.eq_ignore_ascii_case("cleanup")
 }
 
-/// The board's terminal column. Boards name it "Close", "Closed" or
-/// "Deployed"; the first match wins when a board carries more than one.
+/// An older board's merged column, which a card moves into from Push MR once
+/// its pull requests merged. Boards name it "Close", "Closed" or "Deployed";
+/// the first match wins when a board carries more than one. A current board
+/// has none: a merged card stays in Shipped until a person cleans it up.
 fn close_status(statuses: &[api_types::ProjectStatus]) -> Option<&api_types::ProjectStatus> {
     statuses.iter().find(|status| is_close_column(&status.name))
 }
@@ -888,7 +892,7 @@ fn cleanup_status(statuses: &[api_types::ProjectStatus]) -> Option<&api_types::P
 ///
 /// Every column but Clean-up. Jira is the source of truth for whether work is
 /// finished, and a person closes the ticket from wherever the card happens to
-/// sit — Push MR with the merge request closed unmerged because the fix landed
+/// sit — Shipped with the merge request closed unmerged because the fix landed
 /// another way, Review, Execute, or To Do because it turned out not to need
 /// doing. The first version of this sweep looked only at the Close column, and
 /// three Done tickets in Push MR collected a daily EOB comment each for a week.
@@ -953,26 +957,27 @@ async fn jira_human_assigned_keys(tracker: &dyn Tracker, keys: &[String]) -> Has
     held
 }
 
-/// Whether a card sitting in Pushed MR is finished with review.
+/// What the merge sweep does with a card in Shipped, from its [`PrState`] and
+/// whether it already carries the `merged_at` stamp.
 #[derive(Debug, PartialEq, Eq)]
-enum MergeAdvance {
-    /// Something landed and nothing is left in review.
-    Advance,
-    /// A merge request is still open, or none of them merged.
+enum MergeStep {
+    /// The merge requests landed and the card has not been told: stamp it,
+    /// fire the tracker's `done` transition, and on an older board move it to
+    /// Close.
+    Landed,
+    /// Stamped, but a merge request is open again: drop the stamp so the
+    /// watch resumes.
+    Reopened,
+    /// Nothing to do: still in review, nothing ever opened, everything closed
+    /// unmerged (a person decides), or already stamped.
     Wait,
 }
 
-/// A single open merge request holds the card however many others merged: a
-/// ticket that opened several is not done while any part of it is still in
-/// review. A card whose merge requests all closed unmerged also waits, since
-/// nothing landed and a human decides whether it is reopened or abandoned.
-fn merge_advance(statuses: &[PullRequestStatus]) -> MergeAdvance {
-    let open = statuses.contains(&PullRequestStatus::Open);
-    let merged = statuses.contains(&PullRequestStatus::Merged);
-    if merged && !open {
-        MergeAdvance::Advance
-    } else {
-        MergeAdvance::Wait
+fn merge_step(state: Option<PrState>, stamped: bool) -> MergeStep {
+    match (state, stamped) {
+        (Some(PrState::Merged), false) => MergeStep::Landed,
+        (Some(PrState::Open), true) => MergeStep::Reopened,
+        _ => MergeStep::Wait,
     }
 }
 
@@ -1195,8 +1200,7 @@ fn eob_state(
     reviewer: Option<&str>,
 ) -> Option<EobState> {
     match stage {
-        // An investigation's report is already on the ticket.
-        Stage::Cleanup | Stage::Triaged => None,
+        Stage::Cleanup => None,
         Stage::Executing => Some(EobState::BuildingFix),
         Stage::Reviewing => Some(EobState::AutomatedReview),
         Stage::Planning => {
@@ -1235,7 +1239,7 @@ fn eob_state(
             }
             Some(EobState::RcaAwaitingReview)
         }
-        Stage::PushedMr => {
+        Stage::Shipped => {
             // An open merge request is the live story even when an earlier one
             // merged: the ticket is not finished while something is in review.
             if let Some(open) = pull_requests
@@ -1403,7 +1407,7 @@ enum DigestSection {
 /// lists everything in flight, and only a daily sweep can see what *hasn't*
 /// moved.
 ///
-/// A merged merge request outside Push MR is called out wherever it appears:
+/// A merged merge request outside Shipped is called out wherever it appears:
 /// the card was dragged backwards, or its merge request belongs to another
 /// ticket, and either way nothing else notices.
 fn classify(
@@ -1413,15 +1417,14 @@ fn classify(
     stalled_for: Option<u32>,
 ) -> DigestSection {
     // Clean-up is the terminal column: its cards are finished, and the
-    // retention sweeps own what happens to them next. Triaged is an
-    // investigation's end, and waits on nobody.
-    if matches!(stage, Stage::Cleanup | Stage::Triaged) {
+    // retention sweeps own what happens to them next.
+    if stage == Stage::Cleanup {
         return DigestSection::InFlight;
     }
     let open = pull_requests.contains(&PullRequestStatus::Open);
     let merged = pull_requests.contains(&PullRequestStatus::Merged);
 
-    if stage == Stage::PushedMr {
+    if stage == Stage::Shipped {
         if open {
             // Waiting is normal; waiting for days without anyone noticing is
             // the thing the digest exists to surface. The caller has already
@@ -1434,7 +1437,8 @@ fn classify(
             };
         }
         if merged {
-            // The merge sweep advances these within five minutes.
+            // Landed: the board shows it waiting for a person to clean it up,
+            // and an older board's merge sweep moves it to Close.
             return DigestSection::InFlight;
         }
         return if pull_requests.is_empty() {
@@ -1600,11 +1604,11 @@ fn rca_handoff_due(tracker_configured: bool, metadata: &IssueExtMetadata) -> boo
 #[derive(Debug, PartialEq, Eq)]
 enum LaunchPlan {
     /// Claim it and run the stage: with this playbook text for the stages
-    /// that start an agent, with none for Push MR and Clean-up, which the
+    /// that start an agent, with none for Shipped and Clean-up, which the
     /// orchestrator does itself.
     Launch(Option<String>),
-    /// Push MR with a merge request already open: watch it for review
-    /// comments instead of opening another.
+    /// Shipped with a merge request already open: watch it for review comments
+    /// instead of opening another.
     WatchMr,
     /// Leave it, saying why when the reason is worth a log line.
     Skip(Option<String>),
@@ -1656,11 +1660,9 @@ fn launch_plan(
                 None => LaunchPlan::Skip(Some(format!("no playbook '{playbook_key}' configured"))),
             }
         }
-        // Terminal: nothing runs here.
-        Stage::Triaged => LaunchPlan::Skip(None),
         // An investigation never has a branch to review or push; a card
         // dragged here by hand is left alone rather than reviewed.
-        Stage::Reviewing | Stage::PushedMr
+        Stage::Reviewing | Stage::Shipped
             if metadata.work_class == Some(WorkClass::Investigation) =>
         {
             LaunchPlan::Skip(Some(INVESTIGATION_GATE_REASON.to_string()))
@@ -1682,9 +1684,11 @@ fn launch_plan(
                 ))),
             }
         }
-        Stage::PushedMr if !in_workflow => LaunchPlan::Skip(None),
-        Stage::PushedMr if metadata.mr_url.is_some() => LaunchPlan::WatchMr,
-        Stage::PushedMr => LaunchPlan::Launch(None),
+        Stage::Shipped if !in_workflow => LaunchPlan::Skip(None),
+        // Landed: nothing left to open or watch.
+        Stage::Shipped if metadata.merged_at.is_some() => LaunchPlan::Skip(None),
+        Stage::Shipped if metadata.mr_url.is_some() => LaunchPlan::WatchMr,
+        Stage::Shipped => LaunchPlan::Launch(None),
         Stage::Cleanup if !in_workflow => LaunchPlan::Skip(None),
         Stage::Cleanup => LaunchPlan::Launch(None),
     }
@@ -2395,7 +2399,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
         if stage_by_status.is_empty() {
             info!(
-                "Stage orchestrator: project {project_id} has no automated workflow columns (looking for Planning/Executing/Reviewing/Pushed MR/Clean-up)"
+                "Stage orchestrator: project {project_id} has no automated workflow columns (looking for Plan/Execute/Review/Shipped/Clean up)"
             );
             return Ok(());
         }
@@ -2561,9 +2565,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     /// and without the card going on reporting itself as in flight: the EOB
     /// update and the digest both read the column. The alternatives still
     /// stand: move it by hand, or let the `deployed_retention_days` sweep age
-    /// it out. A card retired with a merge request still open is announced on
-    /// the board's channel, because closing that MR is now somebody's job and
-    /// nothing else will say so.
+    /// it out. A card whose merge request is still open stays put — Clean up
+    /// never takes one — and is announced on the board's channel, because
+    /// closing that MR is now somebody's job and nothing else will say so.
     async fn scan_jira_done(
         &self,
         client: &RemoteClient,
@@ -2647,26 +2651,63 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             }
             last_attempts.insert(issue.id, Instant::now());
 
-            // A merge request the card leaves behind is the one thing this
-            // retirement can orphan: the ticket says finished, the MR says
-            // waiting for review, and nobody is told. One line, once.
-            let open_mrs: Vec<i64> = match client.list_pull_requests(issue.id).await {
-                Ok(prs) => prs
-                    .pull_requests
-                    .iter()
-                    .filter(|pr| pr.status == PullRequestStatus::Open)
-                    .map(|pr| pr.number as i64)
-                    .collect(),
+            let pull_requests = match client.list_pull_requests(issue.id).await {
+                Ok(prs) => prs.pull_requests,
                 Err(e) => {
                     warn!(
                         "Stage orchestrator: could not read merge requests for {} before \
                          retiring it: {e}",
                         issue.simple_id
                     );
-                    Vec::new()
+                    continue;
                 }
             };
+            let statuses: Vec<PullRequestStatus> =
+                pull_requests.iter().map(|pr| pr.status).collect();
+            let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
 
+            // Clean up never takes a card whose merge request is still open:
+            // the ticket says finished, the MR says waiting for review, and
+            // closing that MR is now somebody's job. The card stays where it
+            // is and the board's channel is told, once.
+            if pr_state(&statuses) == Some(PrState::Open) {
+                static ANNOUNCED: LazyLock<Mutex<HashSet<Uuid>>> = LazyLock::new(Default::default);
+                if ANNOUNCED.lock().unwrap().insert(issue.id) {
+                    let open_mrs: Vec<i64> = pull_requests
+                        .iter()
+                        .filter(|pr| pr.status == PullRequestStatus::Open)
+                        .map(|pr| pr.number as i64)
+                        .collect();
+                    info!(
+                        "Stage orchestrator: {} is Done in the tracker but keeps its card — \
+                         merge request(s) still open",
+                        issue.simple_id
+                    );
+                    self.notifications
+                        .send(
+                            Some(settings.project_id),
+                            Event::TicketClosedWithOpenMrs {
+                                issue: issue_ref(issue, &metadata),
+                                mr_numbers: open_mrs,
+                            },
+                        )
+                        .await;
+                }
+                continue;
+            }
+
+            // A person closing the ticket is the decision a closed, unmerged
+            // merge request waits on, so it stands as the discard
+            // confirmation Clean up asks for.
+            let discard = pr_state(&statuses) == Some(PrState::Closed)
+                && metadata.discard_confirmed_at.is_none();
+            let extension_metadata = discard.then(|| {
+                IssueExtMetadata {
+                    discard_confirmed_at: Some(Utc::now()),
+                    ..Default::default()
+                }
+                .merge_into(&issue.extension_metadata)
+            });
             let update = UpdateIssueRequest {
                 status_id: Some(cleanup_status.id),
                 title: None,
@@ -2678,7 +2719,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 sort_order: None,
                 parent_issue_id: None,
                 parent_issue_sort_order: None,
-                extension_metadata: None,
+                extension_metadata,
             };
             match client.update_issue(issue.id, &update).await {
                 Ok(_) => {
@@ -2686,17 +2727,17 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         "Stage orchestrator: {} moved to Clean-up — {} is Done in Jira",
                         issue.simple_id, key
                     );
-                    if !open_mrs.is_empty() {
-                        let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
-                        self.notifications
-                            .send(
-                                Some(settings.project_id),
-                                Event::TicketClosedWithOpenMrs {
-                                    issue: issue_ref(issue, &metadata),
-                                    mr_numbers: open_mrs,
-                                },
-                            )
-                            .await;
+                    if discard {
+                        post_audit_comment(
+                            client,
+                            issue.id,
+                            &issue.simple_id,
+                            &format!(
+                                "clean-up: {key} was closed in the tracker — its unmerged merge \
+                                 request's branch and worktree are discarded"
+                            ),
+                        )
+                        .await;
                     }
                 }
                 Err(e) => warn!(
@@ -2708,11 +2749,6 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         Ok(())
     }
 
-    /// Moves cards out of Pushed MR once their merge requests have landed.
-    ///
-    /// The merge request is the only signal that pushed work is finished, so a
-    /// card left here keeps polling review comments on a merge request that is
-    /// already closed.
     /// Resolves a git-host login to a display name, once per process.
     ///
     /// The set of reviewers is small and their names do not change, so a miss
@@ -2778,8 +2814,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         };
 
         // Every column: a parked original sits wherever its card came to rest,
-        // which is Close for work that shipped and Clean-up for work that was
-        // retired before the report arrived.
+        // which is Shipped (Close on an older board) for work that shipped and
+        // Clean-up for work that was retired before the report arrived.
         let response = client
             .search_issues(&SearchIssuesRequest {
                 project_id,
@@ -2907,11 +2943,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     /// One-shot per board: records the full comment history of every merge
     /// request the board already knows about.
     ///
-    /// Live polling only runs for cards in Push MR — 15 of them today — so
+    /// Live polling only runs for cards in Shipped with an open merge request, so
     /// without this the record starts from whatever is still awaiting review and
     /// misses everything that already merged. That is the wrong half: a merge
     /// request that was sent back, reworked and merged is exactly the case the
-    /// analysis is about, and it has long since left Push MR.
+    /// analysis is about, and it has long since stopped being polled.
     ///
     /// Reads the host through a workspace like the live path does, rather than
     /// deriving a remote URL from the merge-request URL. Deriving would work
@@ -3053,7 +3089,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         for (issue, _, _, number) in &pending {
             let probe = async {
                 // Unmerged is the common answer and costs one call: a card in
-                // Push MR is asked this on every sweep until someone merges it.
+                // review is asked this on every sweep until someone merges it.
                 let Some(merge_sha) = host.pr_merge_commit(&repo, *number).await? else {
                     return Ok::<_, GitHostError>(None);
                 };
@@ -3499,6 +3535,10 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 continue;
             }
             let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
+            // A triaged investigation's report is on the ticket already.
+            if metadata.is_triaged() {
+                continue;
+            }
             let Some(jira_key) = metadata.jira.as_ref().map(|jira| jira.key.clone()) else {
                 continue;
             };
@@ -3516,7 +3556,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 continue;
             }
 
-            let pull_requests: Vec<EobPr> = if stage == Stage::PushedMr {
+            let pull_requests: Vec<EobPr> = if stage == Stage::Shipped {
                 match client.list_pull_requests(issue.id).await {
                     Ok(response) => response
                         .pull_requests
@@ -3697,6 +3737,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 continue;
             }
             let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
+            // Waits on a person, but the board's "need you" says so; the
+            // digest is for what nothing else surfaces.
+            if metadata.is_triaged() {
+                continue;
+            }
             let pull_requests: Vec<PullRequestStatus> =
                 match client.list_pull_requests(issue.id).await {
                     Ok(response) => response.pull_requests.iter().map(|pr| pr.status).collect(),
@@ -3821,6 +3866,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         Ok(())
     }
 
+    /// Notices the moment a card's merge requests have landed (merged, none
+    /// still open) — the pull request is the only signal that pushed work is
+    /// finished — and acts once: the tracker's `done` transition fires, and
+    /// the card is stamped `merged_at` so the Shipped column's merge request
+    /// watch stops. An older board also moves the card from Push MR to its
+    /// Close column, as it always has; a current board leaves it in Shipped for
+    /// a person to clean up. A stamped card whose merge requests opened again
+    /// loses the stamp.
     async fn scan_merged_mrs(
         &self,
         client: &RemoteClient,
@@ -3841,20 +3894,21 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             last.insert(project_id, Instant::now());
         }
 
-        let pushed_ids: Vec<Uuid> = statuses
+        let done_ids: Vec<Uuid> = statuses
             .iter()
-            .filter(|status| Stage::from_status_name(&status.name) == Some(Stage::PushedMr))
+            .filter(|status| Stage::from_status_name(&status.name) == Some(Stage::Shipped))
             .map(|status| status.id)
             .collect();
-        let (Some(closed_status), false) = (close_status(statuses), pushed_ids.is_empty()) else {
+        if done_ids.is_empty() {
             return Ok(());
-        };
+        }
+        let closed_status = close_status(statuses);
 
         let response = client
             .search_issues(&SearchIssuesRequest {
                 project_id,
                 status_id: None,
-                status_ids: Some(pushed_ids),
+                status_ids: Some(done_ids),
                 priority: None,
                 parent_issue_id: None,
                 search: None,
@@ -3871,7 +3925,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         for issue in &response.issues {
             // A card the orchestrator has just touched keeps its backoff: the
-            // Pushed MR stage may still be mid-push, and its own merge request
+            // Shipped stage may still be mid-push, and its own merge request
             // would not be recorded yet.
             if let Some(attempted_at) = last_attempts.get(&issue.id)
                 && attempted_at.elapsed() < RETRY_BACKOFF
@@ -3891,37 +3945,107 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             };
             let pr_statuses: Vec<PullRequestStatus> =
                 pull_requests.iter().map(|pr| pr.status).collect();
-            if merge_advance(&pr_statuses) != MergeAdvance::Advance {
-                continue;
+            let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
+            match merge_step(pr_state(&pr_statuses), metadata.merged_at.is_some()) {
+                MergeStep::Wait => continue,
+                MergeStep::Reopened => {
+                    let mut blob = issue.extension_metadata.clone();
+                    if let Value::Object(map) = &mut blob {
+                        map.remove("merged_at");
+                    }
+                    if let Err(e) = client
+                        .update_issue(issue.id, &ext_metadata_update(blob))
+                        .await
+                    {
+                        warn!(
+                            "Stage orchestrator: clearing {}'s merge stamp failed: {e}",
+                            issue.simple_id
+                        );
+                    }
+                    continue;
+                }
+                MergeStep::Landed => {}
             }
             last_attempts.insert(issue.id, Instant::now());
+            let merged = pr_statuses
+                .iter()
+                .filter(|status| **status == PullRequestStatus::Merged)
+                .count();
+            info!(
+                "Stage orchestrator: {} landed — {merged} merge request(s) merged, none open",
+                issue.simple_id
+            );
 
-            let update = UpdateIssueRequest {
-                status_id: Some(closed_status.id),
-                title: None,
-                description: None,
-                priority: None,
-                start_date: None,
-                target_date: None,
-                completed_at: None,
-                sort_order: None,
-                parent_issue_id: None,
-                parent_issue_sort_order: None,
-                extension_metadata: None,
+            // The move goes first: it is a forward move, which clears the
+            // stamp, and a failed one is retried on the next sweep because
+            // nothing was stamped.
+            if let Some(closed_status) = closed_status {
+                let update = UpdateIssueRequest {
+                    status_id: Some(closed_status.id),
+                    title: None,
+                    description: None,
+                    priority: None,
+                    start_date: None,
+                    target_date: None,
+                    completed_at: None,
+                    sort_order: None,
+                    parent_issue_id: None,
+                    parent_issue_sort_order: None,
+                    extension_metadata: None,
+                };
+                match client.update_issue(issue.id, &update).await {
+                    Ok(_) => info!(
+                        "Stage orchestrator: {} moved to {}",
+                        issue.simple_id, closed_status.name
+                    ),
+                    Err(e) => {
+                        warn!(
+                            "Stage orchestrator: merge-advance move failed for {}: {e}",
+                            issue.simple_id
+                        );
+                        continue;
+                    }
+                }
+            }
+
+            // A person who took the ticket over owns its tracker status.
+            if !takeover_active(&metadata)
+                && let Some(ticket) = self.tracker_for(issue, &metadata, "merge mirroring").await
+                && let Err(e) = ticket
+                    .tracker
+                    .enter_stage(&ticket.key, TicketStage::Done)
+                    .await
+            {
+                warn!(
+                    "Stage orchestrator: could not mirror the merge onto {}: {e}",
+                    ticket.key
+                );
+            }
+
+            // Read back rather than reusing the snapshot: the move above
+            // rewrote the metadata.
+            let current = match client.get_issue(issue.id).await {
+                Ok(current) => current.extension_metadata,
+                Err(e) => {
+                    warn!(
+                        "Stage orchestrator: re-reading {} before stamping its merge failed: {e}",
+                        issue.simple_id
+                    );
+                    continue;
+                }
             };
-            match client.update_issue(issue.id, &update).await {
-                Ok(_) => info!(
-                    "Stage orchestrator: {} moved to Close — {} merge request(s) merged, none open",
-                    issue.simple_id,
-                    pr_statuses
-                        .iter()
-                        .filter(|status| **status == PullRequestStatus::Merged)
-                        .count()
-                ),
-                Err(e) => warn!(
-                    "Stage orchestrator: merge-advance move failed for {}: {e}",
+            let stamp = IssueExtMetadata {
+                merged_at: Some(Utc::now()),
+                ..Default::default()
+            };
+            if let Err(e) = client
+                .update_issue(issue.id, &ext_metadata_update(stamp.merge_into(&current)))
+                .await
+            {
+                warn!(
+                    "Stage orchestrator: stamping {}'s merge failed: {e}",
                     issue.simple_id
-                ),
+                );
             }
         }
         Ok(())
@@ -3979,6 +4103,27 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 continue;
             }
             last_attempts.insert(issue.id, Instant::now());
+
+            // Clean up's own gate, asked first so a card it would refuse is
+            // left quietly rather than refused on every sweep.
+            let statuses: Vec<PullRequestStatus> = match client.list_pull_requests(issue.id).await {
+                Ok(response) => response.pull_requests.iter().map(|pr| pr.status).collect(),
+                Err(e) => {
+                    warn!(
+                        "Stage orchestrator: retention lookup failed for {}: {e}",
+                        issue.simple_id
+                    );
+                    continue;
+                }
+            };
+            let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
+            if let Some(reason) = api_types::cleanup_block_reason(pr_state(&statuses), &metadata) {
+                debug!(
+                    "Stage orchestrator: {} kept out of Clean-up — {reason}",
+                    issue.simple_id
+                );
+                continue;
+            }
 
             let update = UpdateIssueRequest {
                 status_id: Some(cleanup_status.id),
@@ -4215,9 +4360,12 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     }
 
     /// Auto-closes epics whose subtasks are all done: an epic (work_class
-    /// epic, not yet Closed/Clean-up) with at least one subtask carrying its
-    /// Jira key in `extension_metadata.epic_key` moves to Closed once every
-    /// such subtask sits in Closed or Clean-up.
+    /// epic, not yet closed or cleaned up) with at least one subtask carrying
+    /// its Jira key in `extension_metadata.epic_key` closes once every such
+    /// subtask is done — merged (stamped `merged_at`), in an older board's
+    /// Close column, or in Clean-up. The epic moves to Close on an older
+    /// board and to Clean up on a current one: it has no pull request of its
+    /// own, so Clean up takes it.
     async fn scan_epics(
         &self,
         client: &RemoteClient,
@@ -4225,7 +4373,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         statuses: &[api_types::ProjectStatus],
         last_attempts: &mut HashMap<Uuid, Instant>,
     ) -> Result<(), StageOrchestratorError> {
-        let Some(closed_status) = close_status(statuses) else {
+        let Some(closed_status) = close_status(statuses).or_else(|| cleanup_status(statuses))
+        else {
             return Ok(());
         };
         let done_status_ids: std::collections::HashSet<Uuid> = statuses
@@ -4233,6 +4382,12 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             .filter(|status| is_close_column(&status.name) || is_cleanup_column(&status.name))
             .map(|status| status.id)
             .collect();
+        let is_done = |issue: &Issue| {
+            done_status_ids.contains(&issue.status_id)
+                || IssueExtMetadata::from_value(&issue.extension_metadata)
+                    .merged_at
+                    .is_some()
+        };
 
         // One project-wide fetch; epics and their subtasks are matched in
         // memory (extension_metadata is not server-side filterable).
@@ -4262,14 +4417,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             if let Some(epic_key) = metadata.epic_key {
                 let entry = counts.entry(epic_key).or_insert((0, 0));
                 entry.0 += 1;
-                if done_status_ids.contains(&issue.status_id) {
+                if is_done(issue) {
                     entry.1 += 1;
                 }
             }
         }
 
         for issue in &response.issues {
-            if done_status_ids.contains(&issue.status_id) {
+            if is_done(issue) {
                 continue;
             }
             let metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
@@ -4814,11 +4969,6 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         last_attempts: &mut HashMap<Uuid, Instant>,
         launch_budget: &mut u32,
     ) {
-        // Triaged is where an investigation ends: nothing runs there, and
-        // converting the card is what moves it on.
-        if stage == Stage::Triaged {
-            return;
-        }
         let project_id = settings.project_id;
         let mut metadata = IssueExtMetadata::from_value(&issue.extension_metadata);
 
@@ -4918,14 +5068,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         .await;
                 }
                 // Same reasoning for MR review comments: opening the MR
-                // claims the ticket, so Push MR's *steady* state is claimed —
+                // claims the ticket, so Shipped's *steady* state is claimed —
                 // polling only from the unclaimed launch path meant feedback
                 // was picked up in a narrow window (an MR recorded before the
                 // column move, or after a backward-then-forward gesture) and
                 // silently ignored the rest of the time. Skipped under human
-                // takeover, which pauses every injection.
-                if stage == Stage::PushedMr
+                // takeover, which pauses every injection, and once the merge
+                // landed: the card waits in Shipped for a person to clean it up.
+                if stage == Stage::Shipped
                     && metadata.mr_url.is_some()
+                    && metadata.merged_at.is_none()
                     && !takeover_active(&metadata)
                 {
                     self.poll_mr_comments(client, issue, &metadata).await;
@@ -4942,7 +5094,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 // turn that ended with a child still running is reported
                 // rather than left silent. Both pause under human takeover
                 // like every other injection.
-                if matches!(stage, Stage::Executing | Stage::Reviewing | Stage::PushedMr)
+                if matches!(stage, Stage::Executing | Stage::Reviewing | Stage::Shipped)
                     && !takeover_active(&metadata)
                 {
                     if let Err(e) = self.serve_verify_requests(client, issue, &metadata).await {
@@ -5272,7 +5424,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                         Some(workspace.id),
                     )
                 }),
-            Stage::PushedMr => self
+            Stage::Shipped => self
                 .auto_create_mr(client, issue, &metadata, &jira_key, &claimed_metadata)
                 .await
                 .map(|mr_url| (format!("MR created for {jira_key}"), mr_url, None)),
@@ -5280,8 +5432,6 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 .run_cleanup(client, issue, &metadata, &jira_key)
                 .await
                 .map(|summary| (format!("Clean-up done for {jira_key}"), summary, None)),
-            // Returned from at the top: nothing launches in Triaged.
-            Stage::Triaged => return,
         };
 
         match result {
@@ -5296,8 +5446,13 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 last_attempts.remove(&issue.id);
                 self.clear_failed_tag(client, project_id, issue).await;
                 // Work has visibly started: mirror the board state to the
-                // tracker.
-                if let Some(ticket) = self.tracker_for(issue, &metadata, "stage mirroring").await {
+                // tracker. A merged card's `done` transition fired when the
+                // merge was seen, so its clean-up does not fire it again.
+                let mirrored_at_merge = stage == Stage::Cleanup && metadata.merged_at.is_some();
+                if !mirrored_at_merge
+                    && let Some(ticket) =
+                        self.tracker_for(issue, &metadata, "stage mirroring").await
+                {
                     self.mirror_stage_to_tracker(stage, &ticket).await;
                 }
                 self.container
@@ -5527,9 +5682,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             // Reviewing is handled by `handle_review_verdict`, which runs
             // whether or not autonomy is on.
             Stage::Reviewing => Ok(()),
-            // Pushed MR and Clean-up are already fully automated, and Triaged
-            // is terminal.
-            Stage::PushedMr | Stage::Cleanup | Stage::Triaged => Ok(()),
+            // Shipped and Clean-up are already fully automated.
+            Stage::Shipped | Stage::Cleanup => Ok(()),
         };
         if let Err(e) = result {
             warn!(
@@ -5600,8 +5754,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             Stage::Planning => TicketStage::Planning,
             Stage::Executing => TicketStage::Executing,
             Stage::Reviewing => TicketStage::Reviewing,
-            Stage::PushedMr => TicketStage::PushedMr,
-            Stage::Triaged => TicketStage::Triaged,
+            Stage::Shipped => TicketStage::PushedMr,
             Stage::Cleanup => TicketStage::Done,
         };
         if let Err(e) = tracker.enter_stage(key, ticket_stage).await {
@@ -5878,8 +6031,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         // stops once execution starts.
         self.poll_jira_comments(client, issue, metadata).await;
 
-        // An investigation has no gate to pass or escalate: its report moves
-        // it to Triaged (see `triage_if_reported`), in every mode.
+        // An investigation has no gate to pass or escalate: its report marks
+        // it triaged (see `triage_if_reported`), in every mode.
         if metadata.work_class == Some(WorkClass::Investigation) {
             return Ok(());
         }
@@ -6705,7 +6858,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             // Leave behind exactly the verdict that approved this change. Push
             // MR posts its product questions on the merge request, and the key
             // is overwritten rather than cleared — so a round that recorded
-            // nothing would otherwise hand Push MR an earlier round's findings,
+            // nothing would otherwise hand Shipped an earlier round's findings,
             // already answered, to post as fresh threads.
             let consumed = IssueExtMetadata {
                 review: Some(recorded.cloned().unwrap_or_default()),
@@ -6723,7 +6876,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 );
             }
 
-            self.advance_issue(client, project_id, issue, Stage::PushedMr)
+            self.advance_issue(client, project_id, issue, Stage::Shipped)
                 .await?;
             // Name the product questions in the audit trail: they are the
             // reason a human is being handed this merge request, and the count
@@ -6731,16 +6884,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             // them on the diff.
             let questions = recorded.map_or(0, |v| v.product_questions().count());
             let note = if questions == 0 {
-                "autonomy: review approved — advanced to Push MR (a human reviews and merges)"
+                "autonomy: review approved — advanced to Shipped (a human reviews and merges)"
                     .to_string()
             } else {
                 format!(
                     "autonomy: review approved with {questions} product question(s) — advanced to \
-                     Push MR (a human reviews, merges and answers them)"
+                     Shipped (a human reviews, merges and answers them)"
                 )
             };
             self.post_autonomy_comment(client, issue, &note).await;
-            info!("Stage orchestrator: autonomy advanced {jira_key} → Push MR");
+            info!("Stage orchestrator: autonomy advanced {jira_key} → Shipped");
             self.container
                 .notification_service()
                 .notify(
@@ -8520,9 +8673,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     }
 
     /// Once a taken-over ticket's in-flight stage has finished, park it in
-    /// Close: the board then reads "orchestrator done — the human owns this
-    /// in Jira". Clean-up automation stays takeover-gated, so parking never
-    /// fires the Jira→Done transition or workspace archiving.
+    /// an older board's Close column: the board then reads "orchestrator done
+    /// — the human owns this in Jira". A current board has no such column and
+    /// the card stays where it is, wearing its taken-over tag. Clean-up
+    /// automation stays takeover-gated, so parking never fires the Jira→Done
+    /// transition or workspace archiving.
     ///
     /// Reached on every scan of a paused ticket, so it is throttled: the
     /// question it answers — has the in-flight turn finished — costs a status
@@ -8548,11 +8703,12 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         let done = match stage {
             // Clean-up runs under takeover and is already the last column;
-            // parking it backwards into Close would undo a human's move. A
-            // triaged card is finished already.
-            Stage::Cleanup | Stage::Triaged => return,
-            // Nothing runs in Push MR once the takeover gate is up.
-            Stage::PushedMr => true,
+            // parking it backwards into Close would undo a human's move.
+            Stage::Cleanup => return,
+            // A triaged investigation is finished already.
+            Stage::Planning if metadata.is_triaged() => return,
+            // Nothing runs in Shipped once the takeover gate is up.
+            Stage::Shipped => true,
             Stage::Planning => {
                 let verdict_recorded = metadata
                     .planning
@@ -8969,9 +9125,11 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     }
 
     /// Finishes an investigation in Planning once its `TRIAGE REPORT` comment
-    /// is on the card: records the report, sends `investigation_completed`
-    /// once, copies the report onto the tracker ticket, and moves the card to
-    /// Triaged. Nothing waits on an approval, in any autonomy mode.
+    /// is on the card: records the report (which is what makes the card
+    /// triaged), sends `investigation_completed` once, copies the report onto
+    /// the tracker ticket, and finishes the triage on the board (see
+    /// [`Self::finish_triage`]). Nothing waits on an approval, in any autonomy
+    /// mode.
     ///
     /// Each step is stamped on the card's `triage` record, so a tick that
     /// fails part-way resumes where it stopped. Returns whether this tick
@@ -8984,6 +9142,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         issue: &Issue,
         metadata: &IssueExtMetadata,
     ) -> bool {
+        // Finished: the card waits, triaged, for a person.
+        if metadata
+            .triage
+            .as_ref()
+            .is_some_and(|triage| triage.completed_at.is_some())
+        {
+            return false;
+        }
         let project_id = settings.project_id;
         let jira_key = jira_key_for(issue, metadata);
         let mut blob = issue.extension_metadata.clone();
@@ -9019,6 +9185,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     recorded_at: Utc::now(),
                     notified_at: None,
                     tracker_posted_at: None,
+                    completed_at: None,
                 };
                 blob = with_triage(&blob, &record);
                 if let Err(e) = client
@@ -9062,8 +9229,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     stamped = true;
                 }
                 Err(e) => {
-                    // Held in Planning until the ticket has it: once the card
-                    // is in Triaged nothing would try again.
+                    // The triage stays unfinished until the ticket has it:
+                    // once it is finished nothing would try again.
                     warn!(
                         "Stage orchestrator: posting {}'s triage report to {} failed (will retry): {e}",
                         issue.simple_id, ticket.key
@@ -9075,7 +9242,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         if stamped {
             blob = with_triage(&blob, &triage);
             match client
-                .update_issue(issue.id, &ext_metadata_update(blob))
+                .update_issue(issue.id, &ext_metadata_update(blob.clone()))
                 .await
             {
                 Ok(_) => changed = true,
@@ -9088,9 +9255,23 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         if tracker_pending {
             return changed;
         }
-        self.move_to_triaged(client, project_id, issue, metadata)
+        if self
+            .finish_triage(client, project_id, issue, metadata)
             .await
-            || changed
+        {
+            triage.completed_at = Some(Utc::now());
+            match client
+                .update_issue(issue.id, &ext_metadata_update(with_triage(&blob, &triage)))
+                .await
+            {
+                Ok(_) => changed = true,
+                Err(e) => warn!(
+                    "Stage orchestrator: stamping {}'s finished triage failed: {e}",
+                    issue.simple_id
+                ),
+            }
+        }
+        changed
     }
 
     /// The harness's worktree-relative path, when it is still on disk in the
@@ -9167,19 +9348,19 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
     }
 
-    /// Moves a triaged investigation into the Triaged column. A board without
-    /// one keeps the card in Planning, tagged `needs-column`, and says so once
-    /// per card: the column is the board owner's to add. Returns whether the
-    /// card moved.
-    async fn move_to_triaged(
+    /// Finishes a triage on the board: a board that keeps a Triaged column
+    /// gets the card moved there, any other keeps it in Plan, where its
+    /// triaged state is what the board shows; the tracker's `triaged` status
+    /// is mirrored and one audit line posted either way. Returns whether it
+    /// finished — `false` only when a column lookup or the move failed, to be
+    /// tried again on the next tick.
+    async fn finish_triage(
         &self,
         client: &RemoteClient,
         project_id: Uuid,
         issue: &Issue,
         metadata: &IssueExtMetadata,
     ) -> bool {
-        static NEEDS_COLUMN_LOGGED: LazyLock<Mutex<HashSet<Uuid>>> =
-            LazyLock::new(Default::default);
         let statuses = match client.list_project_statuses(project_id).await {
             Ok(response) => response.project_statuses,
             Err(e) => {
@@ -9190,57 +9371,62 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 return false;
             }
         };
-        let Some(triaged) = statuses
+        let column = statuses
             .iter()
-            .find(|status| Stage::from_status_name(&status.name) == Some(Stage::Triaged))
-        else {
-            if NEEDS_COLUMN_LOGGED.lock().unwrap().insert(issue.id) {
+            .find(|status| is_triaged_column(&status.name));
+        if let Some(column) = column
+            && column.id != issue.status_id
+        {
+            let request = UpdateIssueRequest {
+                status_id: Some(column.id),
+                title: None,
+                description: None,
+                priority: None,
+                start_date: None,
+                target_date: None,
+                completed_at: None,
+                sort_order: None,
+                parent_issue_id: None,
+                parent_issue_sort_order: None,
+                extension_metadata: None,
+            };
+            if let Err(e) = client.update_issue(issue.id, &request).await {
                 warn!(
-                    "Stage orchestrator: {} has its triage report, but board {project_id} has no \
-                     Triaged column; it stays in Planning tagged '{NEEDS_COLUMN_TAG_NAME}' until \
-                     one is added between Plan and Execute",
-                    issue.simple_id
+                    "Stage orchestrator: moving {} to {} failed: {e}",
+                    issue.simple_id, column.name
                 );
-                self.link_named_tag(client, project_id, issue, NEEDS_COLUMN_TAG_NAME)
-                    .await;
+                return false;
             }
-            return false;
+        }
+        let note = match column {
+            Some(column) => format!(
+                "triage: report recorded — moved to {}; convert the card to a bug to fix it, or \
+                 close it",
+                column.name
+            ),
+            None => "triage: report recorded — triaged in Plan; convert the card to a bug to fix \
+                     it, or close it"
+                .to_string(),
         };
-        let request = UpdateIssueRequest {
-            status_id: Some(triaged.id),
-            title: None,
-            description: None,
-            priority: None,
-            start_date: None,
-            target_date: None,
-            completed_at: None,
-            sort_order: None,
-            parent_issue_id: None,
-            parent_issue_sort_order: None,
-            extension_metadata: None,
-        };
-        if let Err(e) = client.update_issue(issue.id, &request).await {
+        self.post_autonomy_comment(client, issue, &note).await;
+        if let Some(ticket) = self.tracker_for(issue, metadata, "triage mirroring").await
+            && let Err(e) = ticket
+                .tracker
+                .enter_stage(&ticket.key, TicketStage::Triaged)
+                .await
+        {
             warn!(
-                "Stage orchestrator: moving {} to Triaged failed: {e}",
-                issue.simple_id
+                "Stage orchestrator: could not mirror the triage onto {}: {e}",
+                ticket.key
             );
-            return false;
         }
-        // The tag may predate this process, so it is cleared whether or not
-        // this run put it there.
-        NEEDS_COLUMN_LOGGED.lock().unwrap().remove(&issue.id);
-        self.unlink_named_tag(client, project_id, issue, NEEDS_COLUMN_TAG_NAME)
-            .await;
-        self.post_autonomy_comment(
-            client,
-            issue,
-            "triage: report recorded — moved to Triaged; convert the card to a bug to fix it",
-        )
-        .await;
-        if let Some(ticket) = self.tracker_for(issue, metadata, "stage mirroring").await {
-            self.mirror_stage_to_tracker(Stage::Triaged, &ticket).await;
-        }
-        info!("Stage orchestrator: {} moved to Triaged", issue.simple_id);
+        info!(
+            "Stage orchestrator: {} triaged{}",
+            issue.simple_id,
+            column
+                .map(|column| format!(", moved to {}", column.name))
+                .unwrap_or_default()
+        );
         true
     }
 
@@ -9392,7 +9578,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
     }
 
-    /// Push MR comment watcher: new human comments on the MR are
+    /// Shipped-column comment watcher: new human comments on an open MR are
     /// injected into the impl agent as a follow-up, so review feedback is
     /// addressed without anyone relaying it. Bot authors (see
     /// [`is_bot_login`]) and already-delivered comments (autonomy
@@ -9603,7 +9789,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
     }
 
-    /// Push MR conflict watcher (autonomy Full only): a merge request the host
+    /// Shipped-column conflict watcher (autonomy Full only): a merge request the host
     /// reports as conflicting with (or behind) its target is handed back to the
     /// implementing agent to rebase, once per head commit.
     ///
@@ -9796,7 +9982,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
     }
 
-    /// Push MR pipeline watcher (autonomy Full only): a red pipeline on the MR
+    /// Shipped-column pipeline watcher (autonomy Full only): a red pipeline on the MR
     /// gets one automatic fix attempt per head commit, capped at
     /// [`PIPELINE_FIX_MAX_ROUNDS`].
     ///
@@ -10627,7 +10813,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         // human to commit (or discard) and move the ticket again.
         if has_uncommitted_changes(&worktree_path) {
             return Err(StageOrchestratorError::Other(format!(
-                "worktree {} has uncommitted changes — commit or discard them, then move the ticket to Push MR again",
+                "worktree {} has uncommitted changes — commit or discard them, then move the ticket to Shipped again",
                 worktree_path.display()
             )));
         }
@@ -10643,7 +10829,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         })?;
         if !artefacts.is_empty() {
             return Err(StageOrchestratorError::Other(format!(
-                "{} Then move the ticket to Push MR again.",
+                "{} Then move the ticket to Shipped again.",
                 repro_artefacts_message(&artefacts)
             )));
         }
@@ -11039,8 +11225,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         // Active columns only: every stage that runs an agent, plus To Do
         // (a question asked before work starts still deserves an answer).
-        // Close/Deployed and Clean-up are excluded — `scan_comment_triage`
-        // owns those, and it answers any comment there, not just mentions.
+        // An older board's Close/Deployed and Clean-up are excluded —
+        // `scan_comment_triage` owns those, and it answers any comment there,
+        // not just mentions.
         let active_ids: Vec<Uuid> = statuses
             .iter()
             .filter(|status| {
@@ -11069,7 +11256,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         // Triage owns shipped tickets and answers any comment on them, not
         // just mentions. An active column is no longer enough to tell the two
-        // apart: a card in Push MR whose ticket is already Merged belongs to
+        // apart: a card in Shipped whose ticket is already Merged belongs to
         // triage, and without this both sweeps would reply in one thread.
         let shipped = self.shipped_jira_keys(tracker.as_ref()).await;
 
@@ -11355,8 +11542,8 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         // Finished work answers to two vocabularies and neither contains the
         // other. The board column says how far the card got; the Jira status
-        // says what the team recorded. A card sits in Push MR for as long as it
-        // takes a human to merge and advance it, while Jira may already say
+        // says what the team recorded. A card sits in Shipped for as long as it
+        // takes a human to merge and clean it up, while Jira may already say
         // Merged; a card reaches Deployed whether or not anyone moved the
         // ticket past In Progress. Both are shipped to the person who filed the
         // bug, so triage answers on either.
@@ -12171,7 +12358,7 @@ fn takeover_active(metadata: &IssueExtMetadata) -> bool {
 
 /// The takeover note's second sentence: what, if anything, still runs after
 /// the pause. Only Planning has an RCA still to land; past it the RCA is
-/// already on the ticket, and in Pushed MR nothing is in flight at all
+/// already on the ticket, and in Shipped nothing is in flight at all
 /// (BUG-10692 was told an RCA was coming six days after it had arrived).
 fn what_still_runs(stage: Stage) -> &'static str {
     match stage {
@@ -12181,9 +12368,8 @@ fn what_still_runs(stage: Stage) -> &'static str {
         Stage::Executing | Stage::Reviewing => {
             "The run in progress finishes; nothing advances after that."
         }
-        Stage::PushedMr => "The merge request stays as it is for you; nothing advances.",
+        Stage::Shipped => "The merge request stays as it is for you; nothing advances.",
         Stage::Cleanup => "Clean-up finishes; nothing else runs.",
-        Stage::Triaged => "The triage report is already here; nothing else runs.",
     }
 }
 
@@ -12313,7 +12499,7 @@ fn status_tag_color(tag_name: &str) -> &'static str {
     match name.as_str() {
         FAILED_TAG_NAME => "0 84% 60%",
         TAKEN_OVER_TAG_NAME => "32 95% 44%",
-        NEEDS_REPLAN_TAG_NAME | NEEDS_COLUMN_TAG_NAME => "45 93% 47%",
+        NEEDS_REPLAN_TAG_NAME => "45 93% 47%",
         "bug" => "355 65% 53%",
         "investigation" => "188 78% 41%",
         "story" => "124 82% 30%",
@@ -12394,8 +12580,8 @@ impl<C: ContainerService + Send + Sync + 'static> DecisionHost for StageOrchestr
             Some(Stage::Planning) => CardStage::Planning,
             Some(Stage::Executing) => CardStage::Executing,
             Some(Stage::Reviewing) => CardStage::Reviewing,
-            Some(Stage::PushedMr) => CardStage::PushedMr,
-            Some(Stage::Cleanup | Stage::Triaged) | None => CardStage::Other,
+            Some(Stage::Shipped) => CardStage::Shipped,
+            Some(Stage::Cleanup) | None => CardStage::Other,
         };
         let reference = IssueExtMetadata::from_value(&issue.extension_metadata)
             .jira
@@ -12449,7 +12635,7 @@ impl<C: ContainerService + Send + Sync + 'static> DecisionHost for StageOrchestr
             CardStage::Planning => Stage::Planning,
             CardStage::Executing => Stage::Executing,
             CardStage::Reviewing => Stage::Reviewing,
-            CardStage::PushedMr => Stage::PushedMr,
+            CardStage::Shipped => Stage::Shipped,
             CardStage::Other => {
                 return Err(DecisionError::Failed(
                     "a decision only moves a card between Prepcook's own columns".to_string(),
@@ -12659,33 +12845,42 @@ mod tests {
 
     use super::*;
 
+    fn step(statuses: &[PullRequestStatus], stamped: bool) -> MergeStep {
+        merge_step(pr_state(statuses), stamped)
+    }
+
     #[test]
-    fn a_merged_mr_with_nothing_open_advances_the_card() {
+    fn a_merged_mr_with_nothing_open_lands_the_card_once() {
+        assert_eq!(step(&[PullRequestStatus::Merged], false), MergeStep::Landed);
         assert_eq!(
-            merge_advance(&[PullRequestStatus::Merged]),
-            MergeAdvance::Advance
+            step(
+                &[PullRequestStatus::Merged, PullRequestStatus::Closed],
+                false
+            ),
+            MergeStep::Landed
         );
-        assert_eq!(
-            merge_advance(&[PullRequestStatus::Merged, PullRequestStatus::Closed]),
-            MergeAdvance::Advance
-        );
+        // Stamped already: the tracker transition and the move are not
+        // repeated on every sweep while the card waits in Shipped.
+        assert_eq!(step(&[PullRequestStatus::Merged], true), MergeStep::Wait);
     }
 
     #[test]
     fn an_open_mr_holds_the_card() {
         assert_eq!(
-            merge_advance(&[PullRequestStatus::Merged, PullRequestStatus::Open]),
-            MergeAdvance::Wait
+            step(&[PullRequestStatus::Merged, PullRequestStatus::Open], false),
+            MergeStep::Wait
+        );
+        // A stamped card whose merge request opened again is watched again.
+        assert_eq!(
+            step(&[PullRequestStatus::Merged, PullRequestStatus::Open], true),
+            MergeStep::Reopened
         );
     }
 
     #[test]
     fn a_card_with_nothing_merged_waits_for_a_human() {
-        assert_eq!(merge_advance(&[]), MergeAdvance::Wait);
-        assert_eq!(
-            merge_advance(&[PullRequestStatus::Closed]),
-            MergeAdvance::Wait
-        );
+        assert_eq!(step(&[], false), MergeStep::Wait);
+        assert_eq!(step(&[PullRequestStatus::Closed], false), MergeStep::Wait);
     }
 
     #[test]
@@ -12947,7 +13142,7 @@ mod tests {
     #[test]
     fn an_open_merge_request_outranks_one_that_already_merged() {
         let state = eob_state(
-            Stage::PushedMr,
+            Stage::Shipped,
             true,
             None,
             &[
@@ -13074,13 +13269,13 @@ mod tests {
     fn a_merge_request_waiting_for_days_stops_reading_as_routine() {
         // Freshly opened: the digest's "to merge" line is where it belongs.
         assert_eq!(
-            classify(Stage::PushedMr, None, &[PullRequestStatus::Open], None),
+            classify(Stage::Shipped, None, &[PullRequestStatus::Open], None),
             DigestSection::NeedsMerge
         );
         // Open for days with nobody noticing. This is BUG-10332 as it looked
         // to everyone except the reporter, who noticed first and asked four
         // times.
-        let stalled = classify(Stage::PushedMr, None, &[PullRequestStatus::Open], Some(6));
+        let stalled = classify(Stage::Shipped, None, &[PullRequestStatus::Open], Some(6));
         match stalled {
             DigestSection::NotMoving(reason) => {
                 assert!(reason.contains("6 business days"), "{reason}");
@@ -13184,7 +13379,7 @@ mod tests {
     #[test]
     fn a_commenter_turns_waiting_into_in_review() {
         let state = eob_state(
-            Stage::PushedMr,
+            Stage::Shipped,
             true,
             None,
             &[pr(9632, PullRequestStatus::Open)],
@@ -13205,7 +13400,7 @@ mod tests {
     fn push_mr_distinguishes_a_closed_attempt_from_no_attempt() {
         assert_eq!(
             eob_state(
-                Stage::PushedMr,
+                Stage::Shipped,
                 true,
                 None,
                 &[pr(9538, PullRequestStatus::Closed)],
@@ -13214,7 +13409,7 @@ mod tests {
             Some(EobState::ClosedUnmerged)
         );
         assert_eq!(
-            eob_state(Stage::PushedMr, true, None, &[], None),
+            eob_state(Stage::Shipped, true, None, &[], None),
             Some(EobState::Stalled)
         );
     }
@@ -13222,7 +13417,7 @@ mod tests {
     #[test]
     fn a_merge_without_a_recorded_date_still_reports_the_merge() {
         let state = eob_state(
-            Stage::PushedMr,
+            Stage::Shipped,
             true,
             None,
             &[pr(9538, PullRequestStatus::Merged)],
@@ -13244,7 +13439,7 @@ mod tests {
     #[test]
     fn every_column_but_cleanup_retires_when_jira_is_done() {
         for column in [
-            "To Do", "Plan", "Execute", "Review", "Push MR", "Close", "Deployed",
+            "To Do", "Plan", "Execute", "Review", "Shipped", "Done", "Push MR", "Close", "Deployed",
         ] {
             assert!(
                 retires_on_jira_done(column),
@@ -13272,7 +13467,7 @@ mod tests {
     #[test]
     fn an_open_merge_request_is_what_needs_a_human() {
         assert_eq!(
-            classify(Stage::PushedMr, None, &[PullRequestStatus::Open], None),
+            classify(Stage::Shipped, None, &[PullRequestStatus::Open], None),
             DigestSection::NeedsMerge
         );
     }
@@ -13280,7 +13475,7 @@ mod tests {
     #[test]
     fn a_merged_card_in_push_mr_is_left_to_the_merge_sweep() {
         assert_eq!(
-            classify(Stage::PushedMr, None, &[PullRequestStatus::Merged], None),
+            classify(Stage::Shipped, None, &[PullRequestStatus::Merged], None),
             DigestSection::InFlight
         );
     }
@@ -13288,11 +13483,11 @@ mod tests {
     #[test]
     fn push_mr_without_a_live_merge_request_is_stalled() {
         assert!(matches!(
-            classify(Stage::PushedMr, None, &[], None),
+            classify(Stage::Shipped, None, &[], None),
             DigestSection::NotMoving(_)
         ));
         assert!(matches!(
-            classify(Stage::PushedMr, None, &[PullRequestStatus::Closed], None),
+            classify(Stage::Shipped, None, &[PullRequestStatus::Closed], None),
             DigestSection::NotMoving(_)
         ));
     }
@@ -13884,7 +14079,7 @@ mod tests {
         for stage in [
             Stage::Executing,
             Stage::Reviewing,
-            Stage::PushedMr,
+            Stage::Shipped,
             Stage::Cleanup,
         ] {
             assert!(!what_still_runs(stage).contains("RCA"), "{stage:?}");
@@ -14178,7 +14373,7 @@ mod tests {
             gate_block_reason(WorkClass::Investigation, &approved).as_deref(),
             Some("investigation cards do not execute; convert to a bug first")
         );
-        for stage in [Stage::Executing, Stage::Reviewing, Stage::PushedMr] {
+        for stage in [Stage::Executing, Stage::Reviewing, Stage::Shipped] {
             assert_eq!(
                 launch_plan(stage, &approved, &playbooks),
                 LaunchPlan::Skip(Some(INVESTIGATION_GATE_REASON.to_string())),
@@ -14187,10 +14382,6 @@ mod tests {
         }
         // The same verdict on a bug passes: the class is what refuses.
         assert!(executing_gate_passes(WorkClass::Bug, &approved));
-        assert_eq!(
-            launch_plan(Stage::Triaged, &approved, &playbooks),
-            LaunchPlan::Skip(None)
-        );
     }
 
     /// A pattern review keeps its own playbook, whatever its class.
@@ -14280,18 +14471,128 @@ mod tests {
     }
 
     #[test]
-    fn the_triaged_column_is_recognised() {
-        for name in ["Triaged", " triaged ", "TRIAGED"] {
+    fn shipped_is_read_under_its_new_and_old_names() {
+        for name in [
+            "Shipped",
+            " shipped ",
+            "Done",
+            " done ",
+            "Push MR",
+            "pushed mr",
+            "PUSHED MR",
+        ] {
             assert_eq!(
                 Stage::from_status_name(name),
-                Some(Stage::Triaged),
+                Some(Stage::Shipped),
                 "{name}"
             );
         }
-        assert_eq!(Stage::Triaged.title(), "Triaged");
+        for (name, stage) in [
+            ("Plan", Stage::Planning),
+            ("Planning", Stage::Planning),
+            ("Execute", Stage::Executing),
+            ("Review", Stage::Reviewing),
+            ("Clean up", Stage::Cleanup),
+            ("Clean-up", Stage::Cleanup),
+        ] {
+            assert_eq!(Stage::from_status_name(name), Some(stage), "{name}");
+        }
+        // An older board's Close is the merged column the merge sweep moves
+        // cards into, not a stage that launches anything.
+        for name in ["Close", "Closed", "Deployed"] {
+            assert_eq!(Stage::from_status_name(name), None, "{name}");
+            assert!(is_close_column(name), "{name}");
+        }
+        assert_eq!(Stage::Shipped.title(), "Shipped");
+        // The tracker mapping and playbook keys keep their names.
+        assert_eq!(Stage::Shipped.key(), "pushed_mr");
+    }
+
+    /// Triage is a state of the card, not a column: no stage answers to a
+    /// Triaged column, and a board that keeps one is found by name.
+    #[test]
+    fn a_triaged_column_is_not_a_stage() {
+        for name in ["Triaged", " triaged ", "TRIAGED"] {
+            assert_eq!(Stage::from_status_name(name), None, "{name}");
+            assert!(is_triaged_column(name), "{name}");
+        }
+        assert!(!is_triaged_column("Plan"));
+    }
+
+    fn triaged_investigation() -> IssueExtMetadata {
+        IssueExtMetadata {
+            work_class: Some(WorkClass::Investigation),
+            triage: Some(api_types::TriageRecord {
+                report: api_types::parse_triage_report(
+                    "TRIAGE REPORT\n## What happens\nx\n## Why\ny\n## Confidence\nhigh",
+                )
+                .expect("a report"),
+                confidence: Some(ConfidenceLevel::High),
+                harness: None,
+                comment_id: None,
+                recorded_at: Utc::now(),
+                notified_at: Some(Utc::now()),
+                tracker_posted_at: None,
+                completed_at: Some(Utc::now()),
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// A triaged investigation in Plan is finished: nothing launches for it,
+    /// the reporter gets no daily update, and the digest leaves it to the
+    /// board's "need you".
+    #[test]
+    fn a_triaged_investigation_rests_in_plan() {
+        let metadata = triaged_investigation();
+        assert!(metadata.is_triaged());
         assert_eq!(
-            classify(Stage::Triaged, None, &[], Some(9)),
-            DigestSection::InFlight
+            launch_plan(Stage::Executing, &metadata, &BTreeMap::new()),
+            LaunchPlan::Skip(Some(INVESTIGATION_GATE_REASON.to_string()))
+        );
+        // Converted, it is a bug with its triage on record and no longer
+        // triaged.
+        let converted = IssueExtMetadata {
+            work_class: Some(WorkClass::Bug),
+            ..triaged_investigation()
+        };
+        assert!(!converted.is_triaged());
+        // Without a report it is still being investigated.
+        let investigating = IssueExtMetadata {
+            triage: None,
+            ..triaged_investigation()
+        };
+        assert!(!investigating.is_triaged());
+    }
+
+    /// A merged card in Shipped has nothing left to open or watch; one with an
+    /// open merge request is watched, and one with none yet opens it.
+    #[test]
+    fn done_launches_from_the_pull_request_state() {
+        let playbooks = BTreeMap::new();
+        let bug = IssueExtMetadata {
+            work_class: Some(WorkClass::Bug),
+            ..Default::default()
+        };
+        assert_eq!(
+            launch_plan(Stage::Shipped, &bug, &playbooks),
+            LaunchPlan::Launch(None)
+        );
+        let open = IssueExtMetadata {
+            mr_url: Some("https://github.com/acme/pantry/pull/7".to_string()),
+            ..bug.clone()
+        };
+        assert_eq!(
+            launch_plan(Stage::Shipped, &open, &playbooks),
+            LaunchPlan::WatchMr
+        );
+        let merged = IssueExtMetadata {
+            merged_at: Some(Utc::now()),
+            ..open
+        };
+        assert_eq!(
+            launch_plan(Stage::Shipped, &merged, &playbooks),
+            LaunchPlan::Skip(None)
         );
     }
 
@@ -14308,7 +14609,7 @@ mod tests {
         }
     }
 
-    /// The report that moves a card to Triaged is the newest one posted in
+    /// The report that marks a card triaged is the newest one posted in
     /// this planning run: one left by a run before a re-plan does not count,
     /// and the comment-reply agent's `TRIAGE:` line is not a report.
     #[test]
@@ -14344,6 +14645,7 @@ mod tests {
             recorded_at: Utc::now(),
             notified_at: None,
             tracker_posted_at: None,
+            completed_at: None,
         };
         let written = with_triage(&blob, &record);
         assert_eq!(written["foreign"], true);
@@ -14418,7 +14720,7 @@ mod tests {
     fn a_board_only_card_still_opens_its_pull_request() {
         let playbooks = crate::services::config::playbooks::default_playbooks();
         assert_eq!(
-            launch_plan(Stage::PushedMr, &board_only_bug(), &playbooks),
+            launch_plan(Stage::Shipped, &board_only_bug(), &playbooks),
             LaunchPlan::Launch(None)
         );
         let opened = IssueExtMetadata {
@@ -14426,7 +14728,7 @@ mod tests {
             ..board_only_bug()
         };
         assert_eq!(
-            launch_plan(Stage::PushedMr, &opened, &playbooks),
+            launch_plan(Stage::Shipped, &opened, &playbooks),
             LaunchPlan::WatchMr
         );
         assert_eq!(
@@ -14435,7 +14737,7 @@ mod tests {
         );
         // A card outside the workflow is left alone past Plan.
         assert_eq!(
-            launch_plan(Stage::PushedMr, &IssueExtMetadata::default(), &playbooks),
+            launch_plan(Stage::Shipped, &IssueExtMetadata::default(), &playbooks),
             LaunchPlan::Skip(None)
         );
     }

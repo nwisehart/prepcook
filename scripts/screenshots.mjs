@@ -20,13 +20,21 @@
 //     on the board service the way Settings → Projects does (POST /v1/projects
 //     with the owner token from GET /api/auth/token; the token is never
 //     printed), which gives it the default columns;
-//   - files six cards with POST /api/cards and moves each to its column with
-//     PATCH /api/remote/issues/{id} (one each in To Do, Plan, Triaged,
-//     Execute, Review and Close), and posts their comments with
-//     POST /api/remote/issue_comments: the Plan card gets a REPRODUCTION
-//     comment and an RCA comment, the Triaged card a TRIAGE REPORT, the
-//     Review card a REVIEW comment (texts in scripts/fixtures/). A card whose
-//     title is already on the board is left alone, so seeding twice is safe;
+//   - files six cards with POST /api/cards and walks each to its column one
+//     move at a time with PATCH /api/remote/issues/{id}, as the workflow
+//     rules require: one in To Do, two in Plan (a bug waiting at the gate and
+//     a triaged investigation), one each in Execute and Review, and one in
+//     Shipped with its pull request merged. It posts their comments with
+//     POST /api/remote/issue_comments: the bug in Plan gets a REPRODUCTION
+//     comment and an RCA comment, the investigation a TRIAGE REPORT, the
+//     Review card a REVIEW comment (texts in scripts/fixtures/). The states
+//     the board reads go in the card's metadata (the same PATCH): the bug's
+//     planning verdict, the investigation's triage record and the Shipped
+//     card's `merged_at`. The Shipped card's merged pull request is recorded
+//     on the board service (POST /v1/pull_requests with the owner token; it
+//     points at the demo repository's pull request #1, which need not exist).
+//     A card whose title is already on the board is left alone, so seeding
+//     twice is safe;
 //   - adds one webhook notification target (http://127.0.0.1:4999/, every
 //     event) with PUT /api/config, only when no target is configured.
 // Seeding refuses to run while the orchestrator is on (Settings → Orchestrator
@@ -69,8 +77,10 @@ const BOARD_COLOR = '145 45% 38%';
 const WEBHOOK_URL = 'http://127.0.0.1:4999/';
 const MASK_CLASS = 'prepcook-shot-mask';
 
-// The six seeded cards, one per column. `column` is the column's status word
-// (crates/services/src/services/cards.rs `status_word`).
+// The six seeded cards. `column` is the column's status word
+// (crates/services/src/services/cards.rs `status_word`; Shipped is
+// `pushed_mr`), and `metadata` builds what the card's state needs on top of
+// what filing it wrote.
 const CARDS = {
   backlog: {
     column: 'backlog',
@@ -85,9 +95,21 @@ const CARDS = {
     work_class: 'bug',
     // The description is the demo repository's BUG.md, below its title.
     comments: ['pantry-reproduction.md', 'pantry-rca.md'],
+    // Waiting at the gate: the RCA's verdict is in and nobody approved it.
+    metadata: (now) => ({
+      planning: {
+        kind: 'rca',
+        confidence: 'high',
+        open_questions: 0,
+        summary:
+          'Sharing looks the email up case-sensitively, so a differently capitalised address finds nobody.',
+        recorded_at: now,
+      },
+    }),
   },
   triaged: {
-    column: 'triaged',
+    // Triaged is the card's state: it stays in Plan.
+    column: 'planning',
     title: 'Items my partner ticked off still show as to buy',
     work_class: 'investigation',
     origin: {
@@ -98,6 +120,15 @@ const CARDS = {
     description:
       'From #pantry-help: "Ben was in the shop ticking things off on his phone, and on my laptop at home the list still said everything was to buy. Is the sharing broken?"',
     comments: ['pantry-triage-report.md'],
+    metadata: (now) => ({
+      triage: {
+        report: triageReport(fixture('pantry-triage-report.md', {})),
+        confidence: 'high',
+        recorded_at: now,
+        notified_at: now,
+        completed_at: now,
+      },
+    }),
   },
   executing: {
     column: 'executing',
@@ -114,21 +145,28 @@ const CARDS = {
       'Under **Manage**, renaming a list to spaces only reloads the page with the old name and no message. It should keep the old name and say that a list needs a name.',
     comments: ['pantry-review.md'],
   },
-  closed: {
-    column: 'closed',
+  done: {
+    column: 'pushed_mr',
     title: 'Sign-in rejects an email typed with a trailing space',
     work_class: 'bug',
     description:
       'Pasting the email from the welcome message adds a trailing space, and sign-in answers "Wrong email or password."',
+    pullRequest: { number: 1, status: 'merged' },
+    metadata: (now) => ({ merged_at: now }),
   },
 };
+
+// The columns a card walks through, in order: the workflow moves one column
+// at a time.
+const WALK = ['backlog', 'planning', 'executing', 'reviewing', 'pushed_mr'];
 
 // Every shot: the file stem, what it shows, where it is used, and how to
 // reach it. `take` gets the page and the resolved board.
 const SHOTS = [
   {
     name: 'board',
-    shows: 'The Pantry board with the six seeded cards',
+    shows:
+      'The Pantry board: To Do, Plan (a bug at the gate and a triaged investigation), Execute, Review and Shipped (merged)',
     usedIn: 'README: under the opening paragraph',
     take: async (page, ctx) => {
       requireBoard(ctx);
@@ -154,7 +192,8 @@ const SHOTS = [
   },
   {
     name: 'card-triaged',
-    shows: 'The Triaged investigation open, its TRIAGE REPORT in view',
+    shows:
+      'The triaged investigation in Plan, its amber header and TRIAGE REPORT in view',
     usedIn: 'none yet (docs/method.md#investigations)',
     take: async (page, ctx) => {
       const card = requireCard(ctx, 'triaged');
@@ -425,7 +464,8 @@ function statusWord(column) {
   if (name === 'triaged') return 'triaged';
   if (['execute', 'executing'].includes(name)) return 'executing';
   if (['review', 'reviewing'].includes(name)) return 'reviewing';
-  if (['push mr', 'pushed mr'].includes(name)) return 'pushed_mr';
+  if (['shipped', 'done', 'push mr', 'pushed mr'].includes(name))
+    return 'pushed_mr';
   if (['close', 'closed', 'deployed'].includes(name)) return 'closed';
   if (['clean up', 'clean-up', 'cleanup'].includes(name)) return 'cleanup';
   return 'other';
@@ -466,6 +506,78 @@ async function createBoard(client, info) {
   const board = await findBoard(client);
   if (!board) throw new Fatal(`"${BOARD_NAME}" was created but is not listed`);
   return board;
+}
+
+// Records the card's pull request on the board service, the way the
+// orchestrator does once it has opened one. The URL names the demo
+// repository's remote; nothing on the host is read.
+async function recordPullRequest(client, info, repo, issueId, card) {
+  const base = info.shared_api_base;
+  if (!base) throw new Fatal('the server reports no board address');
+  const { access_token: ownerToken } = await client.data(
+    'GET',
+    '/api/auth/token'
+  );
+  const { number, status } = card.pullRequest;
+  const response = await fetch(new URL('/v1/pull_requests', base), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ownerToken}`,
+    },
+    body: JSON.stringify({
+      url: `${repoWebUrl(repo)}/pull/${number}`,
+      number,
+      status,
+      merged_at: status === 'merged' ? new Date().toISOString() : null,
+      merge_commit_sha: null,
+      target_branch_name: 'main',
+      issue_id: issueId,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    console.warn(
+      `seed: the board refused the pull request for "${card.title}" (${response.status}); the card shows no chip`
+    );
+  }
+}
+
+// The demo repository's web URL from its `origin`, for the seeded pull
+// request's link.
+function repoWebUrl(repo) {
+  try {
+    const remote = execFileSync(
+      'git',
+      ['-C', repo, 'remote', 'get-url', 'origin'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    ).trim();
+    const match = remote.match(/github\.com[:/]([^/]+\/[^/.]+)/);
+    if (match) return `https://github.com/${match[1]}`;
+  } catch {
+    // Falls through to the upstream demo repository.
+  }
+  return 'https://github.com/nwisehart/prepcook-demo';
+}
+
+// A TRIAGE REPORT comment's sections, as the orchestrator records them
+// (`parse_triage_report`).
+function triageReport(markdown) {
+  const section = (heading) => {
+    const match = markdown.match(
+      new RegExp(`## ${heading}\\n+([\\s\\S]*?)(?=\\n## |$)`)
+    );
+    return match ? match[1].trim() : '';
+  };
+  return {
+    what_happens: section('What happens'),
+    where: section('Where'),
+    why: section('Why'),
+    scope: section('Scope'),
+    workaround: section('Workaround'),
+    confidence: section('Confidence'),
+    markdown: markdown.trim(),
+  };
 }
 
 async function columns(client, boardId) {
@@ -592,9 +704,29 @@ async function seed(client, opts) {
         start: false,
       },
     });
-    if (column && card.column !== 'backlog') {
+    if (column) {
+      for (const word of WALK.slice(1, WALK.indexOf(card.column) + 1)) {
+        const step = byWord.get(word);
+        if (!step) continue;
+        await client.data('PATCH', `/api/remote/issues/${created.id}`, {
+          body: { status_id: step.id },
+        });
+      }
+    }
+    if (card.pullRequest) {
+      await recordPullRequest(client, info, opts.repo, created.id, card);
+    }
+    if (card.metadata) {
+      const issue = (await boardIssues(client, board.id)).find(
+        (i) => i.id === created.id
+      );
       await client.data('PATCH', `/api/remote/issues/${created.id}`, {
-        body: { status_id: column.id },
+        body: {
+          extension_metadata: {
+            ...(issue?.extension_metadata ?? {}),
+            ...card.metadata(new Date().toISOString()),
+          },
+        },
       });
     }
     for (const name of card.comments ?? []) {

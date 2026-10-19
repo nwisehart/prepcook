@@ -9,19 +9,21 @@ use super::get_txid;
 /// Default statuses that are created for each new project (name, color, sort_order, hidden)
 /// Colors are in HSL format: "H S% L%"
 ///
-/// Prepcook workflow columns (see docs/plans/team-workflow-plan.md).
-/// Automation matchers in issues.rs accept these names with fallbacks to the
-/// upstream defaults, so pre-existing projects keep working.
+/// Prepcook workflow columns: To Do, Plan, Execute, Review, Shipped, then the
+/// Clean up rail. Shipped holds a card from the moment its pull request opens
+/// until a person cleans it up; whether the request is still open, merged or
+/// closed is the card's state, not another column. An investigation's triage
+/// is a state too, and its card stays in Plan. Projects created with older
+/// columns (Triaged, Push MR, Close, or Done where Shipped is now) keep them:
+/// automation matchers here and in the orchestrator accept those names as
+/// well.
 pub const DEFAULT_STATUSES: &[(&str, &str, i32, bool)] = &[
     ("To Do", "217 91% 60%", 0, false),
     ("Plan", "258 90% 66%", 1, false),
-    // Where an investigation card stops with its triage report.
-    ("Triaged", "188 78% 41%", 2, false),
-    ("Execute", "38 92% 50%", 3, false),
-    ("Review", "271 81% 56%", 4, false),
-    ("Push MR", "199 89% 48%", 5, false),
-    ("Close", "142 71% 45%", 6, false),
-    ("Clean up", "220 9% 46%", 7, false),
+    ("Execute", "38 92% 50%", 2, false),
+    ("Review", "271 81% 56%", 3, false),
+    ("Shipped", "142 71% 45%", 4, false),
+    ("Clean up", "220 9% 46%", 5, false),
 ];
 
 #[derive(Debug, Error)]
@@ -261,5 +263,25 @@ impl ProjectStatusRepository {
         .await?;
 
         Ok(statuses)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DEFAULT_STATUSES;
+
+    #[test]
+    fn a_new_project_gets_five_columns_and_the_clean_up_rail() {
+        let names: Vec<&str> = DEFAULT_STATUSES.iter().map(|(name, ..)| *name).collect();
+        assert_eq!(
+            names,
+            ["To Do", "Plan", "Execute", "Review", "Shipped", "Clean up"]
+        );
+        let orders: Vec<i32> = DEFAULT_STATUSES
+            .iter()
+            .map(|(_, _, order, _)| *order)
+            .collect();
+        assert_eq!(orders, [0, 1, 2, 3, 4, 5]);
+        assert!(DEFAULT_STATUSES.iter().all(|(.., hidden)| !hidden));
     }
 }

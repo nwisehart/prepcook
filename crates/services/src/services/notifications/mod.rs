@@ -206,7 +206,7 @@ pub struct HarnessRef {
     pub outcome: HarnessOutcome,
 }
 
-/// An investigation card reached Triaged with its report.
+/// An investigation card was triaged: its report is in.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct InvestigationCompleted {
     pub issue: IssueRef,

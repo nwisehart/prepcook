@@ -554,16 +554,16 @@ mod tests {
     }
 
     /// An investigation card has no review gate in either gate setting: its
-    /// report moves it to Triaged.
+    /// report marks it triaged.
     #[test]
-    fn an_investigation_is_told_it_moves_to_triaged() {
+    fn an_investigation_is_told_its_report_marks_it_triaged() {
         for gate in [InAppGate::Lavish, InAppGate::None] {
             let filled = full(gate).fill_for_class(
                 &default_playbooks()[INVESTIGATION_PLAYBOOK_KEY],
                 card("docs/specs/KEY-7.html"),
                 Some(WorkClass::Investigation),
             );
-            assert!(filled.contains("moves the card to Triaged"), "{filled}");
+            assert!(filled.contains("marks the card triaged"), "{filled}");
             assert!(filled.contains("TRIAGE REPORT"));
             assert!(!filled.to_lowercase().contains("lavish"), "{filled}");
             assert!(!filled.contains("Proposed fix"), "{filled}");

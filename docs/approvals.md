@@ -10,11 +10,12 @@ bug the RCA). There are three decisions:
 | **Re-plan** | Start planning over — for a plan that has already been acted on, typically because merge-request review rejected the approach. |
 
 Approve and request changes are taken while the card is in **Plan**. Re-plan is
-taken from **Plan, Execute, Review or Push MR**. A decision on a card anywhere
-else is refused.
+taken from **Plan, Execute, Review or Shipped** (Push MR or Done on an older
+board). A decision on a card anywhere else is refused.
 
 **An investigation card has no gate.** It is planned like a bug — reproduced,
-explained — and its `TRIAGE REPORT` comment moves it to Triaged by itself, in
+explained — and its `TRIAGE REPORT` comment marks it triaged by itself (it stays
+in Plan, waiting for a person to convert or close it), in
 Chef mode and Prep mode alike ([method.md](method.md#investigations)). Approve
 and request changes on one are refused with a 409 (on the card or ticket, a
 reply saying so); re-plan still runs its planning again. To have its finding
@@ -157,6 +158,6 @@ between columns) and **Prep mode** (autonomy Full: Prepcook moves them itself).
 | Re-plan | The card's claim is cleared and it moves back to Plan, where a fresh planning agent starts on the next tick with the reasons in its prompt. A tracker comment's reasons reach that agent the way every new tracker comment does. | — |
 
 Approve and request changes are refused once the card has left Plan; re-plan
-is refused outside Plan, Execute, Review and Push MR. A decision Prepcook cannot
+is refused outside Plan, Execute, Review and Shipped. A decision Prepcook cannot
 carry out is answered once — on the ticket for a tracker comment, on the card
 otherwise — and not retried.

@@ -308,7 +308,7 @@ An incident tool is a ticketing provider whose `TrackerKind::mode()` is
   URL).
 - `post_comment` adds a note; `enter_stage` acknowledges on `Planning`, and on
   `Triaged` resolves only when `incidents.resolve_on_triage` is set; `Done`
-  resolves.
+  (the merge, or Clean up for a card with no pull request) resolves.
 - It never pages: no escalation, no added responders, no urgency changes.
 - Tests cover the stage mapping with and without `resolve_on_triage`
   (`pagerduty.rs` has the pattern).
@@ -416,8 +416,9 @@ stages are playbooks keyed by it (`investigation:planning`); and the
 orchestrator decides where it stops. An investigation's planning ends with a
 `TRIAGE REPORT` comment, parsed by `parse_triage_report` into a
 `TriageReport`, recorded on the card, sent as `investigation_completed`
-(`notifications::Event`) and copied to the tracker; the card then moves to the
-Triaged column, and `POST /api/cards/{id}/convert` (`services/cards.rs`) turns
+(`notifications::Event`) and copied to the tracker; the card is then triaged
+(`IssueExtMetadata::is_triaged`) and stays in Plan, or moves to a Triaged
+column a board added, and `POST /api/cards/{id}/convert` (`services/cards.rs`) turns
 it into a bug, carrying the plan over when the RCA is at high confidence and
 the harness is still on disk ([method.md](method.md#investigations)).
 

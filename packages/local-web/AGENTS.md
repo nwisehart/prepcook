@@ -148,15 +148,24 @@ the brand.
 - **Needs-you card**: the card takes `border-attention-border overflow-hidden`
   and an amber strip at the top (`bg-attention-soft text-attention-foreground
   text-xs font-bold px-3.5 py-2` with a dot) reading "Needs you · the RCA is
-  ready" or "Needs you · merged, ready to close". The body holds the actions:
-  at the Plan gate **Approve** (primary) + **Review** (secondary, opens the
-  session/RCA); at Close a **Close card** (secondary) button.
+  ready", "Needs you" (a triaged investigation, status line "Triaged — report
+  ready"), "Merged — close card" or "PR closed without merging". The body
+  holds the actions: at the Plan gate **Approve** (primary) + **Review**
+  (secondary, opens the session/RCA); on a triaged investigation **Convert to
+  bug** (primary) + **Close** (secondary); in Shipped a **Clean up** (secondary)
+  button, which confirms before discarding a closed, unmerged pull request.
+- **State chip**: a card in Shipped wears its pull request's state as a chip after
+  the class chip — **PR open** (`bg-brand-soft text-brand-soft-foreground`),
+  **CI failing** (`bg-error-soft text-error`), **Merged**
+  (`bg-success-soft text-success`), **PR closed, not merged**
+  (`bg-panel text-normal`).
 - **Header "2 need you" chip**: an amber pill in the page header
   (`h-6 rounded-full bg-attention-soft text-attention-foreground font-semibold`
   with a dot); clicking it filters the board to those cards.
 - **Column header**: a 10px dot (hollow grey for To Do, `bg-brand` for
-  Plan…Push MR, `bg-success` for Close, grey for Clean up) + name in 700 +
-  muted count, with the helper line in `text-xs text-low` beneath.
+  Plan…Review, `bg-success` for Shipped and an older board's Close, grey for
+  Clean up) + name in 700 + muted count, with the helper line in
+  `text-xs text-low` beneath.
 - **Card**: `bg-secondary border rounded-lg px-3.5 py-3 flex flex-col gap-2`.
   Top row: key in `font-mono text-xs text-low` + chips; title
   `text-sm font-semibold text-high`; status line; optional footer row above a

@@ -40,8 +40,10 @@ pub enum CardStage {
     Planning,
     Executing,
     Reviewing,
-    PushedMr,
-    /// Any other column: To Do, Clean-up, Close, or one Prepcook does not drive.
+    /// The Shipped column (Push MR or Done on an older board).
+    Shipped,
+    /// Any other column: To Do, Clean up, an older board's Close, or one
+    /// Prepcook does not drive.
     Other,
 }
 
@@ -51,7 +53,7 @@ impl CardStage {
             Self::Planning => "Plan",
             Self::Executing => "Execute",
             Self::Reviewing => "Review",
-            Self::PushedMr => "Push MR",
+            Self::Shipped => "Shipped",
             Self::Other => "a column Prepcook does not drive",
         }
     }
@@ -524,13 +526,13 @@ mod tests {
     #[test]
     fn a_decision_applies_only_where_it_means_something() {
         use CardStage::*;
-        for stage in [Planning, Executing, Reviewing, PushedMr] {
+        for stage in [Planning, Executing, Reviewing, Shipped] {
             assert!(takes_decision(Decision::Replan, stage));
         }
         assert!(!takes_decision(Decision::Replan, Other));
         assert!(takes_decision(Decision::Approve, Planning));
         assert!(takes_decision(Decision::RequestChanges, Planning));
-        for stage in [Executing, Reviewing, PushedMr, Other] {
+        for stage in [Executing, Reviewing, Shipped, Other] {
             assert!(!takes_decision(Decision::Approve, stage));
             assert!(!takes_decision(Decision::RequestChanges, stage));
         }
@@ -781,7 +783,7 @@ mod tests {
     #[tokio::test]
     async fn a_replan_clears_the_claim_and_moves_back_to_plan() {
         let host = FakeHost::with(
-            CardStage::PushedMr,
+            CardStage::Shipped,
             serde_json::json!({ "playbook_started_at": "2026-01-01T00:00:00Z" }),
         );
         let outcome = apply_decision(&host, request(Decision::Replan, DecisionSource::Card))

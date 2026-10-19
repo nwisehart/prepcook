@@ -28,7 +28,6 @@ pub const DEFAULT_TAGS: &[(&str, &str)] = &[
     ("agent-failed", "0 84% 60%"),
     ("taken-over", "32 95% 44%"),
     ("needs-replan", "45 93% 47%"),
-    ("needs-column", "45 93% 47%"),
 ];
 
 pub struct TagRepository;

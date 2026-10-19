@@ -420,7 +420,7 @@ impl std::fmt::Display for TrackerKind {
 /// posts (see `docs/incidents.md`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
 pub struct IncidentsConfig {
-    /// Resolve the incident when its investigation card reaches Triaged.
+    /// Resolve the incident when its investigation card is triaged.
     /// Off, the incident stays with the responders and only the triage
     /// report is added to it.
     #[serde(default)]
@@ -431,7 +431,9 @@ pub struct IncidentsConfig {
 /// status set moves the ticket there when the orchestrator starts that
 /// stage's work; unset leaves the ticket where it is. `planning` falls back
 /// to [`StatusMapping::DEFAULT_PLANNING`], so starting work always shows on
-/// the ticket.
+/// the ticket. `pushed_mr`, `triaged` and `done` follow the card's state
+/// rather than a column: the pull request opening, the triage report, the
+/// pull request merging.
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, Eq)]
 pub struct StatusMapping {
     #[serde(default)]
@@ -440,12 +442,16 @@ pub struct StatusMapping {
     pub executing: Option<String>,
     #[serde(default)]
     pub reviewing: Option<String>,
+    /// Where the ticket goes when the card's pull request opens (the card is
+    /// in Shipped, or Push MR or Done on an older board).
     #[serde(default)]
     pub pushed_mr: Option<String>,
-    /// Where an investigation's ticket goes when its card reaches Triaged.
+    /// Where an investigation's ticket goes when its triage report is in (the
+    /// card stays in Plan, or moves to a Triaged column the board added).
     #[serde(default)]
     pub triaged: Option<String>,
-    /// Where the ticket goes when the card reaches Clean-up.
+    /// Where the ticket goes when the card's pull request merges, or, for a
+    /// card that never had one, when it is cleaned up.
     #[serde(default)]
     pub done: Option<String>,
     /// Statuses that mean the work shipped. Matched by name, never by status

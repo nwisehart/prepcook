@@ -177,7 +177,7 @@ seed wrote, and every secret (`PREPCOOK_SECRET_<NAME>` and `<NAME>`).
   the executing agent with the failing step's output (up to four rounds); a
   setup-side failure holds the card, is escalated, and is retried after 15
   minutes. With autonomy off, nothing runs it on its own and a person moves
-  the card. In either mode, a comment on a card in Execute, Review or Push MR
+  the card. In either mode, a comment on a card in Execute, Review or Shipped
   whose first line is `VERIFY:` runs the same check on demand and posts the
   result on the card and the merge request.
 - Story, epic and subtask cards do not stand the app up.

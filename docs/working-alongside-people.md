@@ -24,9 +24,11 @@ then on:
 - **The ticket says so once.** Prepcook posts one comment on the ticket naming the
   stage it was in, what still runs, and how to hand it back, and tags the card
   `taken-over`. The card panel shows the pause and who holds it.
-- **The card is parked in Close** once the in-flight work has finished, so the
-  board reads "the person owns this now". Clean up still runs on a card that
-  reaches it; it archives worktrees and touches nothing the person works on.
+- **On an older board the card is parked in Close** once the in-flight work has
+  finished, so the board reads "the person owns this now"; a board with Shipped
+  has no Close, and the card stays where it is under its `taken-over` tag.
+  Clean up still runs on a card that reaches it; it archives worktrees and
+  touches nothing the person works on.
 - **In Prep mode, the RCA reaches them.** When a taken-over ticket's planning
   verdict lands, the plain-language summary and a link to the full RCA are
   posted on the ticket, once.

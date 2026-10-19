@@ -245,7 +245,7 @@
       "branchRebased": "On <mono>{{branch}}</mono>, rebased on {{target}}.",
       "branchBehind_one": "On <mono>{{branch}}</mono>, {{count}} commit behind {{target}}.",
       "branchBehind_other": "On <mono>{{branch}}</mono>, {{count}} commits behind {{target}}.",
-      "noPrYet": "No pull request yet; it opens at Push MR.",
+      "noPrYet": "No pull request yet; it opens in Shipped.",
       "prOpen": "PR #{{number}} is open.",
       "prMerged": "PR #{{number}} merged.",
       "terminalTitle": "Terminal · worktree",
@@ -601,7 +601,7 @@
     "pushStates": {
       "pushed": "Pushed",
       "failed": "Push failed",
-      "failedHint": "The MR could not be created — check the app log, fix the cause (e.g. uncommitted changes), then move the ticket back to Review and forward into Push MR again to retry."
+      "failedHint": "The MR could not be created — check the app log, fix the cause (e.g. uncommitted changes), then move the ticket back to Review and forward into Shipped again to retry."
     },
     "workflow": {
       "startPlanningAgentTitle": "Start planning agent?",
@@ -715,6 +715,23 @@
     "newCard": "New card",
     "createCard": "Create card",
     "closeCard": "Close card",
+    "cleanUpAction": "Clean up",
+    "triaged": {
+      "close": "Close"
+    },
+    "shippedIndicator": {
+      "open": "PR open",
+      "ciFailing": "CI failing",
+      "ciFailingHint": "The pipeline on the pull request's head commit failed and has not passed since.",
+      "merged": "Merged",
+      "closed": "PR closed, not merged"
+    },
+    "cleanUpGate": {
+      "prOpen": "The pull request is still open. Merge or close it before cleaning the card up.",
+      "discardTitle": "Discard the branch and worktree?",
+      "discardMessage": "The pull request closed without merging. Cleaning the card up discards its branch and worktree.",
+      "discardConfirm": "Discard and clean up"
+    },
     "projectMenu": "Project menu",
     "cardCount_one": "{{count}} card",
     "cardCount_other": "{{count}} cards",
@@ -730,7 +747,7 @@
       "plan": "Reproduce it, then explain it",
       "execute": "The smallest fix, with tests",
       "review": "Fresh eyes on the fix",
-      "pushMr": "Pull request open, people reviewing",
+      "shipped": "Pull request open, then merged; you clean up",
       "close": "Merged; you close it",
       "cleanUp": "Worktrees archived"
     },
@@ -741,7 +758,9 @@
       "showAll": "Show all cards",
       "rcaReady": "Needs you · the RCA is ready",
       "planReady": "Needs you · the plan is ready",
-      "readyToClose": "Needs you · merged, ready to close",
+      "triaged": "Needs you",
+      "merged": "Merged — close card",
+      "closedUnmerged": "PR closed without merging",
       "confidence": "Confidence {{level}}",
       "confidenceLevels": {
         "low": "low",
@@ -778,6 +797,7 @@
         "mergedWhen": "merged {{when}}",
         "openedWhen": "· opened {{when}}",
         "prClosed": "closed",
+        "triaged": "Triaged — report ready",
         "planApproved": "Plan approved {{when}}",
         "agentFinished": "Agent finished {{when}}",
         "sessionFailed": "Session failed {{when}}",
@@ -996,13 +1016,9 @@
         "name": "Review",
         "description": "An independent review in a fresh worktree; request-changes goes back as a fix round."
       },
-      "pushMr": {
-        "name": "Push MR",
-        "description": "Pushes the branch and opens the pull request, reproduction attached."
-      },
-      "close": {
-        "name": "Close",
-        "description": "Merged. You close the card once it has shipped."
+      "shipped": {
+        "name": "Shipped",
+        "description": "Pushes the branch and opens the pull request, reproduction attached. Once it merges, you clean the card up."
       },
       "cleanUp": {
         "name": "Clean up",

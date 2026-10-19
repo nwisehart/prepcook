@@ -14,7 +14,7 @@ git worktree, and when a person takes the ticket over, Prepcook steps aside.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/board-dark.png">
-    <img src="docs/images/board.png" alt="The Pantry board in Prepcook: one card in each of To Do, Plan, Triaged, Execute, Review and Close" width="880">
+    <img src="docs/images/board.png" alt="The Pantry board in Prepcook: cards in To Do, Plan (a bug waiting at the gate and a triaged investigation), Execute, Review and Shipped (merged)" width="880">
   </picture>
 </p>
 
@@ -36,12 +36,15 @@ diff, the code around it and the reproduction, and none of the planning
 context. When it asks for changes, its findings go back to the implementing
 agent to fix or rebut, for up to three rounds.
 
-**Push MR.** Prepcook pushes the branch and opens the pull request (GitHub) or
+**Shipped.** Prepcook pushes the branch and opens the pull request (GitHub) or
 merge request (GitLab), then feeds review comments on it back to the
-implementing agent.
+implementing agent. The card shows the pull request's state — open, CI
+failing, merged, closed without merging — and once it merges, the ticket is
+closed and the card waits for you to clean it up.
 
-**Clean up.** Prepcook runs the repository's clean-up script, archives the
-card's worktrees and closes the ticket. Every approved RCA stays in a knowledge
+**Clean up.** Prepcook runs the repository's clean-up script and archives the
+card's worktrees. Clean up never takes a card whose pull request is still
+open. Every approved RCA stays in a knowledge
 store, linked into a graph of root causes, so a cause that keeps coming back
 becomes visible and opens a pattern review of its own.
 
@@ -53,8 +56,8 @@ are approved from the ticket or through the API.
 Not every card is a fix. An **investigation** card, filed through
 `POST /api/cards` by a support tool or opened from an incident, runs Plan
 exactly as a bug does, then posts a triage report (what happens, where, why,
-scope, workaround, confidence) and stops in **Triaged**; an engineer who wants
-it fixed converts it to a bug, and the RCA and harness become the plan.
+scope, workaround, confidence) and stops in Plan, triaged, until a person
+converts it to a bug — the RCA and harness become the plan — or closes it.
 [Tammy](https://github.com/nwisehart/tammy) is the Slack agent built on this:
 she answers customers from your product's docs, files an investigation when
 something looks broken, and explains the triage report back in plain English.
@@ -155,7 +158,7 @@ Lavish, a review page with **Approve** and **Request changes**; commenting
 moves to **Execute** by itself; at lower confidence it stays in Plan and says
 why ([docs/approvals.md](docs/approvals.md)).
 
-### 4. Execute, Review, Push MR, Clean up (about 5 minutes, then 15 to 30 waiting)
+### 4. Execute, Review, Shipped, Clean up (about 5 minutes, then 15 to 30 waiting)
 
 **Execute.** A new session in the same worktree runs the harness to watch it
 fail, makes the smallest change, adds regression tests and commits on a branch
@@ -168,12 +171,12 @@ fresh worktree and posts `REVIEW: APPROVE` or `REVIEW: REQUEST CHANGES`; a
 request for changes goes back to the implementing agent as a fix round
 ([docs/review.md](docs/review.md)).
 
-**Push MR.** After `REVIEW: APPROVE`, drag the card to **Push MR**. Prepcook
+**Shipped.** After `REVIEW: APPROVE`, drag the card to **Shipped**. Prepcook
 pushes the branch to your fork and opens a pull request there, its first
 comment the reproduction. Merge it on GitHub; within a few minutes the card
-moves to **Close**.
+reads **Merged — close card**.
 
-**Clean up.** Drag the card to **Clean up**. Prepcook archives the card's
+**Clean up.** Press **Clean up** on the card. Prepcook archives the card's
 worktrees; the approved RCA stays under the board's **Knowledge** menu.
 
 [docs/method.md](docs/method.md) describes the whole method, Prep mode

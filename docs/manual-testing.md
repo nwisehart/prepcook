@@ -275,8 +275,11 @@ In the UI:
    under **App steps**, `npm ci`, `node server.js`, the URL `/health`,
    `node scripts/seed.js` and `npm test`; under **Product profile**, Pantry.
 2. **Settings → Projects → Add Project**, named `Pantry`. New boards get the
-   columns **To Do**, **Plan**, **Triaged**, **Execute**, **Review**,
-   **Push MR**, **Close** and **Clean up**.
+   columns **To Do**, **Plan**, **Execute**, **Review** and **Shipped**, and the
+   **Clean up** rail folded beside them. Each column's helper line reads, in
+   order, "Waiting for you to send it to Plan", "Reproduce it, then explain
+   it", "The smallest fix, with tests", "Fresh eyes on the fix" and "Pull
+   request open, then merged; you clean up".
 3. **Settings → Orchestrator**: switch on **Enable automatic agent launches**;
    under **Automated projects**, add `Pantry` and tick `prepcook-demo` under
    **Repositories**. Leave **Autonomy mode** off (Chef mode). **Save**:
@@ -399,23 +402,36 @@ nothing from planning. You should see `REVIEW: APPROVE` or
 round in the implementation workspace and a fresh review after it, up to
 three rounds.
 
-### 2.6 Push MR (5 minutes, then the merge)
+### 2.6 Shipped (5 minutes, then the merge)
 
-Drag the card to **Push MR**. The card shows **Pushing…**, then **Pushed**.
-On your fork (`gh pr list -R <you>/prepcook-demo`) there is a pull request
-from a `prepcook/…` branch into `main`. Its first comment is the
-reproduction, and within a few minutes the implementing agent rewrites its
-title and description.
+Drag the card to **Shipped**. The card shows **Opening the pull request**, then
+the chip **PR open** and a `PR #<n>` link, with no amber header: the
+reviewers have it. On your fork (`gh pr list -R <you>/prepcook-demo`) there
+is a pull request from a `prepcook/…` branch into `main`. Its first comment is
+the reproduction, and within a few minutes the implementing agent rewrites
+its title and description.
+
+Try to drag the card to the **Clean up** rail now (unfold it first): the move
+is refused with "The pull request is still open. Merge or close it before
+cleaning the card up." and the card stays in Shipped.
 
 Merge it (`gh pr merge <number> -R <you>/prepcook-demo --squash`, or on
-GitHub). Within a few minutes the card moves to **Close**.
+GitHub). Within a few minutes the chip reads **Merged**, the card gets the
+amber header **Merged — close card** with a **Clean up** button, and the
+header's "need you" pill counts it. The card stays in **Shipped**.
 
 **Push failed** comes with a hint on the card; collect the server's log.
 
 ### 2.7 Clean up and the knowledge store (3 minutes)
 
-Drag the card from **Close** to **Clean up**. Pantry's manifest has no
-clean-up script, so Prepcook only archives the card's workspaces.
+Press **Clean up** on the card (or drag it to the rail). Pantry's manifest has
+no clean-up script, so Prepcook only archives the card's workspaces.
+
+To see a pull request that closed without merging, take a second bug card to
+Shipped and close its pull request unmerged (`gh pr close <number> -R
+<you>/prepcook-demo`). The chip reads **PR closed, not merged** and the amber
+header **PR closed without merging**; **Clean up** first asks "Discard the
+branch and worktree?", and only **Discard and clean up** moves the card.
 
 Open the board's project menu (**…** beside the board's name) and choose
 **Knowledge**. The page, **Knowledge — RCA graph**, counts the card's RCA
@@ -430,12 +446,11 @@ it fixed ([method.md](method.md#investigations), [api.md](api.md#cards)).
 Two cards are filed, so that one can be converted from the board and the
 other through the API; they run side by side.
 
-### 3.1 Take the Triaged column away (2 minutes)
+### 3.1 The board (1 minute)
 
-To see what a board made before the column existed does, remove it: open the
-board's project menu (**…**), **Edit project settings**, and under
-**Project Statuses** use **Delete status** on **Triaged** (a column with
-cards in it offers **Move issues first** instead).
+A new board has no Triaged column: triage is a state of the card, and a
+triaged investigation stays in **Plan**. Section 3.4 adds the column to show
+what a board that keeps one does.
 
 ### 3.2 File the cards (3 minutes)
 
@@ -493,24 +508,27 @@ Before the report: `"status": "planning"`, `"column": "Plan"`,
 and `"report": false`. After it: `"report": true`, a `confidence`, and
 `harness` with a `.repro/<key>/…` path and `"outcome": "reproduced"`.
 
-### 3.4 No Triaged column: `needs-column` (2 minutes)
+### 3.4 Triaged in Plan (2 minutes)
 
-With the report recorded and no column to move to, each card stays in
-**Plan**, tagged `needs-column`, and the server logs once per card:
+With the report recorded each card stays in **Plan** under an amber **Needs
+you** header, its status line "Triaged — report ready", with **Convert to
+bug** and **Close** on it; the header's "need you" pill counts both. Each
+gets the comment
+`triage: report recorded — triaged in Plan; convert the card to a bug to fix it, or close it`,
+and `investigation_completed` has gone to the notification targets.
+`GET /api/cards/$A` says `"status": "triaged"`, `"column": "Plan"`. Dragging
+either card to **Execute** is refused: investigation cards do not execute.
 
-```
-Stage orchestrator: <key> has its triage report, but board <board id> has no Triaged column; it stays in Planning tagged 'needs-column' until one is added between Plan and Execute
-```
-
-`investigation_completed` has already gone to the notification targets; only
-the move waits.
-
-Put the column back: **Edit project settings → Project Statuses → Add
-column**, rename the new column to `Triaged` with **Edit name**, drag it
-between **Plan** and **Execute**, and save. Within a poll both cards move to
-**Triaged**, lose the `needs-column` tag and get the comment
-`triage: report recorded — moved to Triaged; convert the card to a bug to fix it`.
-`GET /api/cards/$A` now says `"status": "triaged"`, `"column": "Triaged"`.
+To see a board that keeps a Triaged column, file a third card the same way
+(`C=$(file_card manual-test-c | jq -r .data.id)`) and, while it plans, add
+the column: **Edit project settings → Project Statuses → Add column**, rename
+it `Triaged` with **Edit name**, drag it between **Plan** and **Execute**, and
+save. When its report is in, card C moves to **Triaged** with the same amber
+header and gets the comment
+`triage: report recorded — moved to Triaged; convert the card to a bug to fix it, or close it`;
+`GET /api/cards/$C` says `"status": "triaged"`, `"column": "Triaged"`. Press
+**Close** on it: it moves to **Clean up** (it never had a pull request), and
+then delete the Triaged column again.
 
 ### 3.5 Convert to bug, on the board and through the API (5 minutes, then Execute)
 
@@ -539,7 +557,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST "$PC/api/cards/$B/convert" \
 ```
 
 prints `409`. Take the cards on through section 2's steps 2.4 to 2.7, or
-drag them to **Close** and then **Clean up**.
+drag them to **Clean up** (they have no pull request yet, so it takes them).
 
 ## 4. Notifications
 
@@ -614,8 +632,8 @@ describes. Trigger the ones you can and check each delivery says
 | --- | --- | --- |
 | `investigation_completed` | File an investigation (section 3.2); 10 to 20 minutes. | The report's sections, `harness.outcome` `reproduced`, `confidence`, and `source` `{ "kind": "api", "ref": "manual-test-a", … }`. |
 | `card_converted` | Convert it (section 3.5). | `from` `investigation`, `to` `bug`, `by`, and `column` `Execute` or `Plan`. |
-| `blocker_mr_opened` | Before dragging a bug card into **Push MR** (section 2.6), set its priority to **Urgent** (**Change Priority**). | `mr_url` and `summary`. The pull request is labelled `Blocker` when the fork has that label (`gh label create Blocker -R <you>/prepcook-demo`); without it the server logs `labelling MR !<n> Blocker failed (does the label exist in the project?)` and the event is sent all the same. |
-| `replan_requested` | With a card in **Push MR**, comment on the card: `MR-FEEDBACK: NEEDS-REPLAN` on the first line and a reason on the second. This is the verdict the implementing agent writes when merge-request review rejects the approach; posting it yourself tests the delivery without waiting on its judgement. Read within five minutes. | `reason` (your second line) and `mr_url`. The card is tagged `needs-replan` and gets a comment saying a person decides whether it goes back to Plan. Clear it with a `MR-FEEDBACK: ADDRESSED` comment. |
+| `blocker_mr_opened` | Before dragging a bug card into **Shipped** (section 2.6), set its priority to **Urgent** (**Change Priority**). | `mr_url` and `summary`. The pull request is labelled `Blocker` when the fork has that label (`gh label create Blocker -R <you>/prepcook-demo`); without it the server logs `labelling MR !<n> Blocker failed (does the label exist in the project?)` and the event is sent all the same. |
+| `replan_requested` | With a card in **Shipped** and its pull request open, comment on the card: `MR-FEEDBACK: NEEDS-REPLAN` on the first line and a reason on the second. This is the verdict the implementing agent writes when merge-request review rejects the approach; posting it yourself tests the delivery without waiting on its judgement. Read within five minutes. | `reason` (your second line) and `mr_url`. The card is tagged `needs-replan` and gets a comment saying a person decides whether it goes back to Plan. Clear it with a `MR-FEEDBACK: ADDRESSED` comment. |
 | `runner_fault` | A card on a board whose stand-up fails for a setup reason: section 6.2's board set to remote with no `[app.remote]`, with a bug card dragged to **Plan**. | `step` `Planning app stand-up`, `outcome` `target-unconfigured`, and `detail`. Once per card and outcome. |
 | `daily_digest` | The schedule, which is *file only*: stop the server, set the time, start it again (below). Weekdays only. | `date`, `timezone`, and the sections `needs_merge`, `needs_answer` and `not_moving`, always all three. |
 
@@ -695,7 +713,7 @@ entry with `"searched": true` and no `error`. Then:
 
 ### 5.3 From a session (5 minutes)
 
-Pick a card whose work is done (in **Triaged** or **Close**), open its
+Pick a card whose work is done (triaged in **Plan**, or merged in **Shipped**), open its
 workspace and send the session a follow-up: "Call the evidence_search tool
 with pattern "share" and source "Pantry app log", and show me the raw
 result." The session log shows the `evidence_search` call and hits from the
@@ -756,7 +774,7 @@ A bug card dragged into **Plan** now does not stand anything up. The card
 gets `app: could not be stood up — **target-unconfigured** (the setup's
 problem, not the branch's); started the Planning session without it`,
 `runner_fault` goes to the notification targets (section 4.4), and the
-planning session starts without an app. Move that card straight to **Close**
+planning session starts without an app. Move that card straight to **Clean up**
 before 6.3.
 
 ### 6.3 Add `[app.remote]` (5 minutes)
@@ -814,7 +832,7 @@ from a harness run against that URL. When the planning session ends, the
 **Settings → Integrations → Reproduction**: Pantry back to
 **Default (This machine)**;
 **Default Target Branch** back to `main`; `git -C "$PANTRY" switch main`.
-Drag the card to **Close**, then **Clean up**.
+Drag the card to **Clean up**.
 
 ## 7. Ticketing: GitHub Issues
 
@@ -838,8 +856,8 @@ pickup filter defaults to `state:open label:bug`). **Test connection**:
 Under **Ticket pickup**, tick **Pick up new tickets automatically** and set
 **Import into project** to Pantry. Under **Workflow → Stage statuses**,
 leave **Planning** blank (it falls back to `In Progress`) and set
-**Executing** `executing`, **Reviewing** `in review`, **Pushed MR**
-`pr open` and **Clean-up** `done`. **Save**:
+**Executing** `executing`, **Reviewing** `in review`, **Pull request
+opened** `pr open` and **Merged or cleaned up** `done`. **Save**:
 `Ticketing settings saved.`
 
 ### 7.2 File an issue (2 minutes, then 10 to 20 waiting)
@@ -875,9 +893,9 @@ orchestrator's own: the account `gh` is signed in as, which is yours.
 ### 7.4 Labels, the pull request link and the close (with section 2's steps)
 
 Take the card through section 2's steps 2.4 to 2.7. On the issue you should
-see the label follow the stages (`executing`, `in review`, `pr open`); after
-Push MR a comment `**Merge request !<n>**: <pull request URL>`; and on
-**Clean up**, the label `done` and the issue closed.
+see the label follow the stages (`executing`, `in review`, `pr open`); once
+the pull request opens a comment `**Merge request !<n>**: <pull request URL>`;
+and when it merges, the label `done` and the issue closed.
 
 ### 7.5 Jira (optional, 20 minutes)
 
@@ -910,7 +928,7 @@ jq -n --arg key "$PD_ROUTING_KEY" '{
 
 You should see `"status": "success"`; within 45 seconds an investigation card
 in **Plan** whose origin is the incident's page; the incident acknowledged by
-the Prepcook user; after 10 to 20 minutes the card in **Triaged** and the
+the Prepcook user; after 10 to 20 minutes the card triaged in **Plan** and the
 triage report added to the incident as a note; and, with the box ticked, the
 incident resolved. Nobody is paged by Prepcook at any point.
 
@@ -952,7 +970,7 @@ Set **Executing** back to `Default` and **Save**.
 Slack agent that files investigations; the Quickstart in her own README
 (`~/code/tammy/README.md`) is the procedure, and this section is what to
 check along it. She expects Prepcook at `http://localhost:4100` and the Pantry
-board with its **Triaged** column.
+board.
 
 ### 9.1 The menu, offline (5 minutes)
 
@@ -1011,7 +1029,7 @@ target's **Test connection** in Prepcook says `Delivered a ping (HTTP 202)`.
    "New order PC-… : …"; her log says `problem_report, filed PC-…`. On the
    board the card is in **Plan**, tagged `investigation`, "Filed by Tammy
    from thread".
-3. **The report.** When the card reaches **Triaged**, she posts in the
+3. **The report.** When the card is triaged, she posts in the
    customer's thread in plain English: what happens and why, that it is on
    our side, the lower-case workaround, and no paths, code or promises.
    `#pantry-team` gets the short version. The echo from section 4, if it is
