@@ -132,13 +132,13 @@ jobs:
           git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
           git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > release-notes.md
           if [ -z "$(tr -d '[:space:]' < release-notes.md)" ]; then
-            echo "Prep Cook ${{ needs.version.outputs.version }}" > release-notes.md
+            echo "Prepcook ${{ needs.version.outputs.version }}" > release-notes.md
           fi
           cat release-notes.md
 
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3 trufflehog:ignore
         with:
-          name: Prep Cook ${{ needs.version.outputs.version }}
+          name: Prepcook ${{ needs.version.outputs.version }}
           body_path: release-notes.md
           files: |
             dist/*.tar.gz
