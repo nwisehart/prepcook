@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { CheckCircleIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { getRemoteApiUrl } from '@/shared/lib/remoteApi';
 import { SettingsCard } from './SettingsComponents';
@@ -34,22 +33,24 @@ export function BoardSettingsSection() {
       title={t('settings.board.title')}
       description={t('settings.board.description')}
     >
-      <div className="flex flex-col gap-base">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-low">{t('settings.board.url')}</span>
-          <code className="font-ibm-plex-mono text-high break-all">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="w-12 shrink-0 font-semibold text-high">
+            {t('settings.board.url')}
+          </span>
+          <code className="break-all font-mono text-[13px] text-normal">
             {boardUrl || t('settings.board.noUrl')}
           </code>
         </div>
         <div className="flex items-center gap-2">
           {connected ? (
-            <span className="inline-flex items-center gap-1.5 rounded-sm bg-success/10 border border-success/50 px-base py-half text-sm font-medium text-success">
-              <CheckCircleIcon className="size-icon-sm" weight="fill" />
+            <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-success">
+              <span className="size-2 rounded-full bg-success" />
               {statusLabel}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-sm bg-warning/10 border border-warning/50 px-base py-half text-sm font-medium text-warning">
-              <WarningCircleIcon className="size-icon-sm" weight="fill" />
+            <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-attention-foreground">
+              <span className="size-2 rounded-full bg-attention" />
               {statusLabel}
             </span>
           )}

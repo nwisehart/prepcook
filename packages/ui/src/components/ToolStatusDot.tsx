@@ -18,8 +18,8 @@ export function ToolStatusDot({ status, className }: ToolStatusDotProps) {
     statusType === 'failed' ||
     statusType === 'denied' ||
     statusType === 'timed_out';
-  const isPending =
-    statusType === 'created' || statusType === 'pending_approval';
+  const isPending = statusType === 'created';
+  const isWaiting = statusType === 'pending_approval';
 
   return (
     <span className={cn('inline-flex', className)}>
@@ -28,11 +28,17 @@ export function ToolStatusDot({ status, className }: ToolStatusDotProps) {
           'size-1.5 rounded-full',
           isSuccess && 'bg-success',
           isError && 'bg-error',
-          isPending && 'bg-text-low'
+          isPending && 'bg-brand',
+          isWaiting && 'bg-attention'
         )}
       />
-      {isPending && (
-        <span className="absolute inset-0 size-1.5 rounded-full bg-text-low animate-ping" />
+      {(isPending || isWaiting) && (
+        <span
+          className={cn(
+            'absolute inset-0 size-1.5 rounded-full animate-ping',
+            isPending ? 'bg-brand' : 'bg-attention'
+          )}
+        />
       )}
     </span>
   );

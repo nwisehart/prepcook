@@ -17,9 +17,9 @@ interface CommentCardProps {
 }
 
 const variantStyles: Record<CommentCardVariant, string> = {
-  user: 'bg-brand/20 border-brand',
+  user: 'bg-brand-soft border-brand/40',
   github: 'bg-secondary border-border',
-  input: 'bg-brand/20 border-brand',
+  input: 'bg-brand-soft border-brand/40',
 };
 
 /**
@@ -34,10 +34,10 @@ export function CommentCard({
   className,
 }: CommentCardProps) {
   return (
-    <div className="p-base bg-panel font-sans text-base">
+    <div className="p-base bg-panel font-sans text-sm">
       <div
         className={cn(
-          'p-base rounded-sm border',
+          'rounded border px-3 py-2.5',
           variantStyles[variant],
           className
         )}

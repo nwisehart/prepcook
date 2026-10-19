@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/shared/lib/utils';
 import { useTranslation } from 'react-i18next';
+import { SpinnerIcon } from '@phosphor-icons/react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,8 +9,23 @@ import {
   DropdownMenuTrigger,
   DropdownMenuTriggerButton,
 } from '@prepcook/ui/components/Dropdown';
-import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
+import { Button } from '@prepcook/ui/components/Button';
+import { Checkbox } from '@prepcook/ui/components/Checkbox';
+import { Switch } from '@prepcook/ui/components/Switch';
 import type { Icon } from '@phosphor-icons/react';
+
+// Shared class strings, so raw elements inside a section match the inputs
+// these components render.
+export const settingsInputClassName =
+  'h-9 w-full rounded border bg-secondary px-3 text-sm text-high ' +
+  'placeholder:text-low focus-visible:outline-none focus-visible:ring-1 ' +
+  'focus-visible:ring-inset focus-visible:ring-brand';
+
+export const settingsHelperClassName = 'text-[12.5px] leading-[1.45] text-low';
+
+/** A bordered row inside a settings card (an entry, a step, a provider). */
+export const settingsInsetClassName =
+  'rounded-lg border border-border bg-secondary px-4 py-3';
 
 // ============================================================================
 // Two-Column Picker Components
@@ -22,7 +38,7 @@ interface TwoColumnPickerProps {
 
 export function TwoColumnPicker({ children }: TwoColumnPickerProps) {
   return (
-    <div className="flex flex-col md:flex-row border border-border rounded-sm overflow-hidden">
+    <div className="flex flex-col md:flex-row border border-border rounded-lg overflow-hidden bg-secondary">
       {children}
     </div>
   );
@@ -45,19 +61,17 @@ export function TwoColumnPickerColumn({
   return (
     <div
       className={cn(
-        'flex-1',
+        'flex-1 min-w-0',
         isFirst && 'border-b md:border-b-0 md:border-r border-border'
       )}
     >
-      <div className="h-9 px-base border-b border-border bg-secondary/50 flex items-center justify-between">
-        <span className="text-sm font-medium text-low tracking-wide">
+      <div className="h-9 px-3 border-b border-border bg-surface-raised flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-low">
           {label}
         </span>
         {headerAction}
       </div>
-      <div className="max-h-32 md:h-32 overflow-y-auto bg-panel">
-        {children}
-      </div>
+      <div className="max-h-40 md:h-40 overflow-y-auto p-1">{children}</div>
     </div>
   );
 }
@@ -81,9 +95,8 @@ export function TwoColumnPickerItem({
   return (
     <div
       className={cn(
-        'group flex items-center gap-half px-base py-half cursor-pointer transition-colors',
-        'hover:bg-secondary',
-        selected && 'bg-brand/10 text-brand'
+        'group flex items-center gap-2 rounded px-2.5 py-1.5 cursor-pointer transition-colors',
+        selected ? 'bg-panel' : 'hover:bg-panel'
       )}
       onClick={onClick}
     >
@@ -91,7 +104,7 @@ export function TwoColumnPickerItem({
       <span
         className={cn(
           'text-sm truncate flex-1',
-          selected ? 'text-brand font-medium' : 'text-normal'
+          selected ? 'text-high font-semibold' : 'text-normal font-medium'
         )}
       >
         {children}
@@ -114,8 +127,10 @@ export function TwoColumnPickerBadge({
   return (
     <span
       className={cn(
-        'text-xs px-half rounded font-medium shrink-0',
-        variant === 'brand' ? 'bg-brand/15 text-brand' : 'bg-secondary text-low'
+        'inline-flex h-5 items-center rounded-full px-2 text-xs font-medium shrink-0',
+        variant === 'brand'
+          ? 'bg-brand-soft text-brand-soft-foreground'
+          : 'bg-panel text-normal'
       )}
     >
       {children}
@@ -130,7 +145,7 @@ interface TwoColumnPickerEmptyProps {
 
 export function TwoColumnPickerEmpty({ children }: TwoColumnPickerEmptyProps) {
   return (
-    <div className="px-base py-plusfifty text-sm text-low text-center">
+    <div className="px-3 py-plusfifty text-sm text-low text-center">
       {children}
     </div>
   );
@@ -140,61 +155,76 @@ export function TwoColumnPickerEmpty({ children }: TwoColumnPickerEmptyProps) {
 // Settings Card Components
 // ============================================================================
 
-// SettingsCard - A card container for a settings subsection
+// SettingsCard - One logical group of fields: a white card on the page ground
 export function SettingsCard({
   title,
   description,
   children,
   headerAction,
+  className,
 }: {
-  title: string;
+  title?: string;
   description?: ReactNode;
   children: React.ReactNode;
   headerAction?: React.ReactNode;
+  className?: string;
 }) {
+  const hasHeader = Boolean(title || description || headerAction);
   return (
-    <div className="space-y-4 pb-6 border-b border-border last:border-b-0 last:pb-0">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-base font-medium text-high">{title}</h3>
-          {description && (
-            <p className="text-sm text-low mt-1">{description}</p>
-          )}
+    <section
+      className={cn(
+        'flex flex-col gap-4 rounded-lg border border-border bg-secondary px-5 py-[18px]',
+        className
+      )}
+    >
+      {hasHeader && (
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            {title && (
+              <h3 className="text-[15px] font-bold leading-snug text-high">
+                {title}
+              </h3>
+            )}
+            {description && (
+              <p className={settingsHelperClassName}>{description}</p>
+            )}
+          </div>
+          {headerAction && <div className="shrink-0">{headerAction}</div>}
         </div>
-        {headerAction && <div className="shrink-0 ml-2">{headerAction}</div>}
-      </div>
-      <div className="space-y-4">{children}</div>
-    </div>
+      )}
+      {children}
+    </section>
   );
 }
 
-// SettingsField - A labeled field wrapper
+// SettingsField - A labeled field: label, helper under it, then the control
 export function SettingsField({
   label,
   description,
   error,
   children,
+  className,
 }: {
   label: string;
   description?: React.ReactNode;
   error?: string | null;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="space-y-2">
+    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
       {label && (
-        <label className="text-sm font-medium text-normal">{label}</label>
+        <label className="text-sm font-semibold text-high">{label}</label>
       )}
+      {description && <p className={settingsHelperClassName}>{description}</p>}
       {children}
-      {error && <p className="text-sm text-error">{error}</p>}
-      {description && !error && (
-        <p className="text-sm text-low">{description}</p>
-      )}
+      {error && <p className="text-[12.5px] text-error">{error}</p>}
     </div>
   );
 }
 
-// SettingsCheckbox - A checkbox with label and optional description
+// SettingsCheckbox - A boolean setting: a switch (or, for picking members of
+// a list, a checkbox) with its label and optional helper
 export function SettingsCheckbox({
   id,
   label,
@@ -202,6 +232,7 @@ export function SettingsCheckbox({
   checked,
   onChange,
   disabled,
+  variant = 'switch',
 }: {
   id: string;
   label: string;
@@ -209,31 +240,41 @@ export function SettingsCheckbox({
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  variant?: 'switch' | 'checkbox';
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <input
-        type="checkbox"
-        id={id}
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        disabled={disabled}
-        className={cn(
-          'mt-0.5 h-4 w-4 rounded border-border bg-secondary text-brand focus:ring-brand focus:ring-offset-0',
-          disabled && 'opacity-50 cursor-not-allowed'
-        )}
-      />
-      <div className="space-y-0.5">
+    <div className="flex items-start gap-3">
+      {variant === 'switch' ? (
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={onChange}
+          disabled={disabled}
+          className="mt-px"
+        />
+      ) : (
+        <Checkbox
+          id={id}
+          checked={checked}
+          onCheckedChange={onChange}
+          disabled={disabled}
+          className="mt-[3px]"
+        />
+      )}
+      <div className="flex min-w-0 flex-col gap-0.5">
         <label
           htmlFor={id}
           className={cn(
-            'text-sm font-medium text-normal cursor-pointer',
+            'text-sm text-high cursor-pointer',
+            description ? 'font-medium' : 'font-normal',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
         >
           {label}
         </label>
-        {description && <p className="text-sm text-low">{description}</p>}
+        {description && (
+          <p className={settingsHelperClassName}>{description}</p>
+        )}
       </div>
     </div>
   );
@@ -265,7 +306,7 @@ export function SettingsSelect<T extends string>({
       <DropdownMenuTrigger asChild>
         <DropdownMenuTriggerButton
           label={selectedOption?.label || placeholder}
-          className={cn('w-full justify-between', className)}
+          className={cn('h-9 w-full justify-between', className)}
           disabled={disabled || !hasMenuItems}
         />
       </DropdownMenuTrigger>
@@ -293,7 +334,7 @@ export function SettingsSelect<T extends string>({
   );
 }
 
-// SettingsInput - A text input field
+// SettingsInput - A 36px text input field
 export function SettingsInput({
   value,
   onChange,
@@ -302,6 +343,9 @@ export function SettingsInput({
   disabled,
   type = 'text',
   autoComplete,
+  monospace = false,
+  className,
+  id,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -310,9 +354,13 @@ export function SettingsInput({
   disabled?: boolean;
   type?: 'text' | 'password';
   autoComplete?: string;
+  monospace?: boolean;
+  className?: string;
+  id?: string;
 }) {
   return (
     <input
+      id={id}
       type={type}
       autoComplete={autoComplete}
       value={value}
@@ -320,10 +368,11 @@ export function SettingsInput({
       placeholder={placeholder}
       disabled={disabled}
       className={cn(
-        'w-full bg-secondary border rounded-sm px-base py-half text-sm text-high',
-        'placeholder:text-low placeholder:opacity-80 focus:outline-none focus:ring-1 focus:ring-brand',
+        settingsInputClassName,
+        monospace && 'font-mono text-[13px]',
         error ? 'border-error' : 'border-border',
-        disabled && 'opacity-50 cursor-not-allowed'
+        disabled && 'opacity-50 cursor-not-allowed',
+        className
       )}
     />
   );
@@ -353,67 +402,114 @@ export function SettingsTextarea({
       disabled={disabled}
       rows={rows}
       className={cn(
-        'w-full bg-secondary border border-border rounded-sm px-base py-half text-sm text-high',
-        'placeholder:text-low placeholder:opacity-80 focus:outline-none focus:ring-1 focus:ring-brand',
+        'w-full rounded border border-border bg-secondary px-3 py-2 text-sm text-high',
+        'placeholder:text-low focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
         'resize-y',
-        monospace && 'font-mono',
+        monospace && 'font-mono text-[13px] leading-relaxed',
         disabled && 'opacity-50 cursor-not-allowed'
       )}
     />
   );
 }
 
-// SettingsSaveBar - A sticky save bar for unsaved changes
+// SettingsAlert - The saved / failed line at the top of a section
+export function SettingsAlert({
+  variant,
+  children,
+  className,
+}: {
+  variant: 'error' | 'success';
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      role={variant === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'rounded-lg border px-4 py-3 text-sm',
+        variant === 'error'
+          ? 'border-error/30 bg-error-soft text-error'
+          : 'border-success/30 bg-success-soft font-medium text-success',
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+// SettingsLoading - The spinner a section shows while its data loads
+export function SettingsLoading({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-8">
+      <SpinnerIcon className="size-icon-lg animate-spin text-brand" />
+      <span className="text-sm text-normal">{label}</span>
+    </div>
+  );
+}
+
+// SettingsSaveBar - The section's bottom action row. Always shown so the
+// save state is visible; Save is enabled only while there is something to
+// save. Sticks to the bottom of the scrolling content.
 export function SettingsSaveBar({
   show,
   saving,
   saveDisabled,
   onSave,
   onDiscard,
+  onReset,
+  resetDisabled,
 }: {
+  /** Whether the section has unsaved changes. */
   show: boolean;
   saving: boolean;
   saveDisabled?: boolean;
   unsavedMessage?: string;
   onSave: () => void;
   onDiscard?: () => void;
+  /** Puts the section's defaults in the draft; nothing is saved until Save. */
+  onReset?: () => void;
+  resetDisabled?: boolean;
 }) {
   const { t } = useTranslation(['settings', 'common']);
 
-  if (!show) {
-    return <div />;
-  }
-
   return (
-    <div className="sticky bottom-0 z-10 bg-panel/80 backdrop-blur-sm border-t border-border/50 py-4 -mx-6 px-6 -mb-6">
-      <div
+    <div className="sticky bottom-0 z-10 mt-auto flex flex-wrap items-center gap-3 border-t border-border bg-primary py-3">
+      <span
         className={cn(
-          'flex items-center',
-          onDiscard ? 'justify-between' : 'justify-end'
+          'text-[12.5px]',
+          show ? 'font-semibold text-high' : 'text-low'
         )}
       >
-        {onDiscard && (
-          <span className="text-sm text-low">
-            {t('settings.common.unsavedChanges')}
-          </span>
-        )}
-        <div className="flex gap-2">
-          {onDiscard && (
-            <PrimaryButton
-              variant="tertiary"
-              value={t('common:buttons.discard')}
-              onClick={onDiscard}
-              disabled={saving}
-            />
-          )}
-          <PrimaryButton
-            value={t('common:buttons.save')}
-            onClick={onSave}
-            disabled={saving || saveDisabled}
-            actionIcon={saving ? 'spinner' : undefined}
-          />
-        </div>
-      </div>
+        {show
+          ? t('settings.common.unsavedLabel')
+          : t('settings.common.noUnsavedChanges')}
+      </span>
+      <span className="flex-1" />
+      {onReset && (
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={onReset}
+          disabled={saving || resetDisabled}
+        >
+          {t('settings.common.resetToDefaults')}
+        </Button>
+      )}
+      {onDiscard && show && (
+        <Button variant="ghost" size="lg" onClick={onDiscard} disabled={saving}>
+          {t('common:buttons.discard')}
+        </Button>
+      )}
+      <Button
+        size="lg"
+        className="gap-2"
+        onClick={onSave}
+        disabled={!show || saving || saveDisabled}
+      >
+        {saving && <SpinnerIcon className="size-4 animate-spin" />}
+        {t('common:buttons.save')}
+      </Button>
     </div>
   );
 }

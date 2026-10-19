@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cloneDeep, isEqual } from 'lodash';
-import { SpinnerIcon, TrashIcon } from '@phosphor-icons/react';
+import { cloneDeep, isEqual, pick } from 'lodash';
+import { CaretRightIcon, TrashIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import type {
   DeployWatch,
@@ -16,16 +16,20 @@ import type { Project as RemoteProject } from 'shared/remote-types';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { useUserOrganizations } from '@/shared/hooks/useUserOrganizations';
 import { remoteProjectsApi, repoApi } from '@/shared/lib/api';
+import { cn } from '@/shared/lib/utils';
 import { IconButton } from '@prepcook/ui/components/IconButton';
 import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
 import {
+  SettingsAlert,
   SettingsCard,
   SettingsCheckbox,
   SettingsField,
   SettingsInput,
+  SettingsLoading,
   SettingsSaveBar,
   SettingsSelect,
   SettingsTextarea,
+  settingsHelperClassName,
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import {
@@ -65,6 +69,24 @@ const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
   project_defaults: {},
   seat_monitor: false,
 };
+
+// The global values this page edits. Reset to defaults touches only these:
+// the file-only settings and the automated projects are kept.
+const GLOBAL_FIELD_KEYS = [
+  'mode',
+  'poll_interval_secs',
+  'deployed_retention_days',
+  'cleanup_retention_days',
+  'pattern_threshold',
+  'max_launches_per_tick',
+  'workspace_retention_days',
+  'autonomy',
+  'autonomy_review_iterations',
+] as const;
+
+const pickGlobalFields = (
+  config: OrchestratorConfig = DEFAULT_ORCHESTRATOR_CONFIG
+) => pick(config, GLOBAL_FIELD_KEYS);
 
 const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   repo_ids: [],
@@ -383,45 +405,166 @@ export function OrchestratorSettingsSection() {
     setDirty(false);
   };
 
+  // Puts the shipped values of the global fields on this page in the draft.
+  // File-only settings and the automated projects are left as they are.
+  const resetGlobalsToDefaults = () => {
+    markDirty();
+    setDraft((prev) => ({ ...prev, ...pickGlobalFields() }));
+    setInAppGateDraft('lavish');
+  };
+  const globalsAtDefaults =
+    inAppGateDraft === 'lavish' &&
+    isEqual(pickGlobalFields(draft), pickGlobalFields());
+
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.general.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.general.loading')} />;
   }
 
   if (!config) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <SettingsAlert variant="error">
           {t('settings.general.loadError')}
-        </div>
+        </SettingsAlert>
       </div>
     );
   }
 
+  const autonomyOptions = [
+    {
+      value: 'inherit' as TriState,
+      label: t('settings.orchestrator.board.inherit'),
+    },
+    {
+      value: 'off' as TriState,
+      label: t('settings.orchestrator.modes.chef.title'),
+    },
+    {
+      value: 'on' as TriState,
+      label: t('settings.orchestrator.modes.prep.title'),
+    },
+  ];
+
   return (
     <>
-      {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
-          {error}
-        </div>
-      )}
+      {error && <SettingsAlert variant="error">{error}</SettingsAlert>}
 
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <SettingsAlert variant="success">
           {t('settings.orchestrator.save.success')}
-        </div>
+        </SettingsAlert>
       )}
 
+      <SettingsCard>
+        <div className="flex flex-col gap-1.5">
+          <span
+            id="orchestrator-autonomy-mode"
+            className="text-sm font-semibold text-high"
+          >
+            {t('settings.orchestrator.autonomyMode.label')}
+          </span>
+          <p className={settingsHelperClassName}>
+            {t('settings.orchestrator.autonomyMode.helper')}
+          </p>
+        </div>
+        <div
+          role="radiogroup"
+          aria-labelledby="orchestrator-autonomy-mode"
+          className="grid gap-3 sm:grid-cols-2"
+        >
+          <ModeCard
+            selected={draft.autonomy !== 'full'}
+            title={t('settings.orchestrator.modes.chef.title')}
+            chip={t('settings.orchestrator.modes.chef.default')}
+            description={t('settings.orchestrator.modes.chef.description')}
+            onSelect={() => {
+              markDirty();
+              setDraft((prev) => ({ ...prev, autonomy: 'off' }));
+            }}
+          />
+          <ModeCard
+            selected={draft.autonomy === 'full'}
+            title={t('settings.orchestrator.modes.prep.title')}
+            description={t('settings.orchestrator.modes.prep.description')}
+            onSelect={() => {
+              markDirty();
+              setDraft((prev) => ({ ...prev, autonomy: 'full' }));
+            }}
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard>
+        <SettingsField
+          label={t('settings.orchestrator.approvals.title')}
+          description={t('settings.orchestrator.approvals.description')}
+        >
+          <SettingsSelect<InAppGate>
+            value={inAppGateDraft}
+            options={[
+              {
+                value: 'lavish',
+                label: t('settings.orchestrator.approvals.options.lavish'),
+              },
+              {
+                value: 'none',
+                label: t('settings.orchestrator.approvals.options.none'),
+              },
+            ]}
+            onChange={(value) => {
+              markDirty();
+              setInAppGateDraft(value);
+            }}
+            className="max-w-[540px]"
+          />
+        </SettingsField>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SettingsField
+            label={t('settings.orchestrator.reviewLoopCap.label')}
+            description={t('settings.orchestrator.reviewLoopCap.helper')}
+          >
+            <SettingsInput
+              value={String(draft.autonomy_review_iterations)}
+              onChange={(value) => {
+                markDirty();
+                const parsed = parseInt(value, 10);
+                setDraft((prev) => ({
+                  ...prev,
+                  autonomy_review_iterations: Number.isNaN(parsed) ? 0 : parsed,
+                }));
+              }}
+              placeholder="3"
+              error={draft.autonomy_review_iterations < 1}
+              className="mt-auto max-w-[120px]"
+            />
+          </SettingsField>
+
+          <SettingsField
+            label={t('settings.orchestrator.maxLaunchesPerTick.label')}
+            description={t('settings.orchestrator.maxLaunchesPerTick.helper')}
+          >
+            <SettingsInput
+              value={String(draft.max_launches_per_tick)}
+              onChange={(value) => {
+                markDirty();
+                const parsed = parseInt(value, 10);
+                setDraft((prev) => ({
+                  ...prev,
+                  max_launches_per_tick: Number.isNaN(parsed) ? 0 : parsed,
+                }));
+              }}
+              placeholder="3"
+              error={draft.max_launches_per_tick < 1}
+              className="mt-auto max-w-[120px]"
+            />
+          </SettingsField>
+        </div>
+      </SettingsCard>
+
       <SettingsCard
-        title={t('settings.orchestrator.general.title')}
-        description={t('settings.orchestrator.general.description')}
+        title={t('settings.orchestrator.launches.title')}
+        description={t('settings.orchestrator.launches.description')}
       >
         <SettingsCheckbox
           id="orchestrator-auto"
@@ -434,30 +577,58 @@ export function OrchestratorSettingsSection() {
           }}
         />
 
-        <SettingsField
-          label={t('settings.orchestrator.pollInterval.label')}
-          description={t('settings.orchestrator.pollInterval.helper')}
-        >
-          <SettingsInput
-            value={String(pollIntervalSecs)}
-            onChange={(value) => {
-              const parsed = parseInt(value, 10);
-              markDirty();
-              setDraft((prev) => ({
-                ...prev,
-                poll_interval_secs: (Number.isNaN(parsed)
-                  ? 0
-                  : parsed) as unknown as bigint,
-              }));
-            }}
-            placeholder="15"
-            error={pollIntervalSecs < 1}
-          />
-        </SettingsField>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SettingsField
+            label={t('settings.orchestrator.pollInterval.label')}
+            description={t('settings.orchestrator.pollInterval.helper')}
+          >
+            <SettingsInput
+              value={String(pollIntervalSecs)}
+              onChange={(value) => {
+                const parsed = parseInt(value, 10);
+                markDirty();
+                setDraft((prev) => ({
+                  ...prev,
+                  poll_interval_secs: (Number.isNaN(parsed)
+                    ? 0
+                    : parsed) as unknown as bigint,
+                }));
+              }}
+              placeholder="15"
+              error={pollIntervalSecs < 1}
+              className="mt-auto max-w-[120px]"
+            />
+          </SettingsField>
 
+          <SettingsField
+            label={t('settings.orchestrator.patternThreshold.label')}
+            description={t('settings.orchestrator.patternThreshold.helper')}
+          >
+            <SettingsInput
+              value={String(draft.pattern_threshold)}
+              onChange={(value) => {
+                markDirty();
+                const parsed = parseInt(value, 10);
+                setDraft((prev) => ({
+                  ...prev,
+                  pattern_threshold: Number.isNaN(parsed) ? 0 : parsed,
+                }));
+              }}
+              placeholder="5"
+              error={draft.pattern_threshold < 1}
+              className="mt-auto max-w-[120px]"
+            />
+          </SettingsField>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title={t('settings.orchestrator.retention.title')}
+        description={t('settings.orchestrator.retention.description')}
+      >
         <SettingsField
-          label={t('settings.orchestrator.deployedRetention.label')}
-          description={t('settings.orchestrator.deployedRetention.helper')}
+          label={t('settings.orchestrator.closeRetention.label')}
+          description={t('settings.orchestrator.closeRetention.helper')}
         >
           <SettingsInput
             value={
@@ -479,12 +650,13 @@ export function OrchestratorSettingsSection() {
             placeholder={t(
               'settings.orchestrator.deployedRetention.placeholder'
             )}
+            className="max-w-[240px]"
           />
         </SettingsField>
 
         <SettingsField
-          label={t('settings.orchestrator.cleanupRetention.label')}
-          description={t('settings.orchestrator.cleanupRetention.helper')}
+          label={t('settings.orchestrator.deleteRetention.label')}
+          description={t('settings.orchestrator.deleteRetention.helper')}
         >
           <SettingsInput
             value={
@@ -506,60 +678,7 @@ export function OrchestratorSettingsSection() {
             placeholder={t(
               'settings.orchestrator.cleanupRetention.placeholder'
             )}
-          />
-        </SettingsField>
-
-        <SettingsCheckbox
-          id="orchestrator-autonomy"
-          label={t('settings.orchestrator.autonomy.label')}
-          description={t('settings.orchestrator.autonomy.helper')}
-          checked={draft.autonomy === 'full'}
-          onChange={(checked) => {
-            markDirty();
-            setDraft((prev) => ({
-              ...prev,
-              autonomy: checked ? 'full' : 'off',
-            }));
-          }}
-        />
-
-        {draft.autonomy === 'full' && (
-          <SettingsField
-            label={t('settings.orchestrator.autonomyIterations.label')}
-            description={t('settings.orchestrator.autonomyIterations.helper')}
-          >
-            <SettingsInput
-              value={String(draft.autonomy_review_iterations)}
-              onChange={(value) => {
-                markDirty();
-                const parsed = parseInt(value, 10);
-                setDraft((prev) => ({
-                  ...prev,
-                  autonomy_review_iterations: Number.isNaN(parsed) ? 0 : parsed,
-                }));
-              }}
-              placeholder="3"
-              error={draft.autonomy_review_iterations < 1}
-            />
-          </SettingsField>
-        )}
-
-        <SettingsField
-          label={t('settings.orchestrator.patternThreshold.label')}
-          description={t('settings.orchestrator.patternThreshold.helper')}
-        >
-          <SettingsInput
-            value={String(draft.pattern_threshold)}
-            onChange={(value) => {
-              markDirty();
-              const parsed = parseInt(value, 10);
-              setDraft((prev) => ({
-                ...prev,
-                pattern_threshold: Number.isNaN(parsed) ? 0 : parsed,
-              }));
-            }}
-            placeholder="5"
-            error={draft.pattern_threshold < 1}
+            className="max-w-[240px]"
           />
         </SettingsField>
 
@@ -587,43 +706,9 @@ export function OrchestratorSettingsSection() {
             placeholder={t(
               'settings.orchestrator.workspaceRetention.placeholder'
             )}
+            className="max-w-[240px]"
           />
         </SettingsField>
-
-        <SettingsField
-          label={t('settings.orchestrator.maxLaunchesPerTick.label')}
-          description={t('settings.orchestrator.maxLaunchesPerTick.helper')}
-        >
-          <SettingsInput
-            value={String(draft.max_launches_per_tick)}
-            onChange={(value) => {
-              markDirty();
-              const parsed = parseInt(value, 10);
-              setDraft((prev) => ({
-                ...prev,
-                max_launches_per_tick: Number.isNaN(parsed) ? 0 : parsed,
-              }));
-            }}
-            placeholder="3"
-            error={draft.max_launches_per_tick < 1}
-          />
-        </SettingsField>
-      </SettingsCard>
-
-      <SettingsCard
-        title={t('settings.orchestrator.approvals.title')}
-        description={t('settings.orchestrator.approvals.description')}
-      >
-        <SettingsCheckbox
-          id="orchestrator-in-app-gate"
-          label={t('settings.orchestrator.approvals.lavishLabel')}
-          description={t('settings.orchestrator.approvals.lavishHelper')}
-          checked={inAppGateDraft === 'lavish'}
-          onChange={(checked) => {
-            markDirty();
-            setInAppGateDraft(checked ? 'lavish' : 'none');
-          }}
-        />
       </SettingsCard>
 
       <SettingsCard
@@ -659,10 +744,13 @@ export function OrchestratorSettingsSection() {
           return (
             <div
               key={projectId}
-              className="border border-border rounded-sm p-base flex flex-col gap-2"
+              className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-high truncate" title={projectId}>
+                <span
+                  className="truncate text-sm font-semibold text-high"
+                  title={projectId}
+                >
                   {projectNameById.get(projectId) ?? projectId}
                 </span>
                 <IconButton
@@ -670,12 +758,12 @@ export function OrchestratorSettingsSection() {
                   onClick={() => removeProject(projectId)}
                   aria-label={t('settings.orchestrator.projects.remove')}
                   title={t('settings.orchestrator.projects.remove')}
-                  className="hover:text-error hover:bg-error/10"
+                  className="hover:bg-error-soft hover:text-error"
                 />
               </div>
 
               {projectMissing && (
-                <p className="text-sm text-error">
+                <p className="text-[12.5px] text-error">
                   {t('settings.orchestrator.projects.notFound')}
                 </p>
               )}
@@ -684,10 +772,11 @@ export function OrchestratorSettingsSection() {
                 label={t('settings.orchestrator.projects.reposLabel')}
                 description={t('settings.orchestrator.projects.reposHelper')}
               >
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                   {(repos ?? []).map((repo) => (
                     <SettingsCheckbox
                       key={repo.id}
+                      variant="checkbox"
                       id={`orchestrator-${projectId}-${repo.id}`}
                       label={repo.name}
                       checked={defaults.repo_ids.includes(repo.id)}
@@ -704,10 +793,11 @@ export function OrchestratorSettingsSection() {
                 </div>
               </SettingsField>
 
-              <details className="rounded-sm border border-border">
-                <summary className="cursor-pointer px-base py-2 text-sm text-high">
+              <details className="group rounded-lg border border-border">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-high hover:bg-panel [&::-webkit-details-marker]:hidden">
+                  <CaretRightIcon className="size-3.5 shrink-0 text-low transition-transform group-open:rotate-90" />
                   {t('settings.orchestrator.board.overridesTitle')}
-                  <span className="ml-2 text-low">
+                  <span className="ml-auto inline-flex h-[22px] items-center rounded-full bg-panel px-2 text-xs font-medium text-normal">
                     {overrideCount === 0
                       ? t('settings.orchestrator.board.overridesNone')
                       : t('settings.orchestrator.board.overridesCount', {
@@ -715,8 +805,8 @@ export function OrchestratorSettingsSection() {
                         })}
                   </span>
                 </summary>
-                <div className="flex flex-col gap-2 px-base pb-base">
-                  <p className="text-sm text-low">
+                <div className="flex flex-col gap-4 border-t border-divider px-3 pb-3 pt-3">
+                  <p className={settingsHelperClassName}>
                     {t('settings.orchestrator.board.overridesHelper')}
                   </p>
 
@@ -812,6 +902,7 @@ export function OrchestratorSettingsSection() {
                         }))
                       }
                       placeholder="project = {project_key} AND component = Extension"
+                      monospace
                     />
                   </SettingsField>
 
@@ -835,6 +926,7 @@ export function OrchestratorSettingsSection() {
                       placeholder={t(
                         'settings.orchestrator.board.inheritPlaceholder'
                       )}
+                      monospace
                     />
                   </SettingsField>
 
@@ -888,12 +980,13 @@ export function OrchestratorSettingsSection() {
                       'settings.orchestrator.board.skipGlobalHelper'
                     )}
                   >
-                    <div className="flex flex-wrap gap-4">
+                    <div className="flex flex-wrap gap-x-5 gap-y-2">
                       {notificationDescriptors.map((descriptor) => {
                         const kind = descriptor.kind as NotifierKind;
                         return (
                           <SettingsCheckbox
                             key={kind}
+                            variant="checkbox"
                             id={`skip-global-${projectId}-${kind}`}
                             label={descriptor.display_name}
                             checked={defaults.notifications.skip_global.includes(
@@ -992,6 +1085,7 @@ export function OrchestratorSettingsSection() {
                       }
                       rows={3}
                       placeholder={'dev@example.com=dev-login'}
+                      monospace
                     />
                   </SettingsField>
 
@@ -1014,6 +1108,7 @@ export function OrchestratorSettingsSection() {
                       }
                       rows={2}
                       placeholder="release-bot@example.com"
+                      monospace
                     />
                   </SettingsField>
 
@@ -1038,218 +1133,240 @@ export function OrchestratorSettingsSection() {
                       }
                       rows={2}
                       placeholder="ci-bot"
+                      monospace
                     />
                   </SettingsField>
 
-                  <SettingsField
-                    label={t('settings.orchestrator.board.deployWatchJobLabel')}
-                    description={t(
-                      'settings.orchestrator.board.deployWatchJobHelper'
-                    )}
-                  >
-                    <SettingsInput
-                      value={defaults.deploy_watch?.job_name ?? ''}
-                      onChange={(value) =>
-                        updateProjectDefaults(projectId, (current) => ({
-                          ...current,
-                          deploy_watch: toDeployWatch(
-                            value,
-                            current.deploy_watch?.git_ref ?? ''
-                          ),
-                        }))
-                      }
-                      placeholder="deploy_staging"
-                    />
-                  </SettingsField>
-
-                  <SettingsField
-                    label={t('settings.orchestrator.board.deployWatchRefLabel')}
-                    description={t(
-                      'settings.orchestrator.board.deployWatchRefHelper'
-                    )}
-                  >
-                    <SettingsInput
-                      value={defaults.deploy_watch?.git_ref ?? ''}
-                      onChange={(value) =>
-                        updateProjectDefaults(projectId, (current) => ({
-                          ...current,
-                          deploy_watch: toDeployWatch(
-                            current.deploy_watch?.job_name ?? '',
-                            value
-                          ),
-                        }))
-                      }
-                      placeholder="main"
-                    />
-                  </SettingsField>
-
-                  <SettingsField
-                    label={t('settings.orchestrator.autonomy.label')}
-                    description={t(
-                      'settings.orchestrator.board.autonomyHelper'
-                    )}
-                  >
-                    <SettingsSelect<TriState>
-                      value={toTriState(
-                        defaults.autonomy == null
-                          ? null
-                          : defaults.autonomy === 'full'
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <SettingsField
+                      label={t(
+                        'settings.orchestrator.board.deployWatchJobLabel'
                       )}
-                      options={triStateOptions}
-                      onChange={(value) => {
-                        const resolved = fromTriState(value);
-                        updateProjectDefaults(projectId, (current) => ({
-                          ...current,
-                          autonomy:
-                            resolved == null ? null : resolved ? 'full' : 'off',
-                        }));
-                      }}
-                    />
-                  </SettingsField>
+                      description={t(
+                        'settings.orchestrator.board.deployWatchJobHelper'
+                      )}
+                    >
+                      <SettingsInput
+                        value={defaults.deploy_watch?.job_name ?? ''}
+                        onChange={(value) =>
+                          updateProjectDefaults(projectId, (current) => ({
+                            ...current,
+                            deploy_watch: toDeployWatch(
+                              value,
+                              current.deploy_watch?.git_ref ?? ''
+                            ),
+                          }))
+                        }
+                        placeholder="deploy_staging"
+                        monospace
+                        className="mt-auto"
+                      />
+                    </SettingsField>
 
-                  <SettingsField
-                    label={t('settings.orchestrator.autonomyIterations.label')}
-                    description={t(
-                      'settings.orchestrator.board.blankInheritsHelper'
-                    )}
-                  >
-                    <SettingsInput
-                      value={
-                        defaults.autonomy_review_iterations == null
-                          ? ''
-                          : String(defaults.autonomy_review_iterations)
-                      }
-                      onChange={(value) => {
-                        const parsed = parseInt(value, 10);
-                        updateProjectDefaults(projectId, (current) => ({
-                          ...current,
-                          autonomy_review_iterations:
-                            value.trim() === '' ||
-                            Number.isNaN(parsed) ||
-                            parsed < 1
+                    <SettingsField
+                      label={t(
+                        'settings.orchestrator.board.deployWatchRefLabel'
+                      )}
+                      description={t(
+                        'settings.orchestrator.board.deployWatchRefHelper'
+                      )}
+                    >
+                      <SettingsInput
+                        value={defaults.deploy_watch?.git_ref ?? ''}
+                        onChange={(value) =>
+                          updateProjectDefaults(projectId, (current) => ({
+                            ...current,
+                            deploy_watch: toDeployWatch(
+                              current.deploy_watch?.job_name ?? '',
+                              value
+                            ),
+                          }))
+                        }
+                        placeholder="main"
+                        monospace
+                        className="mt-auto"
+                      />
+                    </SettingsField>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <SettingsField
+                      label={t('settings.orchestrator.autonomyMode.label')}
+                      description={t(
+                        'settings.orchestrator.board.autonomyHelper'
+                      )}
+                    >
+                      <div className="mt-auto">
+                        <SettingsSelect<TriState>
+                          value={toTriState(
+                            defaults.autonomy == null
                               ? null
-                              : parsed,
-                        }));
-                      }}
-                      placeholder={t(
-                        'settings.orchestrator.board.inheritPlaceholder'
-                      )}
-                    />
-                  </SettingsField>
-
-                  <SettingsField
-                    label={t('settings.orchestrator.deployedRetention.label')}
-                    description={t(
-                      'settings.orchestrator.board.retentionHelper'
-                    )}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <SettingsSelect<'inherit' | 'off' | 'days'>
-                        value={retentionMode}
-                        options={[
-                          {
-                            value: 'inherit',
-                            label: t('settings.orchestrator.board.inherit'),
-                          },
-                          {
-                            value: 'off',
-                            label: t('settings.orchestrator.board.off'),
-                          },
-                          {
-                            value: 'days',
-                            label: t(
-                              'settings.orchestrator.board.retentionDays'
-                            ),
-                          },
-                        ]}
-                        onChange={(mode) =>
-                          updateProjectDefaults(projectId, (current) => ({
-                            ...current,
-                            deployed_retention:
-                              mode === 'days' ? { days: 7 } : mode,
-                          }))
-                        }
-                      />
-                      {retentionMode === 'days' && (
-                        <SettingsInput
-                          value={String(
-                            typeof retention === 'object' ? retention.days : 7
+                              : defaults.autonomy === 'full'
                           )}
+                          options={autonomyOptions}
                           onChange={(value) => {
-                            const parsed = parseInt(value, 10);
+                            const resolved = fromTriState(value);
                             updateProjectDefaults(projectId, (current) => ({
                               ...current,
-                              deployed_retention: {
-                                days:
-                                  Number.isNaN(parsed) || parsed < 1
-                                    ? 1
-                                    : parsed,
-                              },
+                              autonomy:
+                                resolved == null
+                                  ? null
+                                  : resolved
+                                    ? 'full'
+                                    : 'off',
                             }));
                           }}
-                          placeholder="7"
                         />
-                      )}
-                    </div>
-                  </SettingsField>
+                      </div>
+                    </SettingsField>
 
-                  <SettingsField
-                    label={t('settings.orchestrator.cleanupRetention.label')}
-                    description={t(
-                      'settings.orchestrator.board.cleanupRetentionHelper'
-                    )}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <SettingsSelect<'inherit' | 'off' | 'days'>
-                        value={cleanupRetentionMode}
-                        options={[
-                          {
-                            value: 'inherit',
-                            label: t('settings.orchestrator.board.inherit'),
-                          },
-                          {
-                            value: 'off',
-                            label: t('settings.orchestrator.board.off'),
-                          },
-                          {
-                            value: 'days',
-                            label: t(
-                              'settings.orchestrator.board.retentionDays'
-                            ),
-                          },
-                        ]}
-                        onChange={(mode) =>
+                    <SettingsField
+                      label={t('settings.orchestrator.reviewLoopCap.label')}
+                      description={t(
+                        'settings.orchestrator.board.blankInheritsHelper'
+                      )}
+                    >
+                      <SettingsInput
+                        value={
+                          defaults.autonomy_review_iterations == null
+                            ? ''
+                            : String(defaults.autonomy_review_iterations)
+                        }
+                        onChange={(value) => {
+                          const parsed = parseInt(value, 10);
                           updateProjectDefaults(projectId, (current) => ({
                             ...current,
-                            cleanup_retention:
-                              mode === 'days' ? { days: 14 } : mode,
-                          }))
-                        }
+                            autonomy_review_iterations:
+                              value.trim() === '' ||
+                              Number.isNaN(parsed) ||
+                              parsed < 1
+                                ? null
+                                : parsed,
+                          }));
+                        }}
+                        placeholder={t(
+                          'settings.orchestrator.board.inheritPlaceholder'
+                        )}
+                        className="mt-auto"
                       />
-                      {cleanupRetentionMode === 'days' && (
-                        <SettingsInput
-                          value={String(
-                            typeof cleanupRetention === 'object'
-                              ? cleanupRetention.days
-                              : 14
-                          )}
-                          onChange={(value) => {
-                            const parsed = parseInt(value, 10);
+                    </SettingsField>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <SettingsField
+                      label={t('settings.orchestrator.closeRetention.label')}
+                      description={t(
+                        'settings.orchestrator.board.closeRetentionHelper'
+                      )}
+                    >
+                      <div className="mt-auto flex flex-col gap-1.5">
+                        <SettingsSelect<'inherit' | 'off' | 'days'>
+                          value={retentionMode}
+                          options={[
+                            {
+                              value: 'inherit',
+                              label: t('settings.orchestrator.board.inherit'),
+                            },
+                            {
+                              value: 'off',
+                              label: t('settings.orchestrator.board.off'),
+                            },
+                            {
+                              value: 'days',
+                              label: t(
+                                'settings.orchestrator.board.retentionDays'
+                              ),
+                            },
+                          ]}
+                          onChange={(mode) =>
                             updateProjectDefaults(projectId, (current) => ({
                               ...current,
-                              cleanup_retention: {
-                                days:
-                                  Number.isNaN(parsed) || parsed < 1
-                                    ? 1
-                                    : parsed,
-                              },
-                            }));
-                          }}
-                          placeholder="14"
+                              deployed_retention:
+                                mode === 'days' ? { days: 7 } : mode,
+                            }))
+                          }
                         />
+                        {retentionMode === 'days' && (
+                          <SettingsInput
+                            value={String(
+                              typeof retention === 'object' ? retention.days : 7
+                            )}
+                            onChange={(value) => {
+                              const parsed = parseInt(value, 10);
+                              updateProjectDefaults(projectId, (current) => ({
+                                ...current,
+                                deployed_retention: {
+                                  days:
+                                    Number.isNaN(parsed) || parsed < 1
+                                      ? 1
+                                      : parsed,
+                                },
+                              }));
+                            }}
+                            placeholder="7"
+                          />
+                        )}
+                      </div>
+                    </SettingsField>
+
+                    <SettingsField
+                      label={t('settings.orchestrator.deleteRetention.label')}
+                      description={t(
+                        'settings.orchestrator.board.deleteRetentionHelper'
                       )}
-                    </div>
-                  </SettingsField>
+                    >
+                      <div className="mt-auto flex flex-col gap-1.5">
+                        <SettingsSelect<'inherit' | 'off' | 'days'>
+                          value={cleanupRetentionMode}
+                          options={[
+                            {
+                              value: 'inherit',
+                              label: t('settings.orchestrator.board.inherit'),
+                            },
+                            {
+                              value: 'off',
+                              label: t('settings.orchestrator.board.off'),
+                            },
+                            {
+                              value: 'days',
+                              label: t(
+                                'settings.orchestrator.board.retentionDays'
+                              ),
+                            },
+                          ]}
+                          onChange={(mode) =>
+                            updateProjectDefaults(projectId, (current) => ({
+                              ...current,
+                              cleanup_retention:
+                                mode === 'days' ? { days: 14 } : mode,
+                            }))
+                          }
+                        />
+                        {cleanupRetentionMode === 'days' && (
+                          <SettingsInput
+                            value={String(
+                              typeof cleanupRetention === 'object'
+                                ? cleanupRetention.days
+                                : 14
+                            )}
+                            onChange={(value) => {
+                              const parsed = parseInt(value, 10);
+                              updateProjectDefaults(projectId, (current) => ({
+                                ...current,
+                                cleanup_retention: {
+                                  days:
+                                    Number.isNaN(parsed) || parsed < 1
+                                      ? 1
+                                      : parsed,
+                                },
+                              }));
+                            }}
+                            placeholder="14"
+                          />
+                        )}
+                      </div>
+                    </SettingsField>
+                  </div>
 
                   <SettingsField
                     label={t('settings.orchestrator.patternThreshold.label')}
@@ -1278,10 +1395,11 @@ export function OrchestratorSettingsSection() {
                       placeholder={t(
                         'settings.orchestrator.board.inheritPlaceholder'
                       )}
+                      className="max-w-[240px]"
                     />
                   </SettingsField>
 
-                  <p className="text-sm text-low">
+                  <p className={settingsHelperClassName}>
                     {t('settings.orchestrator.board.playbooksHint')}
                   </p>
                 </div>
@@ -1303,6 +1421,7 @@ export function OrchestratorSettingsSection() {
               }))}
               onChange={(projectId) => addProject(projectId)}
               placeholder={t('settings.orchestrator.projects.addPlaceholder')}
+              className="max-w-[440px]"
             />
           </SettingsField>
         )}
@@ -1313,6 +1432,7 @@ export function OrchestratorSettingsSection() {
               value={t('settings.orchestrator.projects.boardHint')}
               disabled
               variant="default"
+              className="self-start"
             />
           )}
       </SettingsCard>
@@ -1323,11 +1443,63 @@ export function OrchestratorSettingsSection() {
         saveDisabled={
           pollIntervalSecs < 1 ||
           projectsMissingRepos ||
-          (draft.autonomy === 'full' && draft.autonomy_review_iterations < 1)
+          draft.autonomy_review_iterations < 1
         }
         onSave={handleSave}
         onDiscard={handleDiscard}
+        onReset={resetGlobalsToDefaults}
+        resetDisabled={globalsAtDefaults}
       />
     </>
+  );
+}
+
+/** One autonomy mode as a selectable card; the pair forms a radio group. */
+function ModeCard({
+  selected,
+  title,
+  chip,
+  description,
+  onSelect,
+}: {
+  selected: boolean;
+  title: string;
+  chip?: string;
+  description: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        'flex items-start gap-3 rounded-lg border bg-secondary px-3.5 py-3 text-left transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
+        selected
+          ? 'border-brand ring-1 ring-brand'
+          : 'border-border hover:bg-panel'
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          'mt-0.5 size-4 shrink-0 rounded-full bg-secondary',
+          selected ? 'border-[5px] border-brand' : 'border-2 border-low/50'
+        )}
+      />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="flex items-center gap-1.5 text-sm font-bold text-high">
+          {title}
+          {chip && (
+            <span className="inline-flex h-[22px] items-center rounded-full bg-panel px-2 text-xs font-medium text-normal">
+              {chip}
+            </span>
+          )}
+        </span>
+        <span className={settingsHelperClassName}>{description}</span>
+      </span>
+    </button>
   );
 }

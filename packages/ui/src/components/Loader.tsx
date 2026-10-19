@@ -16,11 +16,9 @@ export const Loader: React.FC<LoaderProps> = ({
     className={`flex flex-col items-center justify-center gap-2 ${className}`}
   >
     <Loader2
-      className="animate-spin text-muted-foreground"
+      className="animate-spin text-low"
       style={{ width: size, height: size }}
     />
-    {!!message && (
-      <div className="text-center text-muted-foreground">{message}</div>
-    )}
+    {!!message && <div className="text-center text-sm text-low">{message}</div>}
   </div>
 );

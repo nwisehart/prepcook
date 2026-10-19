@@ -9,14 +9,15 @@ interface ButtonGroupProps {
 }
 
 /**
- * ButtonGroup - A container for grouped buttons with a shared border
- * Can contain IconButtonGroupItem (icon-only) or ButtonGroupItem (text/mixed)
+ * ButtonGroup - A segmented control: a bordered surface (8px radius, 3px
+ * inset) holding IconButtonGroupItem (icon-only) or ButtonGroupItem
+ * (text/mixed) segments with 6px radius.
  */
 export function ButtonGroup({ children, className }: ButtonGroupProps) {
   return (
     <div
       className={cn(
-        'flex items-center rounded-sm border border-border overflow-hidden',
+        'flex items-center gap-0.5 rounded border border-border bg-secondary p-[3px]',
         className
       )}
     >
@@ -50,23 +51,25 @@ export function IconButtonGroupItem({
   className,
 }: IconButtonGroupItemProps) {
   const stateStyles = disabled
-    ? 'opacity-40 cursor-not-allowed'
+    ? 'text-low opacity-40 cursor-not-allowed'
     : active
-      ? 'bg-secondary text-normal'
-      : 'text-low hover:text-normal hover:bg-secondary/50';
+      ? 'bg-panel text-high'
+      : 'text-low hover:text-high';
 
   const button = (
     <button
       type="button"
-      className={cn('p-half transition-colors', stateStyles, className)}
+      className={cn(
+        'inline-flex size-7 items-center justify-center rounded-sm transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
+        stateStyles,
+        className
+      )}
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
     >
-      <IconComponent
-        className={cn('size-icon-sm', iconClassName)}
-        weight="bold"
-      />
+      <IconComponent className={cn('size-icon-sm', iconClassName)} />
     </button>
   );
 
@@ -100,19 +103,20 @@ export function ButtonGroupItem({
   children,
 }: ButtonGroupItemProps) {
   const stateStyles = disabled
-    ? 'opacity-40 cursor-not-allowed'
+    ? 'text-low font-medium opacity-40 cursor-not-allowed'
     : active
-      ? 'bg-secondary text-normal'
-      : 'text-low hover:text-normal hover:bg-secondary/50';
+      ? 'bg-panel text-high font-semibold'
+      : 'text-low font-medium hover:text-high';
 
-  // Use smaller padding for icon-only, larger for text content
-  const paddingStyles = children ? 'px-base py-half' : 'p-half';
+  // Square segment for icon-only, padded segment for text content
+  const paddingStyles = children ? 'px-3' : 'w-7 justify-center';
 
   const button = (
     <button
       type="button"
       className={cn(
-        'text-sm transition-colors',
+        'inline-flex h-7 items-center rounded-sm text-sm transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
         paddingStyles,
         stateStyles,
         className
@@ -124,7 +128,6 @@ export function ButtonGroupItem({
       {IconComponent && (
         <IconComponent
           className={cn('size-icon-sm', children && 'mr-half', iconClassName)}
-          weight="bold"
         />
       )}
       {children}

@@ -246,7 +246,7 @@ export function McpSettingsSection() {
   if (!config) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.mcp.errors.loadFailed')}
         </div>
       </div>
@@ -257,13 +257,13 @@ export function McpSettingsSection() {
     <>
       {/* Status messages */}
       {mcpError && !mcpError.includes('does not support MCP') && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.mcp.errors.mcpError', { error: mcpError })}
         </div>
       )}
 
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.mcp.save.successMessage')}
         </div>
       )}
@@ -285,7 +285,7 @@ export function McpSettingsSection() {
                     ? toPrettyCase(selectedProfileKey)
                     : t('settings.mcp.labels.agentPlaceholder')
                 }
-                className="w-full justify-between"
+                className="h-9 w-full justify-between"
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
@@ -305,11 +305,12 @@ export function McpSettingsSection() {
         </SettingsField>
 
         {mcpError && mcpError.includes('does not support MCP') ? (
-          <div className="rounded-sm border border-warning/50 bg-warning/10 p-4">
-            <h3 className="text-sm font-medium text-warning">
+          <div className="overflow-hidden rounded-lg border border-attention-border">
+            <h3 className="flex items-center gap-2 bg-attention-soft px-4 py-2 text-xs font-bold text-attention-foreground">
+              <span className="size-2 rounded-full bg-attention" />
               {t('settings.mcp.errors.notSupported')}
             </h3>
-            <div className="mt-2 text-sm text-low">
+            <div className="px-4 py-3 text-[13px] text-normal">
               <p>{mcpError}</p>
               <p className="mt-1">{t('settings.mcp.errors.supportMessage')}</p>
             </div>
@@ -325,7 +326,7 @@ export function McpSettingsSection() {
                   <>
                     {t('settings.mcp.labels.saveLocation')}
                     {mcpConfigPath && (
-                      <span className="ml-2 font-mono text-xs">
+                      <span className="ml-2 font-mono text-xs text-normal">
                         {mcpConfigPath}
                       </span>
                     )}
@@ -342,6 +343,7 @@ export function McpSettingsSection() {
                 onChange={handleMcpServersChange}
                 disabled={mcpLoading}
                 rows={14}
+                monospace
                 placeholder='{\n  "server-name": {\n    "type": "stdio",\n    "command": "your-command",\n    "args": ["arg1", "arg2"]\n  }\n}'
               />
             </SettingsField>
@@ -350,15 +352,15 @@ export function McpSettingsSection() {
             {mcpConfig?.preconfigured &&
               typeof mcpConfig.preconfigured === 'object' &&
               Object.keys(servers).length > 0 && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-normal">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-semibold text-high">
                     {t('settings.mcp.labels.popularServers')}
                   </label>
-                  <p className="text-sm text-low">
+                  <p className="text-[12.5px] leading-[1.45] text-low">
                     {t('settings.mcp.labels.serverHelper')}
                   </p>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {Object.entries(servers).map(([key]) => {
                       const metaObj = getMetaFor(key) as {
                         name?: string;
@@ -376,11 +378,12 @@ export function McpSettingsSection() {
                           type="button"
                           onClick={() => addServer(key)}
                           className={cn(
-                            'flex items-start gap-3 p-3 rounded-sm border border-border/50 bg-secondary/30',
-                            'hover:bg-secondary hover:border-border transition-colors text-left'
+                            'flex items-start gap-3 rounded-lg border border-border bg-secondary px-3 py-2.5',
+                            'hover:bg-panel transition-colors text-left',
+                            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
                           )}
                         >
-                          <div className="w-6 h-6 rounded-sm border border-border bg-secondary flex items-center justify-center overflow-hidden shrink-0">
+                          <div className="size-6 rounded-sm bg-brand-soft flex items-center justify-center overflow-hidden shrink-0">
                             {icon ? (
                               <img
                                 src={icon}
@@ -388,23 +391,20 @@ export function McpSettingsSection() {
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <span className="text-xs font-semibold text-normal">
+                              <span className="text-xs font-bold text-brand-soft-foreground">
                                 {name.slice(0, 1).toUpperCase()}
                               </span>
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-normal truncate">
+                            <div className="text-sm font-semibold text-high truncate">
                               {name}
                             </div>
                             <div className="text-xs text-low line-clamp-2">
                               {description}
                             </div>
                           </div>
-                          <PlusIcon
-                            className="size-icon-xs text-low shrink-0"
-                            weight="bold"
-                          />
+                          <PlusIcon className="mt-0.5 size-3.5 shrink-0 text-low" />
                         </button>
                       );
                     })}

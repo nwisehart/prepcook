@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { TerminalIcon, GearSixIcon } from '@phosphor-icons/react';
+import { GearSixIcon, TerminalIcon } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
 
 export type ScriptPlaceholderType = 'setup' | 'cleanup';
@@ -10,6 +10,7 @@ interface ChatScriptPlaceholderProps {
   onConfigure?: () => void;
 }
 
+/** A step that has not happened because no script is configured for it. */
 export function ChatScriptPlaceholder({
   type,
   className,
@@ -28,26 +29,26 @@ export function ChatScriptPlaceholder({
       : t('conversation.scriptPlaceholder.cleanupDescription');
 
   return (
-    <div
-      className={cn(
-        'flex items-start gap-base text-sm rounded-md -mx-half px-half py-half',
-        className
-      )}
-    >
-      <span className="relative shrink-0 pt-0.5">
-        <TerminalIcon className="size-icon-base text-lowest" />
+    <div className={cn('flex items-start gap-3 py-1.5', className)}>
+      <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed text-low">
+        <TerminalIcon className="size-3.5" aria-hidden />
       </span>
-      <div className="flex flex-col min-w-0 flex-1 gap-0.5">
-        <span className="text-low font-medium">{title}</span>
-        <span className="text-lowest text-xs">{description}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="pt-0.5 text-sm font-semibold text-normal">
+          {title}
+        </span>
+        <span className="text-[12.5px] text-low">{description}</span>
       </div>
       {onConfigure && (
         <button
           type="button"
           onClick={onConfigure}
-          className="shrink-0 flex items-center gap-1 px-2 py-1 text-xs text-brand hover:text-brand-hover hover:bg-secondary rounded transition-colors"
+          className={cn(
+            'flex h-6 shrink-0 items-center gap-1 rounded px-2 text-xs font-semibold text-brand-secondary transition-colors hover:bg-panel',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
+          )}
         >
-          <GearSixIcon className="size-icon-xs" />
+          <GearSixIcon className="size-3.5" />
           <span>{t('conversation.scriptPlaceholder.configure')}</span>
         </button>
       )}

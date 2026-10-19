@@ -40,14 +40,14 @@ export function ScriptRunPanel({
   const report = state?.report ?? null;
 
   return (
-    <div className="rounded-sm border border-border bg-secondary">
-      <div className="flex items-center justify-between gap-base px-base py-half border-b border-border">
-        <div className="flex items-center gap-half min-w-0">
-          <span className="text-sm font-medium text-normal truncate">
+    <div className="overflow-hidden rounded-lg border border-border bg-secondary">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-high">
             {t('settings.repos.scripts.run.title', { step, target })}
           </span>
           {isLive ? (
-            <span className="flex items-center gap-half text-sm text-low">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-brand-secondary">
               <RunningDots />
               {t('settings.repos.scripts.run.running')}
             </span>
@@ -59,10 +59,10 @@ export function ScriptRunPanel({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 text-low hover:text-normal"
+            className="shrink-0 rounded p-1 text-low hover:bg-panel hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
             aria-label={t('settings.repos.scripts.run.close')}
           >
-            <XIcon className="size-icon-sm" />
+            <XIcon className="size-4" />
           </button>
         )}
       </div>
@@ -78,7 +78,7 @@ export function ScriptRunPanel({
       </div>
 
       {!isLive && stateError != null && !report && (
-        <p className="px-base py-half text-sm text-error border-t border-border">
+        <p className="border-t border-border px-3 py-2 text-[12.5px] text-error">
           {t('settings.repos.scripts.run.reportUnavailable')}
         </p>
       )}
@@ -93,8 +93,8 @@ function OutcomeBadge({ report }: { report: StandUpReport }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-half rounded-sm px-half text-sm font-ibm-plex-mono',
-        ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
+        'inline-flex h-[22px] items-center rounded-full px-2 font-mono text-xs font-medium',
+        ok ? 'bg-success-soft text-success' : 'bg-error-soft text-error'
       )}
     >
       {report.outcome.kind}
@@ -107,33 +107,35 @@ function ScriptRunReport({ report }: { report: StandUpReport }) {
   const detail = 'detail' in report.outcome ? report.outcome.detail : null;
 
   return (
-    <div className="border-t border-border px-base py-half space-y-half">
+    <div className="flex flex-col gap-1.5 border-t border-border px-3 py-2">
       <p className="text-sm text-normal">
         {t('settings.repos.scripts.run.outcome')}{' '}
-        <span className="font-ibm-plex-mono">{report.outcome.kind}</span>
+        <span className="font-mono">{report.outcome.kind}</span>
         {detail && <span className="text-low"> — {detail}</span>}
       </p>
       {report.message && (
-        <p className="text-sm text-low whitespace-pre-wrap">{report.message}</p>
+        <p className="whitespace-pre-wrap text-[12.5px] text-low">
+          {report.message}
+        </p>
       )}
       {report.steps.length === 0 ? (
-        <p className="text-sm text-low">
+        <p className="text-[12.5px] text-low">
           {t('settings.repos.scripts.run.noSteps')}
         </p>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-low">
-              <th className="font-medium py-0.5 pr-base">
+            <tr className="text-left text-xs text-low">
+              <th className="py-1 pr-3 font-semibold">
                 {t('settings.repos.scripts.run.columns.step')}
               </th>
-              <th className="font-medium py-0.5 pr-base">
+              <th className="py-1 pr-3 font-semibold">
                 {t('settings.repos.scripts.run.columns.exit')}
               </th>
-              <th className="font-medium py-0.5 pr-base">
+              <th className="py-1 pr-3 font-semibold">
                 {t('settings.repos.scripts.run.columns.duration')}
               </th>
-              <th className="font-medium py-0.5">
+              <th className="py-1 font-semibold">
                 {t('settings.repos.scripts.run.columns.timedOut')}
               </th>
             </tr>
@@ -146,22 +148,25 @@ function ScriptRunReport({ report }: { report: StandUpReport }) {
               return (
                 <tr
                   key={`${stepReport.step}-${index}`}
-                  className={cn(failed ? 'text-error' : 'text-normal')}
+                  className={cn(
+                    'border-t border-divider',
+                    failed ? 'text-error' : 'text-normal'
+                  )}
                 >
-                  <td className="py-0.5 pr-base font-ibm-plex-mono">
+                  <td className="py-1 pr-3 font-mono text-[12.5px]">
                     {stepReport.step}
                   </td>
-                  <td className="py-0.5 pr-base font-ibm-plex-mono">
+                  <td className="py-1 pr-3 font-mono text-[12.5px]">
                     {stepReport.exit === null
                       ? t('settings.repos.scripts.run.noExit')
                       : stepReport.exit}
                   </td>
-                  <td className="py-0.5 pr-base">
+                  <td className="py-1 pr-3">
                     {t('settings.repos.scripts.run.seconds', {
                       seconds: (stepReport.duration_ms / 1000).toFixed(1),
                     })}
                   </td>
-                  <td className="py-0.5">
+                  <td className="py-1">
                     {stepReport.timed_out
                       ? t('settings.repos.scripts.run.yes')
                       : t('settings.repos.scripts.run.no')}

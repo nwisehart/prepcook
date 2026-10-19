@@ -54,7 +54,7 @@ export function ClaudeSettingsSection() {
         description={t('settings.claude.status.description')}
         headerAction={
           <PrimaryButton
-            variant="tertiary"
+            variant="secondary"
             value={t('settings.claude.recheck.button')}
             onClick={handleRecheck}
             disabled={checking}
@@ -64,21 +64,21 @@ export function ClaudeSettingsSection() {
       >
         <div className="flex items-center gap-2">
           {claudeSeatDegraded ? (
-            <span className="inline-flex items-center gap-1.5 rounded-sm bg-error/10 border border-error/50 px-base py-half text-sm font-medium text-error">
-              <WarningCircleIcon className="size-icon-sm" weight="fill" />
+            <span className="inline-flex h-[22px] items-center gap-1.5 rounded-full bg-error-soft px-2 text-xs font-medium text-error">
+              <WarningCircleIcon className="size-3.5" weight="fill" />
               {t('settings.claude.status.degraded')}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-sm bg-success/10 border border-success/50 px-base py-half text-sm font-medium text-success">
-              <CheckCircleIcon className="size-icon-sm" weight="fill" />
+            <span className="inline-flex h-[22px] items-center gap-1.5 rounded-full bg-success-soft px-2 text-xs font-medium text-success">
+              <CheckCircleIcon className="size-3.5" weight="fill" />
               {t('settings.claude.status.healthy')}
             </span>
           )}
         </div>
 
-        {checkError && <p className="text-sm text-error">{checkError}</p>}
+        {checkError && <p className="text-[12.5px] text-error">{checkError}</p>}
 
-        <p className="text-sm text-low">
+        <p className="text-[12.5px] leading-[1.45] text-low">
           {claudeSeatDegraded
             ? t('settings.claude.status.degradedHelper')
             : t('settings.claude.status.healthyHelper')}
@@ -94,11 +94,11 @@ export function ClaudeSettingsSection() {
           description={t('settings.claude.reauth.commandHelper')}
         >
           <div className="flex items-stretch gap-2">
-            <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm text-high">
+            <code className="flex h-9 min-w-0 flex-1 items-center overflow-x-auto whitespace-nowrap rounded border border-border bg-surface-raised px-3 font-mono text-[13px] text-high">
               {RELOGIN_COMMAND}
             </code>
             <PrimaryButton
-              variant="tertiary"
+              variant="secondary"
               value={
                 copied
                   ? t('common:actions.copied')
@@ -110,7 +110,7 @@ export function ClaudeSettingsSection() {
           </div>
         </SettingsField>
 
-        <ol className="list-decimal pl-5 space-y-1 text-sm text-low">
+        <ol className="flex list-decimal flex-col gap-1 pl-5 text-[13px] text-normal">
           <li>{t('settings.claude.reauth.step1')}</li>
           <li>{t('settings.claude.reauth.step2')}</li>
           <li>{t('settings.claude.reauth.step3')}</li>

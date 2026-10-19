@@ -51,11 +51,11 @@ function getRunReasonIcon(runReason: string): typeof TerminalIcon {
 function getStatusColor(status: string): string {
   switch (status) {
     case 'running':
-      return 'bg-info';
+      return 'bg-brand';
     case 'completed':
       return 'bg-success';
     case 'failed':
-      return 'bg-destructive';
+      return 'bg-error';
     case 'killed':
       return 'bg-low';
     default:

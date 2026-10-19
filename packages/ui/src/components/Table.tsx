@@ -5,7 +5,11 @@ const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <table ref={ref} className={cn('w-full text-sm', className)} {...props} />
+  <table
+    ref={ref}
+    className={cn('w-full text-sm text-normal', className)}
+    {...props}
+  />
 ));
 Table.displayName = 'Table';
 
@@ -15,7 +19,10 @@ const TableHead = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <thead
     ref={ref}
-    className={cn('uppercase text-muted-foreground', className)}
+    className={cn(
+      'text-xs font-bold uppercase tracking-[0.08em] text-low',
+      className
+    )}
     {...props}
   />
 ));
@@ -38,8 +45,8 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      'border-t',
-      clickable && 'cursor-pointer hover:bg-muted',
+      'border-t border-divider',
+      clickable && 'cursor-pointer transition-colors hover:bg-panel',
       className
     )}
     {...props}
@@ -51,7 +58,7 @@ const TableHeaderCell = React.forwardRef<
   HTMLTableCellElement,
   React.ThHTMLAttributes<HTMLTableCellElement>
 >(({ className, ...props }, ref) => (
-  <th ref={ref} className={cn('text-left', className)} {...props} />
+  <th ref={ref} className={cn('py-2 text-left', className)} {...props} />
 ));
 TableHeaderCell.displayName = 'TableHeaderCell';
 
@@ -71,7 +78,7 @@ const TableEmpty = ({
   children: React.ReactNode;
 }) => (
   <TableRow>
-    <TableCell colSpan={colSpan} className="text-muted-foreground">
+    <TableCell colSpan={colSpan} className="text-low">
       {children}
     </TableCell>
   </TableRow>
@@ -80,7 +87,7 @@ const TableEmpty = ({
 const TableLoading = ({ colSpan }: { colSpan: number }) => (
   <TableRow>
     <TableCell colSpan={colSpan}>
-      <div className="h-5 w-full bg-muted/30 rounded animate-pulse" />
+      <div className="h-5 w-full bg-panel rounded animate-pulse" />
     </TableCell>
   </TableRow>
 );

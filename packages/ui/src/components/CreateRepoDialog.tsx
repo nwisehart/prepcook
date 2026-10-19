@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from './KeyboardDialog';
 import { Button } from './Button';
+import { Input } from './Input';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { FolderSimpleIcon, SpinnerIcon } from '@phosphor-icons/react';
 import { defineModal } from '../lib/modals';
@@ -88,50 +89,58 @@ const CreateRepoDialogImpl = NiceModal.create<CreateRepoDialogProps>(
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-4 py-2">
             {/* Name input */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="create-repo-name"
+                className="text-sm font-semibold text-high"
+              >
                 {t('git.createRepo.form.nameLabel')}
               </label>
-              <input
+              <Input
+                id="create-repo-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('git.createRepo.form.namePlaceholder')}
                 disabled={isSubmitting}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
 
             {/* Location input */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="create-repo-location"
+                className="text-sm font-semibold text-high"
+              >
                 {t('git.createRepo.form.locationLabel')}
               </label>
               <div className="flex gap-2">
-                <input
+                <Input
+                  id="create-repo-location"
                   type="text"
                   value={parentPath}
                   onChange={(e) => setParentPath(e.target.value)}
                   placeholder={t('git.createRepo.form.locationPlaceholder')}
                   disabled={isSubmitting}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="font-mono text-[13px]"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
+                  className="size-9 shrink-0"
                   onClick={handleBrowseForPath}
                   disabled={isSubmitting || !onBrowseForPath}
                 >
-                  <FolderSimpleIcon className="h-4 w-4" weight="fill" />
+                  <FolderSimpleIcon className="size-4" />
                 </Button>
               </div>
             </div>
 
             {/* Error */}
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-[12.5px] text-error">{error}</p>}
           </div>
 
           <DialogFooter>
@@ -148,7 +157,7 @@ const CreateRepoDialogImpl = NiceModal.create<CreateRepoDialogProps>(
             >
               {isSubmitting ? (
                 <>
-                  <SpinnerIcon className="h-4 w-4 animate-spin mr-2" />
+                  <SpinnerIcon className="size-4 animate-spin mr-2" />
                   {t('git.createRepo.states.creating')}
                 </>
               ) : (

@@ -18,17 +18,17 @@ export function PrBadge({ number, url, status, className }: PrBadgeProps) {
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        'flex items-center gap-half px-1.5 py-0.5 rounded text-xs font-medium transition-colors',
+        'inline-flex h-[22px] items-center gap-1 rounded-full px-2 text-xs font-medium leading-none transition-colors',
         status === 'merged'
-          ? 'bg-merged/10 text-merged hover:bg-merged/20'
+          ? 'bg-success-soft text-success hover:opacity-80'
           : status === 'closed'
-            ? 'bg-error/10 text-error hover:bg-error/20'
-            : 'bg-success/10 text-success hover:bg-success/20',
+            ? 'bg-panel text-low hover:text-normal'
+            : 'bg-brand-soft text-brand-soft-foreground hover:opacity-80',
         className
       )}
     >
-      <GitPullRequestIcon className="size-icon-2xs" weight="bold" />
-      <span>#{number}</span>
+      <GitPullRequestIcon className="size-3" weight="bold" />
+      <span className="font-mono">#{number}</span>
     </a>
   );
 }

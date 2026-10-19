@@ -30,11 +30,11 @@ function BulkActionButton({
         type="button"
         onClick={onClick}
         className={cn(
-          'flex items-center gap-half px-base py-half rounded-sm text-sm',
+          'flex h-8 items-center gap-1.5 rounded px-2.5 text-sm font-semibold',
           'transition-colors',
           variant === 'destructive'
-            ? 'text-destructive hover:bg-destructive/10'
-            : 'text-high hover:bg-secondary'
+            ? 'text-error hover:bg-error-soft'
+            : 'text-high hover:bg-panel'
         )}
       >
         <IconComponent className="size-icon-xs" weight="bold" />
@@ -65,8 +65,8 @@ export function BulkActionBar({
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-half bg-primary border border-secondary rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.3)] px-base py-half">
-        <span className="text-sm font-medium text-high whitespace-nowrap px-half">
+      <div className="flex items-center gap-1 rounded-lg border border-border bg-secondary px-2 py-1.5 shadow-overlay">
+        <span className="whitespace-nowrap px-1.5 text-sm font-semibold text-high">
           {t('kanban.bulkSelectedCount', {
             count: selectedCount,
             defaultValue: '{{count}} selected',
@@ -110,7 +110,7 @@ export function BulkActionBar({
           <button
             type="button"
             onClick={onClearSelection}
-            className="flex items-center justify-center p-half rounded-sm text-low hover:text-normal hover:bg-secondary transition-colors"
+            className="flex size-8 items-center justify-center rounded text-low transition-colors hover:bg-panel hover:text-high"
             aria-label={t('kanban.bulkClearSelection', {
               defaultValue: 'Clear selection',
             })}

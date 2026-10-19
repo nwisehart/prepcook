@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep, isEqual } from 'lodash';
-import { SpinnerIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import type {
   Descriptor,
@@ -14,11 +13,14 @@ import type { Project as RemoteProject } from 'shared/remote-types';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { useUserOrganizations } from '@/shared/hooks/useUserOrganizations';
 import { remoteProjectsApi, trackerApi } from '@/shared/lib/api';
+import { cn } from '@/shared/lib/utils';
+import { Button } from '@prepcook/ui/components/Button';
 import {
   SettingsCard,
   SettingsCheckbox,
   SettingsField,
   SettingsInput,
+  SettingsLoading,
   SettingsSaveBar,
   SettingsSelect,
 } from './SettingsComponents';
@@ -104,7 +106,7 @@ const fieldKeys = (descriptor: Descriptor | undefined): string[] =>
   descriptor?.fields.map((field) => field.key) ?? [];
 
 /** Whether any field the provider reads is set. */
-const hasProviderSettings = (
+export const hasProviderSettings = (
   draft: TrackerConfig,
   descriptor: Descriptor | undefined
 ) =>
@@ -333,21 +335,13 @@ export function TicketingSettingsSection() {
   };
 
   if (loading || descriptors.isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.general.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.general.loading')} />;
   }
 
   if (!config || descriptors.isError) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.general.loadError')}
         </div>
       </div>
@@ -360,13 +354,13 @@ export function TicketingSettingsSection() {
   return (
     <>
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.ticketing.save.success')}
         </div>
       )}
@@ -375,7 +369,7 @@ export function TicketingSettingsSection() {
         title={t('settings.ticketing.source.title')}
         description={t('settings.ticketing.source.description')}
       >
-        <div className="flex flex-wrap gap-2" role="radiogroup">
+        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup">
           {MODES.map((mode) => {
             const selected = draft.mode === mode;
             return (
@@ -385,17 +379,30 @@ export function TicketingSettingsSection() {
                 role="radio"
                 aria-checked={selected}
                 onClick={() => update({ mode })}
-                className={`text-sm px-3 py-1.5 rounded-sm border text-left ${
+                className={cn(
+                  'flex items-start gap-3 rounded-lg border bg-secondary px-3.5 py-3 text-left transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
                   selected
-                    ? 'border-brand bg-brand/10'
-                    : 'border-border hover:bg-secondary'
-                }`}
+                    ? 'border-brand ring-1 ring-brand'
+                    : 'border-border hover:bg-panel'
+                )}
               >
-                <span className="block">
-                  {t(`settings.ticketing.mode.${mode}.label`)}
-                </span>
-                <span className="block text-xs text-low">
-                  {t(`settings.ticketing.mode.${mode}.helper`)}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'mt-0.5 size-4 shrink-0 rounded-full bg-secondary',
+                    selected
+                      ? 'border-[5px] border-brand'
+                      : 'border-2 border-low/50'
+                  )}
+                />
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="text-sm font-bold text-high">
+                    {t(`settings.ticketing.mode.${mode}.label`)}
+                  </span>
+                  <span className="text-[12.5px] leading-[1.45] text-low">
+                    {t(`settings.ticketing.mode.${mode}.helper`)}
+                  </span>
                 </span>
               </button>
             );
@@ -466,10 +473,11 @@ export function TicketingSettingsSection() {
             }}
             placeholder="45"
             error={pollSecs < 1}
+            className="max-w-[120px]"
           />
         </SettingsField>
 
-        <p className="text-sm text-low">
+        <p className="text-[12.5px] leading-[1.45] text-low">
           {t('settings.ticketing.watcher.boardsHint')}
         </p>
       </SettingsCard>
@@ -490,11 +498,11 @@ export function TicketingSettingsSection() {
             >
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-low">
-                    <th className="font-normal pb-2 pr-3">
+                  <tr className="text-left text-xs text-low">
+                    <th className="pb-1.5 pr-3 font-semibold">
                       {t('settings.ticketing.workflow.stageColumn')}
                     </th>
-                    <th className="font-normal pb-2">
+                    <th className="pb-1.5 font-semibold">
                       {t('settings.ticketing.workflow.statusColumn')}
                     </th>
                   </tr>
@@ -502,7 +510,7 @@ export function TicketingSettingsSection() {
                 <tbody>
                   {STAGE_STATUS_KEYS.map((key) => (
                     <tr key={key}>
-                      <td className="pr-3 py-1 whitespace-nowrap">
+                      <td className="whitespace-nowrap py-1 pr-3 font-medium text-high">
                         {t(`settings.ticketing.workflow.stages.${key}`)}
                       </td>
                       <td className="py-1">
@@ -563,38 +571,41 @@ export function TicketingSettingsSection() {
           label={t('settings.ticketing.approvers.label')}
           description={t('settings.ticketing.approvers.helper')}
         >
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={loadAssignable}
                 disabled={loadingUsers}
-                className="text-sm px-3 py-1.5 rounded-sm border border-border hover:bg-secondary disabled:opacity-50"
               >
                 {loadingUsers
                   ? t('settings.ticketing.approvers.loading')
                   : assignable
                     ? t('settings.ticketing.approvers.refresh')
                     : t('settings.ticketing.approvers.import')}
-              </button>
-              <span className="text-sm text-low">
+              </Button>
+              <span className="text-[12.5px] text-low">
                 {t('settings.ticketing.approvers.selected', {
                   count: selectedCount,
                 })}
               </span>
             </div>
 
-            {usersError && <p className="text-sm text-error">{usersError}</p>}
+            {usersError && (
+              <p className="text-[12.5px] text-error">{usersError}</p>
+            )}
 
             {approverRows.length === 0 ? (
               <p className="text-sm text-low">
                 {t('settings.ticketing.approvers.empty')}
               </p>
             ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto rounded-sm border border-border p-3">
+              <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-3">
                 {approverRows.map(([accountId, name]) => (
                   <SettingsCheckbox
                     key={accountId}
+                    variant="checkbox"
                     id={`approver-${accountId}`}
                     label={name}
                     checked={Boolean(draft.approvers[accountId])}

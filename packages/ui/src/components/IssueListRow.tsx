@@ -13,29 +13,8 @@ import {
   type RelationshipDisplayType,
 } from './RelationshipBadge';
 import { Checkbox } from './Checkbox';
-
-/**
- * Formats a date as a relative time string (e.g., "1d", "2h", "3m")
- */
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays > 0) {
-    return `${diffDays}d`;
-  }
-  if (diffHours > 0) {
-    return `${diffHours}h`;
-  }
-  if (diffMinutes > 0) {
-    return `${diffMinutes}m`;
-  }
-  return 'now';
-}
+import { formatRelativeTime } from './KanbanRelativeTime';
+import { useTranslation } from 'react-i18next';
 
 const MAX_VISIBLE_TAGS = 2;
 
@@ -88,6 +67,7 @@ export function IssueListRow({
   onCheckboxChange,
   className,
 }: IssueListRowProps) {
+  const { t } = useTranslation('common');
   const showCheckbox = isMultiSelectActive || isChecked;
   const visibleTags = tags.slice(0, MAX_VISIBLE_TAGS);
 
@@ -107,11 +87,12 @@ export function IssueListRow({
             }
           }}
           className={cn(
-            'group/row flex items-center justify-between gap-double px-double py-half',
+            'group/row flex items-center justify-between gap-double border-b border-divider px-double py-2',
             'transition-colors',
-            'hover:bg-secondary',
-            (isSelected || isChecked) && 'bg-secondary',
-            snapshot.isDragging && 'bg-secondary shadow-lg cursor-grabbing',
+            'hover:bg-panel/60',
+            (isSelected || isChecked) && 'bg-brand-soft/50',
+            snapshot.isDragging &&
+              'cursor-grabbing bg-secondary shadow-overlay',
             className
           )}
         >
@@ -149,11 +130,13 @@ export function IssueListRow({
               </div>
             </div>
             <PriorityIcon priority={issue.priority} />
-            <span className="font-ibm-plex-mono text-sm text-normal shrink-0">
+            <span className="shrink-0 font-mono text-xs text-low">
               {issue.simple_id}
             </span>
             <StatusDot color={statusColor} />
-            <span className="text-base text-high truncate">{issue.title}</span>
+            <span className="truncate text-sm font-semibold text-high">
+              {issue.title}
+            </span>
           </div>
 
           {/* Right side: Tags, Assignee, Age */}
@@ -176,15 +159,15 @@ export function IssueListRow({
                   />
                 ))}
                 {relationships.length > 2 && (
-                  <span className="text-sm text-low">
+                  <span className="text-xs text-low">
                     +{relationships.length - 2}
                   </span>
                 )}
               </div>
             )}
             <KanbanAssignee assignees={assignees} />
-            <span className="text-sm text-low w-5 text-right">
-              {formatRelativeTime(issue.created_at)}
+            <span className="min-w-12 text-right text-xs text-low">
+              {formatRelativeTime(t, issue.created_at)}
             </span>
           </div>
         </div>

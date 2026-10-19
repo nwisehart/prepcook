@@ -24,28 +24,28 @@ interface ChatBoxBaseProps {
   // Error display
   error?: string | null;
 
-  // Header content (right side - session/executor dropdown)
+  // Meta row, right side (session dropdown, todos, context gauge)
   headerRight?: ReactNode;
 
-  // Header content (left side - stats)
+  // Meta row, left side (stats, in-progress todo)
   headerLeft?: ReactNode;
 
-  // Footer left content (additional toolbar items like attach button)
+  // Meta row tools (attach, PR comments, toolbar actions)
   footerLeft?: ReactNode;
 
-  // Footer right content (action buttons)
+  // Action buttons beside the input (Send, Stop, Approve, ...)
   footerRight: ReactNode;
 
-  // Model selector node (rendered with footer controls)
+  // Model selector node, rendered as 40px secondary buttons beside the input
   modelSelector?: ReactNode;
 
-  // Banner content (queued message indicator, feedback mode indicator)
+  // Banner content (queued message indicator, question banner)
   banner?: ReactNode;
 
   // visualVariant
   visualVariant: VisualVariant;
 
-  // Whether the workspace is running (shows animated border)
+  // Whether the agent is working (animated brand border on the input)
   isRunning?: boolean;
 
   // Dropzone props for drag-and-drop image uploads
@@ -53,8 +53,9 @@ interface ChatBoxBaseProps {
 }
 
 /**
- * Base chat box layout component.
- * Provides shared structure for CreateChatBox and SessionChatBox.
+ * Base composer layout shared by CreateChatBox and SessionChatBox: a quiet
+ * meta row (tools, stats, session controls), then the input with the model
+ * selector and the action buttons beside it.
  */
 export function ChatBoxBase({
   editor,
@@ -72,67 +73,82 @@ export function ChatBoxBase({
   const { t } = useTranslation(['common', 'tasks']);
 
   const isDragActive = dropzone?.isDragActive ?? false;
+  const isNormal = visualVariant === VisualVariant.NORMAL;
+  const showMetaRow = Boolean(
+    footerLeft || (isNormal && (headerLeft || headerRight))
+  );
 
   return (
     <div
       {...(dropzone?.getRootProps() ?? {})}
-      className={cn(
-        'relative flex w-chat max-w-full flex-col rounded-sm border border-border bg-secondary',
-        (visualVariant === VisualVariant.FEEDBACK ||
-          visualVariant === VisualVariant.EDIT ||
-          visualVariant === VisualVariant.PLAN) &&
-          'border-brand bg-brand/10',
-        isRunning && 'chat-box-running'
-      )}
+      className="relative flex w-chat max-w-full flex-col gap-2"
     >
       {dropzone && <input {...dropzone.getInputProps()} />}
 
       {isDragActive && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-sm border-2 border-dashed border-brand bg-primary/80 backdrop-blur-sm pointer-events-none animate-in fade-in-0 duration-150">
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-lg border border-dashed border-brand bg-primary/90 animate-in fade-in-0 duration-150">
           <div className="text-center">
-            <div className="mx-auto mb-2 w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center">
-              <ImageIcon className="h-5 w-5 text-brand" />
+            <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full bg-brand-soft">
+              <ImageIcon className="size-5 text-brand" />
             </div>
-            <p className="text-sm font-medium text-high">
+            <p className="text-sm font-semibold text-high">
               {t('tasks:dropzone.dropImagesHere')}
             </p>
-            <p className="text-xs text-low mt-0.5">
+            <p className="mt-0.5 text-xs text-low">
               {t('tasks:dropzone.supportedFormats')}
             </p>
           </div>
         </div>
       )}
-      {/* Error alert */}
+
       {error && (
-        <div className="bg-error/10 border-b px-double py-base">
-          <p className="text-error text-sm">{error}</p>
+        <div
+          role="alert"
+          className="rounded bg-error-soft px-3 py-2 text-sm text-error"
+        >
+          {error}
         </div>
       )}
 
-      {/* Banner content (queued indicator, feedback mode, etc.) */}
       {banner}
 
-      {/* Header - Stats and selector */}
-      {visualVariant === VisualVariant.NORMAL && (
-        <div className="flex items-center gap-base border-b px-base py-base">
-          <div className="flex flex-1 items-center gap-base text-sm min-w-0 overflow-hidden">
-            {headerLeft}
+      {showMetaRow && (
+        <div className="flex min-w-0 items-center gap-3 text-xs text-low">
+          {footerLeft && (
+            <Toolbar className="shrink-0 !gap-2">{footerLeft}</Toolbar>
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            {isNormal && headerLeft}
           </div>
-          <Toolbar className="gap-[9px]">{headerRight}</Toolbar>
+          {isNormal && headerRight && (
+            <Toolbar className="shrink-0 gap-2">{headerRight}</Toolbar>
+          )}
         </div>
       )}
 
-      {/* Editor area */}
-      <div className="flex flex-col gap-plusfifty px-base py-base rounded-md">
-        {editor}
-
-        {/* Footer - Controls */}
-        <div className="flex items-end justify-between gap-base">
-          <Toolbar className="flex-1 min-w-0 flex-wrap !gap-half">
+      <div className="flex flex-wrap items-end gap-2.5">
+        <div
+          className={cn(
+            'relative flex min-h-10 min-w-0 flex-1 basis-[260px] items-center rounded-lg border bg-secondary px-3.5 py-2 transition-colors',
+            'focus-within:border-brand',
+            visualVariant === VisualVariant.PLAN && 'border-attention-border',
+            (visualVariant === VisualVariant.FEEDBACK ||
+              visualVariant === VisualVariant.EDIT) &&
+              'border-brand',
+            // The running border is drawn on ::before; match its radius to the
+            // field and close it along the bottom edge.
+            isRunning && 'chat-box-running before:rounded-lg before:pb-px'
+          )}
+        >
+          <div className="min-w-0 flex-1 text-sm text-high">{editor}</div>
+        </div>
+        {modelSelector && (
+          <div className="flex shrink-0 items-center gap-1.5 [&>button]:h-10 [&>button]:rounded [&>button]:font-semibold">
             {modelSelector}
-            {footerLeft}
-          </Toolbar>
-          <div className="flex shrink-0 gap-base">{footerRight}</div>
+          </div>
+        )}
+        <div className="flex shrink-0 items-center gap-2 [&>button]:min-h-10 [&>button]:px-4">
+          {footerRight}
         </div>
       </div>
     </div>

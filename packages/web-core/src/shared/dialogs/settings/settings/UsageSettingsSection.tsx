@@ -4,7 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { SpinnerIcon } from '@phosphor-icons/react';
 import type { UsageSummary } from 'shared/types';
 import { configApi } from '@/shared/lib/api';
-import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
+import {
+  ButtonGroup,
+  ButtonGroupItem,
+} from '@prepcook/ui/components/IconButtonGroup';
 import { SettingsCard } from './SettingsComponents';
 
 // Token spend recorded per agent turn (execution_process_usage), rolled up
@@ -46,22 +49,22 @@ export function UsageSettingsSection() {
       title={t('settings.usage.title')}
       description={t('settings.usage.description')}
       headerAction={
-        <div className="flex items-center gap-1">
+        <ButtonGroup>
           {WINDOWS.map((window) => (
-            <PrimaryButton
+            <ButtonGroupItem
               key={window}
-              variant="tertiary"
-              value={t(`settings.usage.window${window}`)}
+              active={days === window}
               onClick={() => setDays(window)}
-              disabled={days === window}
-            />
+            >
+              {t(`settings.usage.window${window}`)}
+            </ButtonGroupItem>
           ))}
-        </div>
+        </ButtonGroup>
       }
     >
       {isLoading && (
-        <p className="flex items-center gap-1.5 text-sm text-low">
-          <SpinnerIcon className="size-icon-sm animate-spin" />
+        <p className="flex items-center gap-2 text-sm text-low">
+          <SpinnerIcon className="size-4 animate-spin" />
           {t('settings.usage.loading')}
         </p>
       )}
@@ -72,7 +75,7 @@ export function UsageSettingsSection() {
 
       {totals && !empty && (
         <>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             {(
               [
                 ['turns', totals.turns],
@@ -84,9 +87,9 @@ export function UsageSettingsSection() {
             ).map(([key, value]) => (
               <div
                 key={key}
-                className="rounded-sm border border-border bg-secondary px-base py-half"
+                className="flex flex-col gap-0.5 rounded-lg border border-border bg-surface-raised px-3 py-2.5"
               >
-                <div className="text-lg font-semibold text-high">
+                <div className="text-xl font-semibold tabular-nums text-high">
                   {fmt(value)}
                 </div>
                 <div className="text-xs text-low">
@@ -97,20 +100,24 @@ export function UsageSettingsSection() {
           </div>
 
           {(data?.models?.length ?? 0) > 0 && (
-            <div>
-              <p className="text-sm font-medium text-high mb-1">
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-low">
                 {t('settings.usage.models.title')}
               </p>
-              <div className="space-y-0.5">
-                {data?.models.map((model) => (
+              <div className="flex flex-col">
+                {data?.models.map((model, index) => (
                   <div
                     key={model.model ?? 'unknown'}
-                    className="flex items-center justify-between text-sm"
+                    className={
+                      index > 0
+                        ? 'flex items-center justify-between gap-3 border-t border-divider py-1.5 text-[13px]'
+                        : 'flex items-center justify-between gap-3 py-1.5 text-[13px]'
+                    }
                   >
-                    <span className="font-mono text-low truncate">
+                    <span className="truncate font-mono text-[12.5px] text-high">
                       {model.model ?? 'unknown'}
                     </span>
-                    <span className="text-low shrink-0 pl-2">
+                    <span className="shrink-0 tabular-nums text-low">
                       {fmt(model.turns)} · {fmt(model.input_tokens)} in ·{' '}
                       {fmt(model.output_tokens)} out
                     </span>
@@ -121,20 +128,24 @@ export function UsageSettingsSection() {
           )}
 
           {topWorkspaces.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-high mb-1">
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-low">
                 {t('settings.usage.workspaces.title')}
               </p>
-              <div className="space-y-0.5">
-                {topWorkspaces.map((workspace) => (
+              <div className="flex flex-col">
+                {topWorkspaces.map((workspace, index) => (
                   <div
                     key={workspace.workspace_id}
-                    className="flex items-center justify-between text-sm"
+                    className={
+                      index > 0
+                        ? 'flex items-center justify-between gap-3 border-t border-divider py-1.5 text-[13px]'
+                        : 'flex items-center justify-between gap-3 py-1.5 text-[13px]'
+                    }
                   >
-                    <span className="text-low truncate">
+                    <span className="truncate text-normal">
                       {workspace.workspace_name ?? workspace.branch}
                     </span>
-                    <span className="text-low shrink-0 pl-2">
+                    <span className="shrink-0 tabular-nums text-low">
                       {fmt(workspace.input_tokens)} in ·{' '}
                       {fmt(workspace.output_tokens)} out
                     </span>

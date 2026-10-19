@@ -291,3 +291,121 @@ type ChangesPanelComponent = <
 export const ChangesPanel = forwardRef(
   ChangesPanelInner
 ) as ChangesPanelComponent;
+
+export interface ChangesSummaryFile {
+  path: string;
+  additions?: number | null;
+  deletions?: number | null;
+  /** The file did not exist before this session */
+  isNew?: boolean;
+}
+
+interface ChangesSummaryCardProps {
+  title: string;
+  /** "3 files" */
+  filesLabel: string;
+  linesAdded: number;
+  linesRemoved: number;
+  /** One muted line about the branch, e.g. "On x, rebased on main." */
+  summary?: ReactNode;
+  files: ChangesSummaryFile[];
+  /** Files beyond the ones listed, already counted in `filesLabel` */
+  hiddenFilesLabel?: string;
+  newLabel: string;
+  emptyLabel: string;
+  onOpenFile: (path: string) => void;
+  openDiffLabel: string;
+  onOpenDiff: () => void;
+  className?: string;
+}
+
+/**
+ * The Review tab's "Changes" card: totals in mono, one row per changed file,
+ * and the way into the full diff.
+ */
+export function ChangesSummaryCard({
+  title,
+  filesLabel,
+  linesAdded,
+  linesRemoved,
+  summary,
+  files,
+  hiddenFilesLabel,
+  newLabel,
+  emptyLabel,
+  onOpenFile,
+  openDiffLabel,
+  onOpenDiff,
+  className,
+}: ChangesSummaryCardProps) {
+  return (
+    <section
+      className={cn(
+        'flex flex-col gap-2 rounded-lg border bg-secondary p-3',
+        className
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-bold text-high">{title}</span>
+        <span className="font-mono text-xs text-low">
+          {filesLabel} <span className="text-success">+{linesAdded}</span>{' '}
+          <span className="text-error">−{linesRemoved}</span>
+        </span>
+      </div>
+      {summary && <div className="text-[12.5px] text-low">{summary}</div>}
+      {files.length === 0 ? (
+        <span className="text-[12.5px] text-low">{emptyLabel}</span>
+      ) : (
+        <ul className="-mx-1 flex flex-col">
+          {files.map((file) => {
+            const hasAdditions = file.additions != null && file.additions > 0;
+            const hasDeletions = file.deletions != null && file.deletions > 0;
+            return (
+              <li key={file.path}>
+                <button
+                  type="button"
+                  onClick={() => onOpenFile(file.path)}
+                  title={file.path}
+                  className={cn(
+                    'flex w-full min-w-0 items-center gap-2 rounded px-2.5 py-2 text-left font-mono text-[12.5px] transition-colors hover:bg-primary',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate text-high">
+                    {file.path}
+                  </span>
+                  {hasAdditions && (
+                    <span className="shrink-0 text-success">
+                      +{file.additions}
+                    </span>
+                  )}
+                  {hasDeletions && (
+                    <span className="shrink-0 text-error">
+                      −{file.deletions}
+                    </span>
+                  )}
+                  {file.isNew && (
+                    <span className="shrink-0 text-low">{newLabel}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {hiddenFilesLabel && (
+        <span className="text-[12.5px] text-low">{hiddenFilesLabel}</span>
+      )}
+      <button
+        type="button"
+        onClick={onOpenDiff}
+        className={cn(
+          'inline-flex h-8 items-center self-start rounded border bg-secondary px-3 text-sm font-semibold text-high transition-colors hover:bg-panel',
+          'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
+        )}
+      >
+        {openDiffLabel}
+      </button>
+    </section>
+  );
+}

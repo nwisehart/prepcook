@@ -36,7 +36,7 @@ export function GuideDialogShell({
     <>
       <div
         data-tauri-drag-region
-        className="fixed inset-0 z-[9998] bg-black/50 animate-in fade-in-0 duration-200"
+        className="fixed inset-0 z-[9998] bg-scrim/45 animate-in fade-in-0 duration-200"
         onClick={onClose}
       />
       {/* Dialog wrapper - handles positioning */}
@@ -52,49 +52,53 @@ export function GuideDialogShell({
         <div
           className={cn(
             'h-full w-full flex overflow-hidden',
-            'bg-panel/95 backdrop-blur-sm shadow-lg',
+            'bg-secondary text-normal',
             'animate-in fade-in-0 slide-in-from-bottom-4 duration-200',
             // Mobile: full screen, no rounded corners
             'rounded-none border-0',
             // Desktop: fixed size with rounded corners
-            'md:w-[800px] md:h-[600px] md:rounded-sm md:border md:border-border/50',
+            'md:w-[800px] md:h-[600px] md:rounded-xl md:border md:border-border md:shadow-overlay',
             className
           )}
         >
           {/* Sidebar - hidden on mobile when showing content */}
           <div
             className={cn(
-              'bg-secondary/80 border-r border-border/50 flex flex-col',
+              'bg-secondary border-r border-border flex flex-col',
               // Mobile: full width, hidden when showing content
               'w-full',
               mobileShowContent && 'hidden',
               // Desktop: fixed width sidebar, always visible
-              'md:w-52 md:block'
+              'md:w-52 md:flex'
             )}
           >
             {/* Header with mobile close button */}
             <div className="p-3 flex items-center justify-between md:hidden">
-              <span className="text-sm font-medium text-high">Topics</span>
+              <span className="text-sm font-semibold text-high">Topics</span>
               <button
+                type="button"
                 onClick={onClose}
-                className="p-1 rounded-sm hover:bg-secondary text-low hover:text-normal"
+                className="rounded p-1 text-low hover:bg-panel hover:text-high"
               >
-                <XIcon className="h-4 w-4" weight="bold" />
+                <XIcon className="size-4" />
               </button>
             </div>
-            <nav className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto md:pt-3">
+            <nav className="flex-1 px-3 py-[18px] flex flex-col gap-0.5 overflow-y-auto">
               {topics.map((topic, idx) => (
                 <button
                   key={topic.id}
+                  type="button"
                   onClick={() => {
                     setSelectedIndex(idx);
                     setMobileShowContent(true);
                   }}
+                  aria-current={idx === selectedIndex ? 'page' : undefined}
                   className={cn(
-                    'text-left px-3 py-2 rounded-sm text-sm transition-colors',
+                    'text-left px-2.5 py-2 rounded text-sm text-high transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
                     idx === selectedIndex
-                      ? 'bg-brand/10 text-brand font-medium'
-                      : 'text-normal hover:bg-primary/10'
+                      ? 'bg-panel font-semibold'
+                      : 'font-medium hover:bg-panel'
                   )}
                 >
                   {topic.title}
@@ -113,41 +117,44 @@ export function GuideDialogShell({
             )}
           >
             {/* Mobile header with back button */}
-            <div className="flex items-center gap-2 p-3 border-b border-border/50 md:hidden">
+            <div className="flex items-center gap-2 p-3 border-b border-border md:hidden">
               <button
+                type="button"
                 onClick={() => setMobileShowContent(false)}
-                className="p-1 rounded-sm hover:bg-secondary text-low hover:text-normal"
+                className="rounded p-1 text-low hover:bg-panel hover:text-high"
               >
-                <CaretLeftIcon className="h-4 w-4" weight="bold" />
+                <CaretLeftIcon className="size-4" />
               </button>
-              <span className="text-sm font-medium text-high">Back</span>
+              <span className="text-sm font-semibold text-high">Back</span>
               <button
+                type="button"
                 onClick={onClose}
-                className="ml-auto p-1 rounded-sm hover:bg-secondary text-low hover:text-normal"
+                className="ml-auto rounded p-1 text-low hover:bg-panel hover:text-high"
               >
-                <XIcon className="h-4 w-4" weight="bold" />
+                <XIcon className="size-4" />
               </button>
             </div>
             {/* Desktop close button */}
             <button
+              type="button"
               onClick={onClose}
-              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-panel transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 hidden md:block"
+              className="absolute right-4 top-4 hidden size-8 items-center justify-center rounded text-low transition-colors hover:bg-panel hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand md:flex"
             >
-              <XIcon className="h-4 w-4 text-normal" />
+              <XIcon className="size-4" />
               <span className="sr-only">{closeLabel}</span>
             </button>
-            <div className="p-6 pt-4 md:pt-6 flex-1">
-              <h2 className="text-xl font-semibold text-high mb-4 pr-8">
+            <div className="p-6 pt-4 md:pt-[22px] flex-1">
+              <h2 className="text-lg font-bold text-high mb-4 pr-10">
                 {selectedTopic.title}
               </h2>
               {selectedTopic.imageSrc && (
                 <img
                   src={selectedTopic.imageSrc}
                   alt={selectedTopic.imageAlt ?? selectedTopic.title}
-                  className="w-full rounded-sm border border-border/30 mb-4"
+                  className="w-full rounded-lg border border-border mb-4"
                 />
               )}
-              <div className="text-normal text-sm leading-relaxed space-y-3">
+              <div className="text-normal text-sm leading-relaxed flex flex-col gap-3">
                 {typeof selectedTopic.content === 'string' ? (
                   <p>{selectedTopic.content}</p>
                 ) : (

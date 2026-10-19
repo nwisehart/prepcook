@@ -36,16 +36,16 @@ export function SyncErrorIndicator({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex items-center justify-center rounded-sm text-error hover:text-error/80"
+          className="flex size-8 shrink-0 items-center justify-center rounded text-error transition-colors hover:bg-error-soft data-[state=open]:bg-error-soft focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
           aria-label={`${errors.length} sync error${errors.length > 1 ? 's' : ''}`}
         >
-          <WarningIcon className="size-icon-base" weight="fill" />
+          <WarningIcon className="size-4" weight="fill" />
         </button>
       </PopoverTrigger>
       <PopoverContent side="bottom" align="end" className="w-80">
-        <div className="space-y-base">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-normal">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-sm font-bold text-high">
               {t('syncError.networkErrors')}
             </h4>
             <span className="text-xs text-low">
@@ -53,19 +53,19 @@ export function SyncErrorIndicator({
             </span>
           </div>
 
-          <div className="space-y-half max-h-48 overflow-y-auto">
+          <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
             {errors.map((streamError) => (
               <div
                 key={streamError.streamId}
-                className="rounded-sm bg-error/10 p-half text-xs"
+                className="rounded-sm bg-error-soft px-2 py-1.5 text-xs"
               >
-                <div className="font-medium text-error">
+                <div className="font-semibold text-error">
                   {streamError.tableName}
                 </div>
-                <div className="text-low mt-quarter truncate">
+                <div className="mt-0.5 truncate text-normal">
                   {streamError.error.message}
                   {streamError.error.status && (
-                    <span className="ml-1 text-error/70">
+                    <span className="ml-1 text-low">
                       {t('syncError.status', {
                         status: streamError.error.status,
                       })}
@@ -78,10 +78,12 @@ export function SyncErrorIndicator({
 
           <button
             type="button"
-            onClick={() => onRefreshPage?.() ?? window.location.reload()}
-            className="flex w-full items-center justify-center gap-half rounded-sm bg-primary px-base py-half text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            onClick={() =>
+              onRefreshPage ? onRefreshPage() : window.location.reload()
+            }
+            className="flex h-8 w-full items-center justify-center gap-1.5 rounded border bg-secondary px-3 text-sm font-semibold text-high transition-colors hover:bg-panel focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
           >
-            <ArrowClockwiseIcon className="size-icon-sm" />
+            <ArrowClockwiseIcon className="size-4" />
             {t('syncError.refreshPage')}
           </button>
         </div>

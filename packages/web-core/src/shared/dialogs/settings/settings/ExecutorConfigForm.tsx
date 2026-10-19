@@ -98,7 +98,7 @@ export function ExecutorConfigForm({
 
   if (!schema) {
     return (
-      <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+      <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
         {t('settings.agents.errors.schemaNotFound', { executor })}
       </div>
     );
@@ -128,7 +128,7 @@ export function ExecutorConfigForm({
       </Form>
 
       {hasValidationErrors && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           <ul className="list-disc list-inside space-y-1">
             {validationErrors.map((error, index) => (
               <li key={index}>

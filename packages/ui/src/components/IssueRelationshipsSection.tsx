@@ -2,9 +2,10 @@
 
 import { useTranslation } from 'react-i18next';
 import { XIcon } from '@phosphor-icons/react';
-import { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
+import { cn } from '../lib/cn';
+import { IssuePanelSection } from './IssuePanelSection';
 import {
-  RelationshipBadge,
+  relationshipLabel,
   type RelationshipDisplayType,
 } from './RelationshipBadge';
 
@@ -13,6 +14,8 @@ export interface IssueRelationshipsSectionRelationship {
   relatedIssueId: string;
   relatedIssueDisplayId: string;
   displayType: RelationshipDisplayType;
+  /** The related card's title, when it is on this board. */
+  relatedIssueTitle?: string | null;
 }
 
 export interface IssueRelationshipsSectionProps {
@@ -23,6 +26,7 @@ export interface IssueRelationshipsSectionProps {
   headerExtra?: React.ReactNode;
 }
 
+/** "Related" in the card panel: one row per linked card. */
 export function IssueRelationshipsSection({
   relationships,
   onRelationshipClick,
@@ -33,50 +37,71 @@ export function IssueRelationshipsSection({
   const { t } = useTranslation('common');
 
   return (
-    <CollapsibleSectionHeader
-      title={t('kanban.relationships', 'Relationships')}
+    <IssuePanelSection
+      label={t('kanban.panel.related')}
       persistKey="kanban-issue-relationships"
-      defaultExpanded={true}
+      collapsible
       headerExtra={headerExtra}
     >
-      <div className="p-base flex flex-col gap-half border-t">
+      <div className="flex flex-col gap-1.5 text-[13px]">
         {isLoading ? (
-          <p className="text-low py-half">{t('states.loading')}</p>
+          <p className="m-0 text-low">{t('states.loading')}</p>
         ) : relationships.length === 0 ? (
-          <p className="text-low py-half">
+          <p className="m-0 text-low">
             {t('kanban.noRelationships', 'No relationships')}
           </p>
         ) : (
-          relationships.map((rel) => (
-            <div
-              key={rel.relationshipId}
-              className="flex items-center justify-between group"
-            >
-              <RelationshipBadge
-                displayType={rel.displayType}
-                relatedIssueDisplayId={rel.relatedIssueDisplayId}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRelationshipClick(rel.relatedIssueId);
-                }}
-              />
-              {onRemoveRelationship && (
+          relationships.map((rel) => {
+            const isBlocking =
+              rel.displayType === 'blocks' || rel.displayType === 'blocked_by';
+            return (
+              <div
+                key={rel.relationshipId}
+                className="group flex min-w-0 items-center gap-2"
+              >
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRemoveRelationship(rel.relationshipId);
+                    onRelationshipClick(rel.relatedIssueId);
                   }}
-                  className="p-half rounded-sm text-low hover:text-error hover:bg-error/10 transition-colors opacity-0 group-hover:opacity-100"
-                  aria-label="Remove relationship"
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left text-high hover:text-brand-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
                 >
-                  <XIcon className="size-icon-2xs" weight="bold" />
+                  <span className="shrink-0 font-mono text-xs text-low">
+                    {rel.relatedIssueDisplayId}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {rel.relatedIssueTitle ?? ''}
+                  </span>
+                  <span
+                    className={cn(
+                      'inline-flex h-[22px] shrink-0 items-center rounded-full px-2 text-xs font-medium',
+                      isBlocking
+                        ? 'bg-error-soft text-error'
+                        : 'bg-panel text-normal'
+                    )}
+                  >
+                    {relationshipLabel(rel.displayType)}
+                  </span>
                 </button>
-              )}
-            </div>
-          ))
+                {onRemoveRelationship && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveRelationship(rel.relationshipId);
+                    }}
+                    className="flex size-6 shrink-0 items-center justify-center rounded-sm text-low opacity-0 transition-opacity hover:bg-error-soft hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
+                    aria-label={t('kanban.panel.removeRelationship')}
+                  >
+                    <XIcon className="size-3" weight="bold" />
+                  </button>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
-    </CollapsibleSectionHeader>
+    </IssuePanelSection>
   );
 }

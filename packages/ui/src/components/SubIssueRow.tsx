@@ -13,35 +13,13 @@ import { PriorityIcon, type PriorityLevel } from './PriorityIcon';
 import { StatusDot } from './StatusDot';
 import { KanbanAssignee, type KanbanAssigneeUser } from './KanbanAssignee';
 import { useTranslation } from 'react-i18next';
+import { formatRelativeTime } from './KanbanRelativeTime';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './DropdownMenu';
-
-/**
- * Formats a date as a relative time string (e.g., "1d", "2h", "3m")
- */
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays > 0) {
-    return `${diffDays}d`;
-  }
-  if (diffHours > 0) {
-    return `${diffHours}h`;
-  }
-  if (diffMinutes > 0) {
-    return `${diffMinutes}m`;
-  }
-  return 'now';
-}
 
 export interface SubIssueRowProps {
   id: string;
@@ -94,9 +72,10 @@ export function SubIssueRow({
             }
           }}
           className={cn(
-            'flex items-center gap-half px-base py-half rounded-sm transition-colors',
-            onClick && 'cursor-pointer hover:bg-secondary',
-            snapshot.isDragging && 'bg-secondary shadow-lg cursor-grabbing',
+            'flex items-center gap-2 rounded-sm px-2 py-1.5 transition-colors',
+            onClick && 'cursor-pointer hover:bg-panel',
+            snapshot.isDragging &&
+              'cursor-grabbing bg-secondary shadow-overlay',
             className
           )}
         >
@@ -118,7 +97,7 @@ export function SubIssueRow({
               <button
                 type="button"
                 onClick={onPriorityClick}
-                className="flex items-center cursor-pointer hover:bg-secondary rounded-sm transition-colors"
+                className="flex items-center cursor-pointer hover:bg-panel rounded-sm transition-colors"
               >
                 <PriorityIcon priority={priority} />
                 {!priority && (
@@ -131,11 +110,11 @@ export function SubIssueRow({
             ) : (
               <PriorityIcon priority={priority} />
             )}
-            <span className="font-ibm-plex-mono text-sm text-normal shrink-0">
+            <span className="shrink-0 font-mono text-xs text-low">
               {simpleId}
             </span>
             <StatusDot color={statusColor} />
-            <span className="text-base text-high truncate">{title}</span>
+            <span className="truncate text-high">{title}</span>
           </div>
 
           {/* Right side: Assignee, Age */}
@@ -144,15 +123,15 @@ export function SubIssueRow({
               <button
                 type="button"
                 onClick={onAssigneeClick}
-                className="cursor-pointer hover:bg-secondary rounded-sm transition-colors"
+                className="cursor-pointer hover:bg-panel rounded-full transition-colors"
               >
                 <KanbanAssignee assignees={assignees} />
               </button>
             ) : (
               <KanbanAssignee assignees={assignees} />
             )}
-            <span className="text-sm text-low">
-              {formatRelativeTime(createdAt)}
+            <span className="text-xs text-low">
+              {formatRelativeTime(t, createdAt)}
             </span>
             {(onMarkIndependentClick || onDeleteClick) && (
               <DropdownMenu>
@@ -160,7 +139,7 @@ export function SubIssueRow({
                   <button
                     type="button"
                     onClick={(e) => e.stopPropagation()}
-                    className="p-half rounded-sm text-low hover:text-normal hover:bg-secondary transition-colors"
+                    className="p-half rounded-sm text-low hover:text-high hover:bg-panel transition-colors"
                     aria-label="Sub-issue actions"
                     title="Sub-issue actions"
                   >
@@ -185,7 +164,7 @@ export function SubIssueRow({
                         e.stopPropagation();
                         onDeleteClick(e);
                       }}
-                      className="text-destructive focus:text-destructive"
+                      className="text-error focus:text-error"
                     >
                       <TrashIcon className="size-icon-xs" />
                       {t('buttons.delete')}

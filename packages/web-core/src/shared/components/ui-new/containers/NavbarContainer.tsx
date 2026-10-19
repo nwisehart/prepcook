@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useUserContext } from '@/shared/hooks/useUserContext';
 import { useActions } from '@/shared/hooks/useActions';
@@ -16,7 +17,7 @@ import { PROJECT_ISSUES_SHAPE } from 'shared/remote-types';
 import { RemoteIssueLink } from './RemoteIssueLink';
 import { AppBarUserPopoverContainer } from './AppBarUserPopoverContainer';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
-import { NavbarActionGroups } from '@/shared/actions';
+import { Actions, NavbarActionGroups } from '@/shared/actions';
 import {
   NavbarDivider,
   type ActionDefinition,
@@ -100,7 +101,8 @@ function toNavbarSectionItems(
     result.push({
       type: 'action',
       id: item.id,
-      icon,
+      // The command bar is the app's search: show it as one.
+      icon: item.id === Actions.OpenCommandBar.id ? MagnifyingGlassIcon : icon,
       isActive: isActionActive(item, ctx),
       tooltip: getActionTooltip(item, ctx),
       shortcut: item.shortcut,
@@ -134,6 +136,10 @@ export function NavbarContainer({
   const projectId = projectDestination?.projectId ?? null;
   const isOnProjectSubRoute =
     projectDestination !== null && projectDestination.kind !== 'project';
+  const routeIssueId =
+    projectDestination && 'issueId' in projectDestination
+      ? projectDestination.issueId
+      : null;
   const [mobileActiveTab, setMobileActiveTab] = useMobileActiveTab();
 
   // Find remote workspace linked to current local workspace
@@ -170,48 +176,112 @@ export function NavbarContainer({
     [actionCtx, handleExecuteAction]
   );
 
+  // On desktop, Settings lives in the sidebar (and the account menu), so the
+  // navbar keeps only search, help, feedback and the page's panel toggles.
+  const rightActionItems = useMemo(
+    () =>
+      mobileMode
+        ? NavbarActionGroups.right
+        : NavbarActionGroups.right.filter(
+            (item) => isDivider(item) || item.id !== Actions.Settings.id
+          ),
+    [mobileMode]
+  );
+
   const rightItems = useMemo(
     () =>
       toNavbarSectionItems(
-        filterNavbarItems(NavbarActionGroups.right, actionCtx),
+        filterNavbarItems(rightActionItems, actionCtx),
         actionCtx,
         handleExecuteAction
       ),
-    [actionCtx, handleExecuteAction]
+    [rightActionItems, actionCtx, handleExecuteAction]
   );
 
-  // Breadcrumbs: Project / Issue / Workspace (only on workspace pages with linked project)
+  // Breadcrumbs: Project / card key / session. On project pages they follow
+  // the route; on workspace pages they follow the workspace's linked issue.
   const linkedProjectId = linkedRemoteWorkspace?.project_id ?? null;
   const linkedIssueId = linkedRemoteWorkspace?.issue_id ?? null;
   const shouldResolveBreadcrumbData =
     !isOnProjectPage && !isCreateMode && !!linkedProjectId;
+  const breadcrumbProjectId = isOnProjectPage ? projectId : linkedProjectId;
+  const breadcrumbIssueId = isOnProjectPage ? routeIssueId : linkedIssueId;
   const shouldResolveIssueBreadcrumb =
-    shouldResolveBreadcrumbData && !!linkedIssueId;
+    (isOnProjectPage || shouldResolveBreadcrumbData) && !!breadcrumbIssueId;
 
   const { data: allProjects, isLoading: isProjectsLoading } =
     useAllOrganizationProjects({
       enabled: shouldResolveBreadcrumbData || isOnProjectPage,
     });
 
-  const navbarTitle = isCreateMode
-    ? 'Create Workspace'
-    : isOnProjectPage
-      ? (allProjects.find((p) => p.id === projectId)?.name ?? '')
-      : selectedWorkspace?.branch;
   const { data: projectIssues, isLoading: isProjectIssuesLoading } = useShape(
     PROJECT_ISSUES_SHAPE,
-    { project_id: linkedProjectId || '' },
-    { enabled: shouldResolveIssueBreadcrumb }
+    { project_id: breadcrumbProjectId || '' },
+    { enabled: shouldResolveIssueBreadcrumb && !!breadcrumbProjectId }
   );
   const linkedProject = allProjects.find((p) => p.id === linkedProjectId);
   const isWaitingForProjectBreadcrumb =
     shouldResolveBreadcrumbData && !linkedProject && isProjectsLoading;
   const isWaitingForIssueBreadcrumb =
-    shouldResolveIssueBreadcrumb && isProjectIssuesLoading;
+    shouldResolveBreadcrumbData && !!linkedIssueId && isProjectIssuesLoading;
   const isWaitingForBreadcrumbData =
     isWaitingForProjectBreadcrumb || isWaitingForIssueBreadcrumb;
 
-  const breadcrumbs = useMemo((): NavbarBreadcrumbItem[] | undefined => {
+  const workspaceLabel =
+    selectedWorkspace?.name || selectedWorkspace?.branch || '';
+
+  const projectPageBreadcrumbs = useMemo(():
+    | NavbarBreadcrumbItem[]
+    | undefined => {
+    if (!projectDestination || !projectId) return undefined;
+    const project = allProjects.find((p) => p.id === projectId);
+    if (!project) return undefined;
+
+    const goToBoard = () => appNavigation.goToProject(projectId);
+    const items: NavbarBreadcrumbItem[] = [
+      { label: project.name, onClick: goToBoard },
+    ];
+
+    if (projectDestination.kind === 'project-knowledge') {
+      items.push({ label: t('kanban.knowledgeMenu') });
+    }
+
+    if (routeIssueId) {
+      const issue = projectIssues.find((i) => i.id === routeIssueId);
+      if (issue) {
+        items.push({
+          label: issue.simple_id,
+          mono: true,
+          onClick: () =>
+            appNavigation.goToProjectIssue(projectId, routeIssueId),
+        });
+      }
+    }
+
+    if (projectDestination.kind === 'project-issue-workspace') {
+      if (workspaceLabel) items.push({ label: workspaceLabel });
+    } else if (
+      projectDestination.kind === 'project-issue-workspace-create' ||
+      projectDestination.kind === 'project-workspace-create'
+    ) {
+      items.push({ label: t('navbar.newSession') });
+    }
+
+    return items;
+  }, [
+    projectDestination,
+    projectId,
+    allProjects,
+    routeIssueId,
+    projectIssues,
+    workspaceLabel,
+    appNavigation,
+    t,
+  ]);
+
+  const workspaceBreadcrumbs = useMemo(():
+    | NavbarBreadcrumbItem[]
+    | undefined => {
     if (
       !shouldResolveBreadcrumbData ||
       !linkedProjectId ||
@@ -235,14 +305,13 @@ export function NavbarContainer({
       if (issue) {
         items.push({
           label: issue.simple_id,
+          mono: true,
           onClick: () =>
             appNavigation.goToProjectIssue(linkedProjectId, linkedIssueId),
         });
       }
     }
 
-    const workspaceLabel =
-      selectedWorkspace?.name || selectedWorkspace?.branch || '';
     if (workspaceLabel) {
       items.push({ label: workspaceLabel });
     }
@@ -255,10 +324,25 @@ export function NavbarContainer({
     linkedProject,
     isWaitingForBreadcrumbData,
     projectIssues,
-    selectedWorkspace?.name,
-    selectedWorkspace?.branch,
+    workspaceLabel,
     appNavigation,
   ]);
+
+  // A workspace that is not linked to a card is named by its branch.
+  const unlinkedWorkspaceBreadcrumbs = useMemo(():
+    | NavbarBreadcrumbItem[]
+    | undefined => {
+    if (isOnProjectPage || isCreateMode || !selectedWorkspace?.branch) {
+      return undefined;
+    }
+    return [{ label: selectedWorkspace.branch, mono: true }];
+  }, [isOnProjectPage, isCreateMode, selectedWorkspace?.branch]);
+
+  const breadcrumbs = isOnProjectPage
+    ? projectPageBreadcrumbs
+    : (workspaceBreadcrumbs ??
+      (isWaitingForBreadcrumbData ? undefined : unlinkedWorkspaceBreadcrumbs));
+  const navbarTitle = isCreateMode ? t('navbar.newSession') : undefined;
 
   // Mobile-specific callbacks
   const handleOpenCommandBar = useCallback(() => {
@@ -286,12 +370,6 @@ export function NavbarContainer({
     };
   }, [isOnProjectPage, projectId, appNavigation]);
 
-  // Build user popover slot for mobile mode
-  const userPopoverSlot = useMemo(() => {
-    if (!mobileMode) return undefined;
-    return <AppBarUserPopoverContainer />;
-  }, [mobileMode]);
-
   const syncErrors = useMemo(() => {
     const errors = syncErrorContext?.errors ? [...syncErrorContext.errors] : [];
 
@@ -316,8 +394,8 @@ export function NavbarContainer({
       leftItems={leftItems}
       rightItems={rightItems}
       syncErrors={syncErrors}
+      userSlot={<AppBarUserPopoverContainer />}
       mobileMode={mobileMode}
-      mobileUserSlot={userPopoverSlot}
       isOnProjectPage={isOnProjectPage}
       isOnProjectSubRoute={isOnProjectSubRoute}
       onOpenCommandBar={handleOpenCommandBar}
@@ -328,7 +406,8 @@ export function NavbarContainer({
       mobileActiveTab={mobileActiveTab as MobileTabId}
       onMobileTabChange={(tab) => setMobileActiveTab(tab)}
       leftSlot={
-        !breadcrumbs &&
+        !isOnProjectPage &&
+        !workspaceBreadcrumbs &&
         !isWaitingForBreadcrumbData &&
         linkedRemoteWorkspace?.issue_id ? (
           <RemoteIssueLink

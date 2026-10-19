@@ -15,6 +15,7 @@ interface ChatThinkingMessageProps {
   renderMarkdown: (props: ChatThinkingMessageRenderProps) => ReactNode;
 }
 
+/** The agent's thinking: muted text on a quiet 8px-radius block. */
 export function ChatThinkingMessage({
   content,
   className,
@@ -22,15 +23,17 @@ export function ChatThinkingMessage({
   renderMarkdown,
 }: ChatThinkingMessageProps) {
   return (
-    <div
-      className={cn('flex items-start gap-base text-sm text-low', className)}
-    >
-      <ChatDotsIcon className="shrink-0 size-icon-base pt-0.5" />
-      {renderMarkdown({
-        content,
-        workspaceId: workspaceId,
-        className: 'text-sm',
-      })}
+    <div className={cn('flex items-start gap-3 py-1.5', className)}>
+      <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-panel text-low">
+        <ChatDotsIcon className="size-3.5" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1 rounded bg-panel/60 px-3 py-2 text-[13px] text-low">
+        {renderMarkdown({
+          content,
+          workspaceId: workspaceId,
+          className: 'text-[13px] text-low',
+        })}
+      </div>
     </div>
   );
 }

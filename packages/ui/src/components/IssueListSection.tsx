@@ -5,7 +5,6 @@ import { cn } from '../lib/cn';
 import { Droppable } from '@hello-pangea/dnd';
 import { CaretDownIcon } from '@phosphor-icons/react';
 import { StatusDot } from './StatusDot';
-import { KanbanBadge } from './KanbanBadge';
 import {
   IssueListRow,
   type IssueListRowIssue,
@@ -75,10 +74,10 @@ export function IssueListSection({
         onClick={handleToggleExpanded}
         className={cn(
           'flex items-center justify-between',
-          'h-8 px-double py-base',
-          'bg-panel border-y border-border',
+          'h-9 px-double',
+          'border-b border-border bg-primary',
           'cursor-pointer transition-colors',
-          'hover:bg-secondary'
+          'hover:bg-panel/60'
         )}
       >
         <div className="flex items-center gap-base">
@@ -90,9 +89,9 @@ export function IssueListSection({
             weight="bold"
           />
           <StatusDot color={status.color} />
-          <span className="text-base font-medium text-high">{status.name}</span>
+          <span className="text-sm font-bold text-high">{status.name}</span>
         </div>
-        <KanbanBadge name={String(issueIds.length)} />
+        <span className="text-xs text-low">{issueIds.length}</span>
       </button>
 
       {/* Section Content - Droppable area */}

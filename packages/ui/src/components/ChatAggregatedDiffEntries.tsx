@@ -1,13 +1,17 @@
 import { useMemo } from 'react';
-import {
-  CaretDownIcon,
-  ArrowSquareUpRightIcon,
-  FileIcon as DefaultFileIcon,
-} from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '../lib/cn';
+import {
+  ChatStep,
+  ChatStepDetail,
+  chatStepStateFromStatus,
+  worstChatStepState,
+} from './ChatStep';
+import {
+  ChatDiffCounts,
+  ChatOpenInReviewButton,
+  type ChatFileEntryDiffInput,
+} from './ChatFileEntry';
 import { ToolStatusDot, type ToolStatusLike } from './ToolStatusDot';
-import type { ChatFileEntryDiffInput } from './ChatFileEntry';
 
 export type ChatAggregatedDiffChange = {
   action: 'edit' | 'write' | 'delete' | 'rename';
@@ -27,22 +31,20 @@ export interface AggregatedDiffEntry {
 }
 
 interface ChatAggregatedDiffEntriesProps {
+  /** Step label, e.g. "Edited quantity.ts" */
+  label: string;
   /** The file path being edited */
   filePath: string;
   /** The individual diff entries for this file */
   entries: AggregatedDiffEntry[];
-  /** Whether the accordion is expanded */
+  /** Whether the step is expanded */
   expanded: boolean;
-  /** Currently hovered state */
-  isHovered: boolean;
   /** Callback when toggling expansion */
   onToggle: () => void;
-  /** Callback when hover state changes */
-  onHoverChange: (hovered: boolean) => void;
   /** Callback to open file in changes panel */
   onOpenInChanges: (() => void) | null;
+  time?: string;
   className?: string;
-  fileIcon?: React.ElementType;
   renderDiffBody?: (args: {
     filePath: string;
     change: ChatAggregatedDiffChange;
@@ -68,6 +70,16 @@ function parseUnifiedDiffStats(unifiedDiff: string) {
   return { additions, deletions };
 }
 
+function changeStats(change: ChatAggregatedDiffChange) {
+  if (change.action === 'edit' && change.unified_diff) {
+    return parseUnifiedDiffStats(change.unified_diff);
+  }
+  if (change.action === 'write' && change.content) {
+    return { additions: change.content.split('\n').length, deletions: 0 };
+  }
+  return { additions: 0, deletions: 0 };
+}
+
 function buildDiffContent(
   change: ChatAggregatedDiffChange,
   filePath: string
@@ -91,21 +103,6 @@ function buildDiffContent(
   return undefined;
 }
 
-function getActionLabel(change: ChatAggregatedDiffChange) {
-  switch (change.action) {
-    case 'edit':
-      return 'Edit';
-    case 'write':
-      return 'Write';
-    case 'delete':
-      return 'Delete';
-    case 'rename':
-      return change.new_path ? `Rename → ${change.new_path}` : 'Rename';
-    default:
-      return 'Change';
-  }
-}
-
 function DiffEntry({
   filePath,
   change,
@@ -115,210 +112,108 @@ function DiffEntry({
   filePath: string;
   change: ChatAggregatedDiffChange;
   status: ToolStatusLike | null;
-  renderDiffBody?: (args: {
-    filePath: string;
-    change: ChatAggregatedDiffChange;
-    diffContent?: ChatFileEntryDiffInput;
-  }) => React.ReactNode;
+  renderDiffBody?: ChatAggregatedDiffEntriesProps['renderDiffBody'];
 }) {
-  const { additions, deletions } = useMemo(() => {
-    if (change.action === 'edit' && change.unified_diff) {
-      return parseUnifiedDiffStats(change.unified_diff);
-    }
-    return { additions: undefined, deletions: undefined };
-  }, [change]);
-
-  const writeAdditions =
-    change.action === 'write' && change.content
-      ? change.content.split('\n').length
-      : undefined;
+  const { t } = useTranslation('tasks');
+  const { additions, deletions } = useMemo(() => changeStats(change), [change]);
   const diffContent = useMemo(
     () => buildDiffContent(change, filePath),
     [change, filePath]
   );
-  const hasStats =
-    (additions !== undefined && additions > 0) ||
-    (deletions !== undefined && deletions > 0) ||
-    (writeAdditions !== undefined && writeAdditions > 0);
+
+  const actionLabel = (() => {
+    switch (change.action) {
+      case 'edit':
+        return t('conversation.fileEntry.modified');
+      case 'write':
+        return t('conversation.fileEntry.created');
+      case 'delete':
+        return t('conversation.fileEntry.deleted');
+      case 'rename':
+        return change.new_path
+          ? `${t('conversation.fileEntry.renamed')} → ${change.new_path}`
+          : t('conversation.fileEntry.renamed');
+    }
+  })();
 
   return (
-    <div className="border-t border-muted/50 first:border-t-0">
-      <div className="flex items-center p-base bg-muted/10">
-        <div className="flex-1 flex items-center gap-base min-w-0">
-          <span className="relative shrink-0">
-            {status && <ToolStatusDot status={status} className="size-2" />}
-          </span>
-          <span className="text-sm text-low">{getActionLabel(change)}</span>
-          {hasStats && (
-            <span className="text-sm shrink-0">
-              {(additions ?? writeAdditions) !== undefined &&
-                (additions ?? writeAdditions)! > 0 && (
-                  <span className="text-success">
-                    +{additions ?? writeAdditions}
-                  </span>
-                )}
-              {(additions ?? writeAdditions) !== undefined &&
-                deletions !== undefined &&
-                deletions > 0 &&
-                ' '}
-              {deletions !== undefined && deletions > 0 && (
-                <span className="text-error">-{deletions}</span>
-              )}
-            </span>
-          )}
-        </div>
+    <div className="border-t border-divider first:border-t-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-low">
+        {status && <ToolStatusDot status={status} className="shrink-0" />}
+        <span>{actionLabel}</span>
+        <ChatDiffCounts additions={additions} deletions={deletions} />
       </div>
-
-      {diffContent &&
-        renderDiffBody?.({
-          filePath,
-          change,
-          diffContent,
-        })}
+      {diffContent && renderDiffBody?.({ filePath, change, diffContent })}
     </div>
   );
 }
 
+/** Several edits to one file as a single step; expands to every diff. */
 export function ChatAggregatedDiffEntries({
+  label,
   filePath,
   entries,
   expanded,
-  isHovered,
   onToggle,
-  onHoverChange,
   onOpenInChanges,
+  time,
   className,
-  fileIcon,
   renderDiffBody,
 }: ChatAggregatedDiffEntriesProps) {
-  const { t } = useTranslation('tasks');
-  const FileIcon = fileIcon ?? DefaultFileIcon;
+  const { t } = useTranslation('common');
 
-  const handleClick = () => {
-    onToggle();
-  };
+  const totalStats = useMemo(
+    () =>
+      entries.reduce(
+        (total, entry) => {
+          const stats = changeStats(entry.change);
+          return {
+            additions: total.additions + stats.additions,
+            deletions: total.deletions + stats.deletions,
+          };
+        },
+        { additions: 0, deletions: 0 }
+      ),
+    [entries]
+  );
 
-  const totalStats = useMemo(() => {
-    let additions = 0;
-    let deletions = 0;
-
-    for (const entry of entries) {
-      const { change } = entry;
-      if (change.action === 'edit' && change.unified_diff) {
-        const stats = parseUnifiedDiffStats(change.unified_diff);
-        additions += stats.additions ?? 0;
-        deletions += stats.deletions ?? 0;
-      } else if (change.action === 'write' && change.content) {
-        additions += change.content.split('\n').length;
-      }
-    }
-
-    return { additions, deletions };
-  }, [entries]);
-
-  const aggregateStatus = useMemo(() => {
-    return entries.reduce<ToolStatusLike | null>((worst, entry) => {
-      if (!entry.status) return worst;
-      if (!worst) return entry.status;
-
-      const statusPriority: Record<string, number> = {
-        failed: 6,
-        denied: 5,
-        timed_out: 4,
-        pending_approval: 3,
-        created: 2,
-        success: 1,
-      };
-
-      const worstPriority = statusPriority[worst.status] || 0;
-      const currentPriority = statusPriority[entry.status.status] || 0;
-
-      return currentPriority > worstPriority ? entry.status : worst;
-    }, null);
-  }, [entries]);
-
-  const isDenied = aggregateStatus?.status === 'denied';
-  const hasStats = totalStats.additions > 0 || totalStats.deletions > 0;
+  const state = worstChatStepState(
+    entries.map((entry) => chatStepStateFromStatus(entry.status))
+  );
 
   return (
-    <div
-      className={cn(
-        'rounded-sm border overflow-hidden',
-        isDenied && 'border-error bg-error/10',
-        className
-      )}
-    >
-      <div
-        className={cn(
-          'flex items-center p-base w-full',
-          isDenied ? 'bg-error/20' : 'bg-panel',
-          'cursor-pointer'
-        )}
-        onClick={handleClick}
-        onMouseEnter={() => onHoverChange(true)}
-        onMouseLeave={() => onHoverChange(false)}
-        role="button"
-        aria-expanded={expanded}
-        data-scroll-anchor-target=""
-      >
-        <div className="flex-1 flex items-center gap-base min-w-0">
-          <span className="relative shrink-0">
-            {isHovered ? (
-              <CaretDownIcon
-                className={cn(
-                  'size-icon-base transition-transform duration-150',
-                  !expanded && '-rotate-90'
-                )}
+    <ChatStep
+      state={state}
+      label={label}
+      detail={
+        <ChatStepDetail
+          parts={[
+            <span key="path" className="font-mono">
+              {filePath}
+            </span>,
+            t('conversation.steps.editCount', { count: entries.length }),
+            totalStats.additions || totalStats.deletions ? (
+              <ChatDiffCounts
+                key="counts"
+                additions={totalStats.additions}
+                deletions={totalStats.deletions}
               />
-            ) : (
-              <FileIcon className="size-icon-base" />
-            )}
-            {aggregateStatus && (
-              <ToolStatusDot
-                status={aggregateStatus}
-                className="absolute -bottom-0.5 -right-0.5"
-              />
-            )}
-          </span>
-          <span className="text-sm text-normal truncate">{filePath}</span>
-          <span className="text-xs text-low shrink-0">
-            · {entries.length} {entries.length === 1 ? 'edit' : 'edits'}
-          </span>
-          {onOpenInChanges && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenInChanges();
-              }}
-              className="shrink-0 p-0.5 rounded hover:bg-muted text-low hover:text-normal transition-colors"
-              title={t('conversation.viewInReview')}
-            >
-              <ArrowSquareUpRightIcon className="size-icon-xs" />
-            </button>
-          )}
-          {hasStats && (
-            <span className="text-sm shrink-0">
-              {totalStats.additions > 0 && (
-                <span className="text-success">+{totalStats.additions}</span>
-              )}
-              {totalStats.additions > 0 && totalStats.deletions > 0 && ' '}
-              {totalStats.deletions > 0 && (
-                <span className="text-error">-{totalStats.deletions}</span>
-              )}
-            </span>
-          )}
-        </div>
-        <CaretDownIcon
-          className={cn(
-            'size-icon-xs shrink-0 text-low transition-transform',
-            !expanded && '-rotate-90'
-          )}
+            ) : null,
+          ]}
         />
-      </div>
-
+      }
+      time={time}
+      expanded={expanded}
+      onActivate={onToggle}
+      actions={
+        onOpenInChanges ? (
+          <ChatOpenInReviewButton onClick={onOpenInChanges} />
+        ) : undefined
+      }
+      className={className}
+    >
       {expanded && (
-        <div className="border-t">
+        <div className="mt-1.5 overflow-hidden rounded border bg-secondary">
           {entries.map((entry) => (
             <DiffEntry
               key={entry.expansionKey}
@@ -330,6 +225,6 @@ export function ChatAggregatedDiffEntries({
           ))}
         </div>
       )}
-    </div>
+    </ChatStep>
   );
 }

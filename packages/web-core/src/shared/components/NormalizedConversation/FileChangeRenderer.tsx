@@ -52,7 +52,7 @@ const FileChangeRenderer = ({
   const effectiveExpanded = forceExpanded || expanded;
 
   const theme = getActualTheme(config?.theme);
-  const headerClass = cn('flex items-center gap-1.5 text-secondary-foreground');
+  const headerClass = cn('flex items-center gap-1.5 text-normal');
 
   const statusIcon =
     statusAppearance === 'denied' ? (

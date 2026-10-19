@@ -19,11 +19,24 @@ import {
   type WorkspaceSortOrder,
 } from '@/shared/stores/useUiPreferencesStore';
 import type { Workspace } from '@/shared/hooks/useWorkspaces';
+import type { TFunction } from 'i18next';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import {
   WorkspacesSidebar,
   type WorkspacesSidebarPersistKeys,
+  type WorkspacesSidebarWorkspace,
 } from '@prepcook/ui/components/WorkspacesSidebar';
+import {
+  useSessionCards,
+  type SessionCard,
+} from '@/features/workspace/model/hooks/useSessionCards';
+import {
+  deriveSessionStatus,
+  elapsedSince,
+  groupSession,
+  resolvePlanReady,
+  type SessionStatus,
+} from '@/features/workspace/model/sessionStatus';
 import {
   MultiSelectDropdown,
   type MultiSelectDropdownOption,
@@ -246,6 +259,129 @@ function getWorkspaceSortTimestamp(
   }
 
   return toTimestamp(workspace.createdAt);
+}
+
+function formatDuration(
+  iso: string | undefined,
+  now: Date,
+  t: TFunction<'common'>
+): string | null {
+  const elapsed = elapsedSince(iso, now);
+  if (!elapsed) return null;
+  return t(`workspaces.duration.${elapsed.unit}`, { count: elapsed.count });
+}
+
+function runningLabel(
+  card: SessionCard | undefined,
+  t: TFunction<'common'>
+): string {
+  switch (card?.stage) {
+    case 'plan':
+      return t('workspaces.status.planning');
+    case 'execute':
+      return card.metadata?.work_class === 'bug'
+        ? t('workspaces.status.writingFix')
+        : t('workspaces.status.implementing');
+    case 'review':
+      return t('workspaces.status.reviewing');
+    case 'push':
+      return t('workspaces.status.updatingPr');
+    default:
+      return t('workspaces.status.working');
+  }
+}
+
+/**
+ * The status line under a session's title, e.g. "RCA ready · idle 6 min",
+ * "Writing the fix" or "PR #212 opened · 2 h ago".
+ */
+function sessionStatusLabel(
+  status: SessionStatus,
+  workspace: Workspace,
+  card: SessionCard | undefined,
+  now: Date,
+  t: TFunction<'common'>
+): string {
+  const since = formatDuration(workspace.latestProcessCompletedAt, now, t);
+  const withIdle = (base: string) =>
+    since
+      ? `${base} · ${t('workspaces.status.idleFor', { duration: since })}`
+      : base;
+  const withAgo = (base: string) =>
+    since
+      ? `${base} · ${t('workspaces.status.ago', { duration: since })}`
+      : base;
+
+  switch (status.kind) {
+    case 'approval':
+      return t('workspaces.status.waitingApproval');
+    case 'plan-ready':
+      return withIdle(
+        card?.metadata?.planning?.kind === 'rca'
+          ? t('workspaces.status.rcaReady')
+          : t('workspaces.status.specReady')
+      );
+    case 'merged-ready':
+      return t('workspaces.status.mergedReadyToClose');
+    case 'unseen':
+      return withIdle(t('workspaces.readyForYou'));
+    case 'running':
+      return runningLabel(card, t);
+    case 'failed':
+      return withAgo(t('workspaces.status.lastRunFailed'));
+    case 'merged':
+      return withAgo(t('workspaces.status.merged'));
+    case 'pr-open':
+      return withAgo(
+        workspace.prNumber
+          ? t('workspaces.status.prOpened', { number: workspace.prNumber })
+          : t('workspaces.status.prOpen')
+      );
+    case 'idle':
+      return since
+        ? t('workspaces.status.lastActive', { duration: since })
+        : t('workspaces.status.noRuns');
+  }
+}
+
+/** Builds the presentation of one session row from its summary and card. */
+function toSessionRow(
+  workspace: Workspace,
+  card: SessionCard | undefined,
+  now: Date,
+  t: TFunction<'common'>
+): WorkspacesSidebarWorkspace {
+  const stage = card?.stage ?? null;
+  const status = deriveSessionStatus({
+    isRunning: workspace.isRunning,
+    hasPendingApproval: workspace.hasPendingApproval,
+    hasUnseenActivity: workspace.hasUnseenActivity,
+    latestProcessStatus: workspace.latestProcessStatus,
+    latestProcessCompletedAt: workspace.latestProcessCompletedAt,
+    prStatus: workspace.prStatus,
+    stage,
+    planReady: resolvePlanReady(card?.metadata, stage),
+  });
+  const group = groupSession(
+    status,
+    workspace.latestProcessCompletedAt ?? workspace.updatedAt,
+    now
+  );
+  const isDone = group === 'done-today' || group === 'earlier';
+
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    cardKey: card?.key ?? workspace.branch,
+    stageLabel: card?.stageName ?? undefined,
+    stageTone: isDone ? 'neutral' : stage === 'close' ? 'success' : 'brand',
+    statusLabel: sessionStatusLabel(status, workspace, card, now, t),
+    statusTone: status.tone,
+    group,
+    isMuted: isDone,
+    isPinned: workspace.isPinned,
+    hasRunningDevServer: workspace.hasRunningDevServer,
+  };
 }
 
 export function WorkspacesSidebarContainer({
@@ -531,6 +667,35 @@ export function WorkspacesSidebarContainer({
     [sortedArchivedWorkspaces, displayLimit, isSearching]
   );
 
+  // Resolve each session to its card (key, column, planning verdict) and
+  // derive the group and status line the list shows.
+  const sessionCards = useSessionCards();
+  const toRows = useCallback(
+    (list: Workspace[]) => {
+      const now = new Date();
+      return list.map((ws) =>
+        toSessionRow(ws, sessionCards.get(ws.id), now, t)
+      );
+    },
+    [sessionCards, t]
+  );
+
+  const activeRows = useMemo(
+    () => toRows(paginatedActiveWorkspaces),
+    [toRows, paginatedActiveWorkspaces]
+  );
+
+  const archivedRows = useMemo(
+    () => toRows(paginatedArchivedWorkspaces),
+    [toRows, paginatedArchivedWorkspaces]
+  );
+
+  const todayCount = useMemo(
+    () =>
+      toRows(activeWorkspaces).filter((row) => row.group !== 'earlier').length,
+    [toRows, activeWorkspaces]
+  );
+
   // Check if there are more workspaces to load
   const hasMoreWorkspaces = showArchive
     ? sortedArchivedWorkspaces.length > displayLimit
@@ -560,8 +725,8 @@ export function WorkspacesSidebarContainer({
     const { title } = splitMessageToTitleDescription(
       scratchData.message.trim()
     );
-    return title || 'New Workspace';
-  }, [draftScratch]);
+    return title || t('workspaces.newSession');
+  }, [draftScratch, t]);
 
   // Handle workspace selection - scroll to bottom if re-selecting same workspace
   const handleSelectWorkspace = useCallback(
@@ -606,32 +771,33 @@ export function WorkspacesSidebarContainer({
 
   const searchControls = (
     <>
-      <div className="shrink-0">
-        <div className="flex items-stretch">
-          <IconButton
-            icon={
-              workspaceSort.sortOrder === 'asc'
-                ? SortAscendingIcon
-                : SortDescendingIcon
-            }
-            onClick={() => setIsSortDialogOpen(true)}
-            aria-label={sortDialogTitle}
-            title={sortDialogTitle}
-            className={cn(
-              '!h-cta !px-half !py-0',
-              hasNonDefaultSort && 'text-brand hover:text-brand'
-            )}
-            iconClassName="size-icon-lg"
-          />
-          <IconButton
-            icon={FunnelIcon}
-            onClick={() => setIsFilterDialogOpen(true)}
-            aria-label={filterDialogTitle}
-            title={filterDialogTitle}
-            className="!h-cta !px-half !py-0"
-            iconClassName={cn('size-icon-lg', hasActiveFilters && 'text-brand')}
-          />
-        </div>
+      <div className="flex shrink-0 items-stretch gap-0.5">
+        <IconButton
+          icon={
+            workspaceSort.sortOrder === 'asc'
+              ? SortAscendingIcon
+              : SortDescendingIcon
+          }
+          onClick={() => setIsSortDialogOpen(true)}
+          aria-label={sortDialogTitle}
+          title={sortDialogTitle}
+          className={cn(
+            'size-9',
+            hasNonDefaultSort && 'text-brand hover:text-brand'
+          )}
+          iconClassName="size-4"
+        />
+        <IconButton
+          icon={FunnelIcon}
+          onClick={() => setIsFilterDialogOpen(true)}
+          aria-label={filterDialogTitle}
+          title={filterDialogTitle}
+          className={cn(
+            'size-9',
+            hasActiveFilters && 'text-brand hover:text-brand'
+          )}
+          iconClassName="size-4"
+        />
       </div>
 
       <WorkspacesSortDialog
@@ -659,9 +825,10 @@ export function WorkspacesSidebarContainer({
 
   return (
     <WorkspacesSidebar
-      workspaces={paginatedActiveWorkspaces}
+      workspaces={activeRows}
       totalWorkspacesCount={activeWorkspaces.length}
-      archivedWorkspaces={paginatedArchivedWorkspaces}
+      todayCount={todayCount}
+      archivedWorkspaces={archivedRows}
       isLoading={isWorkspacesListLoading}
       selectedWorkspaceId={selectedWorkspaceId ?? null}
       onSelectWorkspace={handleSelectWorkspace}

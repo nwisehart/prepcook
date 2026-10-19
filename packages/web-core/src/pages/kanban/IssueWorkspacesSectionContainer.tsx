@@ -22,6 +22,10 @@ import { DeleteWorkspaceDialog } from '@prepcook/ui/components/DeleteWorkspaceDi
 import type { WorkspaceWithStats } from '@prepcook/ui/components/IssueWorkspaceCard';
 import { IssueWorkspacesSection } from '@prepcook/ui/components/IssueWorkspacesSection';
 import type { SectionAction } from '@prepcook/ui/components/CollapsibleSectionHeader';
+import {
+  isReviewSession,
+  workflowStageKey,
+} from '@/features/kanban/model/cardSignals';
 
 interface IssueWorkspacesSectionContainerProps {
   issueId: string;
@@ -46,6 +50,7 @@ export function IssueWorkspacesSectionContainer({
     getIssue,
     getWorkspacesForIssue,
     issues,
+    statuses,
     isLoading: projectLoading,
   } = useProjectContext();
   const { activeWorkspaces, archivedWorkspaces } = useWorkspaceContext();
@@ -65,9 +70,35 @@ export function IssueWorkspacesSectionContainer({
     return map;
   }, [activeWorkspaces, archivedWorkspaces]);
 
-  // Get workspaces for the issue, with PR info
+  // The stage chip on each session row. Independent reviews run in their
+  // own "Review: …" sessions; planning and execution share the card's
+  // implementation session, which is planning while the card is in Plan
+  // and executing (with its fix rounds) from Execute on.
+  const stageLabels = useMemo(() => {
+    const nameOf = (stage: string) =>
+      statuses.find((status) => workflowStageKey(status.name) === stage)
+        ?.name ?? null;
+    const issueStatusName = statuses.find(
+      (status) => status.id === getIssue(issueId)?.status_id
+    )?.name;
+    const cardStage = workflowStageKey(issueStatusName);
+    return {
+      review: nameOf('review'),
+      implementation:
+        cardStage === 'plan'
+          ? nameOf('plan')
+          : cardStage && cardStage !== 'todo'
+            ? nameOf('execute')
+            : null,
+    };
+  }, [statuses, getIssue, issueId]);
+
+  // Get workspaces for the issue, with PR info, newest first
   const workspacesWithStats: WorkspaceWithStats[] = useMemo(() => {
-    const rawWorkspaces = getWorkspacesForIssue(issueId);
+    const rawWorkspaces = [...getWorkspacesForIssue(issueId)].sort(
+      (a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
 
     return rawWorkspaces.map((workspace) => {
       const localWorkspace = workspace.local_workspace_id
@@ -105,6 +136,9 @@ export function IssueWorkspacesSectionContainer({
         hasUnseenActivity: localWorkspace?.hasUnseenActivity,
         latestProcessCompletedAt: localWorkspace?.latestProcessCompletedAt,
         latestProcessStatus: localWorkspace?.latestProcessStatus,
+        stageLabel: isReviewSession(workspace)
+          ? stageLabels.review
+          : stageLabels.implementation,
       };
     });
   }, [
@@ -114,6 +148,7 @@ export function IssueWorkspacesSectionContainer({
     membersWithProfilesById,
     userId,
     localWorkspacesById,
+    stageLabels,
   ]);
 
   const isLoading = projectLoading || orgLoading;

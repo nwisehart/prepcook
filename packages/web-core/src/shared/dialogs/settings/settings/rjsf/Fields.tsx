@@ -62,13 +62,13 @@ export function KeyValueField({
   const isDisabled = disabled || readonly;
 
   const inputClassName = cn(
-    'min-w-[50px] flex-1 bg-secondary border border-border rounded-sm px-base py-half text-base text-high font-mono text-sm',
-    'placeholder:text-low placeholder:opacity-80 focus:outline-none focus:ring-1 focus:ring-brand',
+    'h-9 min-w-[50px] flex-1 rounded border border-border bg-secondary px-3 font-mono text-[13px] text-high',
+    'placeholder:text-low focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
     isDisabled && 'opacity-50 cursor-not-allowed'
   );
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-2">
       {entries.map(([key, value]) => (
         <div key={key} className="flex gap-2 items-center">
           <input
@@ -90,14 +90,14 @@ export function KeyValueField({
             onClick={() => handleRemove(key)}
             disabled={isDisabled}
             className={cn(
-              'h-8 w-8 p-0 flex items-center justify-center shrink-0 rounded-sm',
-              'text-low hover:text-error hover:bg-error/10',
-              'focus:outline-none focus:ring-1 focus:ring-brand',
+              'size-9 p-0 flex items-center justify-center shrink-0 rounded',
+              'text-low hover:text-error hover:bg-error-soft',
+              'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
               'disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
             )}
             aria-label={`Remove ${key}`}
           >
-            <XIcon className="size-icon-xs" weight="bold" />
+            <XIcon className="size-4" />
           </button>
         </div>
       ))}
@@ -131,14 +131,14 @@ export function KeyValueField({
           onClick={handleAdd}
           disabled={isDisabled || !newKey.trim()}
           className={cn(
-            'h-8 w-8 p-0 flex items-center justify-center shrink-0 rounded-sm',
-            'bg-secondary border border-border text-normal hover:bg-secondary/80',
-            'focus:outline-none focus:ring-1 focus:ring-brand',
+            'size-9 p-0 flex items-center justify-center shrink-0 rounded',
+            'border border-border bg-secondary text-high hover:bg-panel',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
             'disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
           )}
           aria-label="Add environment variable"
         >
-          <PlusIcon className="size-icon-xs" weight="bold" />
+          <PlusIcon className="size-4" />
         </button>
       </div>
     </div>

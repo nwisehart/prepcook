@@ -51,14 +51,17 @@ export function GitPanel({
   const { t } = useTranslation(['tasks', 'common']);
 
   return (
-    <div
+    <section
       className={cn(
-        'flex flex-col flex-1 w-full bg-secondary text-low overflow-y-auto',
+        'flex w-full flex-col gap-2 rounded-lg border bg-secondary p-3 text-normal',
         className
       )}
     >
+      <span className="text-sm font-bold text-high">
+        {t('common:sections.repositories')}
+      </span>
       {error && <ErrorAlert message={error} />}
-      <div className="gap-base px-base">
+      <div className="flex flex-col">
         {repos.map((repo) => (
           <RepoCard
             key={repo.id}
@@ -86,21 +89,22 @@ export function GitPanel({
             onMoreClick={() => onMoreClick?.(repo.id)}
           />
         ))}
-        <div className="bg-primary flex flex-col gap-base w-full p-base rounded-sm my-base">
-          <div className="flex gap-base items-center">
-            <GitBranchIcon className="size-icon-md text-base" weight="fill" />
-            <p className="font-medium truncate">
-              {t('common:sections.workingBranch')}
-            </p>
-          </div>
-          <InputField
-            variant="editable"
-            value={workingBranchName}
-            onChange={onWorkingBranchNameChange}
-            placeholder={t('gitPanel.advanced.placeholder')}
-          />
-        </div>
       </div>
-    </div>
+      <div className="flex flex-col gap-1.5 border-t border-divider pt-2.5">
+        <div className="flex items-center gap-1.5 text-[12.5px] text-low">
+          <GitBranchIcon className="size-3.5" />
+          <span className="font-medium">
+            {t('common:sections.workingBranch')}
+          </span>
+        </div>
+        <InputField
+          variant="editable"
+          value={workingBranchName}
+          onChange={onWorkingBranchNameChange}
+          placeholder={t('gitPanel.advanced.placeholder')}
+          className="font-mono"
+        />
+      </div>
+    </section>
   );
 }

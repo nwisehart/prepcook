@@ -95,17 +95,17 @@ export function AppBarUserPopover({
         <button
           type="button"
           className={cn(
-            'flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-md sm:rounded-lg',
-            'transition-colors cursor-pointer overflow-hidden',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-            'bg-panel text-normal font-medium text-sm hover:bg-panel/70'
+            'flex size-8 shrink-0 items-center justify-center rounded',
+            'text-low transition-colors cursor-pointer hover:bg-panel hover:text-high',
+            'data-[state=open]:bg-panel data-[state=open]:text-high',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
           )}
-          aria-label="Account"
+          aria-label={t('appBar.account')}
         >
-          <UserIcon className="size-icon-sm" weight="bold" />
+          <UserIcon className="size-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="end" className="min-w-[200px]">
+      <DropdownMenuContent side="bottom" align="end" className="min-w-[200px]">
         {menuGroups.flatMap((group, index) =>
           index === 0
             ? [group]

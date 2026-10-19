@@ -100,7 +100,7 @@ const PIERRE_DIFFS_THEME_CSS = `
     cursor: pointer;
     padding-inline: 12px;
     border-radius: 4px 4px 0 0;
-    font-family: 'IBM Plex Mono', monospace;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 0.875rem;
     line-height: 1.25rem;
   }

@@ -300,7 +300,7 @@ export function DiffViewCard({
               />
             )}
           </span>
-          <span className="text-sm text-normal truncate font-ibm-plex-mono">
+          <span className="text-sm text-normal truncate font-mono">
             {filePath}
           </span>
           {hasStats && (
@@ -383,7 +383,7 @@ export function DiffViewBody({
 
   if (!isValid) {
     return (
-      <div className="px-base pb-base text-xs font-ibm-plex-mono text-low">
+      <div className="px-base pb-base text-xs font-mono text-low">
         {invalidMessage ?? t('conversation.unableToRenderDiff')}
       </div>
     );

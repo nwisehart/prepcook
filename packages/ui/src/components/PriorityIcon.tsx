@@ -18,18 +18,15 @@ const priorityConfig: Record<
   { icon: typeof ArrowUpIcon; colorClass: string }
 > = {
   urgent: { icon: ArrowFatLineUpIcon, colorClass: 'text-error' },
-  high: { icon: ArrowUpIcon, colorClass: 'text-brand' },
+  high: { icon: ArrowUpIcon, colorClass: 'text-attention' },
   medium: { icon: MinusIcon, colorClass: 'text-low' },
-  low: { icon: ArrowDownIcon, colorClass: 'text-success' },
+  low: { icon: ArrowDownIcon, colorClass: 'text-low' },
 };
 
 export const PriorityIcon = ({ priority, className }: PriorityIconProps) => {
   if (!priority) return null;
   const { icon: IconComponent, colorClass } = priorityConfig[priority];
   return (
-    <IconComponent
-      className={cn('size-icon-xs', colorClass, className)}
-      weight="bold"
-    />
+    <IconComponent className={cn('size-icon-xs', colorClass, className)} />
   );
 };

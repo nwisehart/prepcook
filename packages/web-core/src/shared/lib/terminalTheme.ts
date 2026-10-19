@@ -55,77 +55,46 @@ function getCssVariable(name: string): string {
 }
 
 /**
- * Build an xterm.js theme from CSS variables defined in index.css.
- * Uses --console-background and --console-foreground as the main colors,
- * and derives ANSI colors from a combination of theme-appropriate defaults.
+ * Build an xterm.js theme from the console tokens in index.css. The console
+ * surface (--console-background / --console-foreground) is dark in both
+ * modes, so the ANSI palette is always the one tuned for a dark ground.
+ * --console-success / --console-error are tuned for light surfaces in light
+ * mode (diff counts use them), so in light mode green and red fall back to
+ * the dark-mode success and error values, which read on the dark console.
  */
 export function getTerminalTheme(): ITheme {
-  const background = getCssVariable('--bg-secondary');
-  const foreground = getCssVariable('--text-high');
-  const success = getCssVariable('--console-success');
-  const error = getCssVariable('--console-error');
-
-  // Detect if we're in dark mode by checking the class on html element
   const isDark = document.documentElement.classList.contains('dark');
+  const bgHex = hslToHex(getCssVariable('--console-background'));
+  const fgHex = hslToHex(getCssVariable('--console-foreground'));
+  const greenHex = isDark
+    ? hslToHex(getCssVariable('--console-success'))
+    : '#5fc08a';
+  const redHex = isDark
+    ? hslToHex(getCssVariable('--console-error'))
+    : '#f0a39b';
 
-  // Convert the main colors
-  const bgHex = hslToHex(background);
-  const fgHex = hslToHex(foreground);
-  const greenHex = hslToHex(success);
-  const redHex = hslToHex(error);
-
-  // Define ANSI palette based on light/dark mode
-  // These are carefully chosen to be readable on the respective backgrounds
-  if (isDark) {
-    return {
-      background: bgHex,
-      foreground: fgHex,
-      cursor: fgHex,
-      cursorAccent: bgHex,
-      selectionBackground: '#3d4966',
-      selectionForeground: fgHex,
-      black: '#1a1a1a',
-      red: redHex,
-      green: greenHex,
-      yellow: '#e0af68',
-      blue: '#7aa2f7',
-      magenta: '#bb9af7',
-      cyan: '#7dcfff',
-      white: '#c0caf5',
-      brightBlack: '#545c7e',
-      brightRed: redHex,
-      brightGreen: greenHex,
-      brightYellow: '#e0af68',
-      brightBlue: '#7aa2f7',
-      brightMagenta: '#bb9af7',
-      brightCyan: '#7dcfff',
-      brightWhite: fgHex,
-    };
-  } else {
-    // Light mode colors
-    return {
-      background: bgHex,
-      foreground: fgHex,
-      cursor: fgHex,
-      cursorAccent: bgHex,
-      selectionBackground: '#accef7',
-      selectionForeground: '#1a1a1a',
-      black: '#1a1a1a',
-      red: redHex,
-      green: greenHex,
-      yellow: '#946800',
-      blue: '#0550ae',
-      magenta: '#a626a4',
-      cyan: '#0e7490',
-      white: '#57606a',
-      brightBlack: '#4b5563',
-      brightRed: redHex,
-      brightGreen: greenHex,
-      brightYellow: '#7c5800',
-      brightBlue: '#0969da',
-      brightMagenta: '#8250df',
-      brightCyan: '#0891b2',
-      brightWhite: fgHex,
-    };
-  }
+  return {
+    background: bgHex,
+    foreground: fgHex,
+    cursor: fgHex,
+    cursorAccent: bgHex,
+    selectionBackground: '#3a4a63',
+    selectionForeground: fgHex,
+    black: '#2d2e33',
+    red: redHex,
+    green: greenHex,
+    yellow: '#e7b94c',
+    blue: '#8fb0de',
+    magenta: '#bba7f0',
+    cyan: '#7fc8d6',
+    white: '#c9cbd0',
+    brightBlack: '#6a6f78',
+    brightRed: redHex,
+    brightGreen: greenHex,
+    brightYellow: '#e7b94c',
+    brightBlue: '#9dbce8',
+    brightMagenta: '#bba7f0',
+    brightCyan: '#9ad6e2',
+    brightWhite: fgHex,
+  };
 }

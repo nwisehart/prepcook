@@ -2,7 +2,7 @@ import { WarningIcon } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 
 /**
- * Warning strip shown when the periodic Claude seat probe last failed
+ * Error notice shown when the periodic Claude seat probe last failed
  * (seat_monitor → /api/info `claude_seat_degraded`). The subscription login
  * has expired, so agents can't run until someone re-authenticates on the
  * runner (`docker exec -it prepcook claude /login`). Slack is
@@ -11,8 +11,11 @@ import { useTranslation } from 'react-i18next';
 export function SeatDegradedBanner() {
   const { t } = useTranslation('common');
   return (
-    <div className="flex items-center justify-center gap-2 bg-warning/15 text-warning px-base py-1 text-sm font-medium border-b border-warning/30">
-      <WarningIcon className="size-icon-xs shrink-0" weight="bold" />
+    <div
+      role="alert"
+      className="flex items-center gap-2 rounded border border-error/20 bg-error-soft px-3 py-2 text-sm text-high"
+    >
+      <WarningIcon className="size-4 shrink-0 text-error" />
       <span>
         {t('seatDegraded.banner', {
           defaultValue:

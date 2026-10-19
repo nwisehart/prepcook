@@ -20,10 +20,10 @@ export function ChatEmptyState({
         className
       )}
     >
-      <div className="flex size-12 items-center justify-center rounded-full border border-border/70 bg-panel text-low">
+      <div className="flex size-12 items-center justify-center rounded-full border bg-secondary text-low">
         <ChatCircleDotsIcon className="size-6" />
       </div>
-      <p className="text-sm font-medium text-normal">{title}</p>
+      <p className="text-sm font-semibold text-high">{title}</p>
       {description ? <p className="text-sm text-low">{description}</p> : null}
     </div>
   );

@@ -1,99 +1,62 @@
-import { forwardRef } from 'react';
-import {
-  ListMagnifyingGlassIcon,
-  TerminalWindowIcon,
-  FileTextIcon,
-  GlobeIcon,
-} from '@phosphor-icons/react';
+import type { ReactNode } from 'react';
 import { cn } from '../lib/cn';
-import { ToolStatusDot, type ToolStatusLike } from './ToolStatusDot';
+import { ChatStep, chatStepStateFromStatus } from './ChatStep';
+import type { ToolStatusLike } from './ToolStatusDot';
 
 interface ChatToolSummaryProps {
-  summary: string;
+  /** What the step did, e.g. "Read a file" */
+  label: string;
+  /** The object of the step (path, query, command), muted under the label */
+  detail?: ReactNode;
+  /** Full text of a long detail, shown when the row is expanded */
+  fullDetail?: string;
+  time?: string;
   className?: string;
   expanded?: boolean;
+  /** Toggles `fullDetail`; only used when there is no output to open */
   onToggle?: () => void;
   status?: ToolStatusLike;
+  /** Opens the tool's output in the logs panel */
   onViewContent?: () => void;
-  toolName?: string;
-  isTruncated?: boolean;
-  /** The action type for determining the icon */
-  actionType?: string;
+  /** Extra content under the detail (e.g. a posted comment) */
+  children?: ReactNode;
 }
 
-export const ChatToolSummary = forwardRef<
-  HTMLSpanElement,
-  ChatToolSummaryProps
->(function ChatToolSummary(
-  {
-    summary,
-    className,
-    expanded,
-    onToggle,
-    status,
-    onViewContent,
-    toolName,
-    isTruncated,
-    actionType,
-  },
-  ref
-) {
-  // Can expand if text is truncated and onToggle is provided
-  const canExpand = isTruncated && onToggle;
-  const isClickable = Boolean(onViewContent || canExpand);
-
-  const handleClick = () => {
-    if (onViewContent) {
-      onViewContent();
-    } else if (canExpand) {
-      onToggle();
-    }
-  };
-
-  // Determine icon based on action type or tool name
-  const getIcon = () => {
-    if (toolName === 'Bash') return TerminalWindowIcon;
-    switch (actionType) {
-      case 'file_read':
-        return FileTextIcon;
-      case 'search':
-        return ListMagnifyingGlassIcon;
-      case 'web_fetch':
-        return GlobeIcon;
-      default:
-        return ListMagnifyingGlassIcon;
-    }
-  };
-  const Icon = getIcon();
+/** A single tool call rendered as a transcript step. */
+export function ChatToolSummary({
+  label,
+  detail,
+  fullDetail,
+  time,
+  className,
+  expanded,
+  onToggle,
+  status,
+  onViewContent,
+  children,
+}: ChatToolSummaryProps) {
+  const canExpand = !onViewContent && Boolean(fullDetail && onToggle);
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-base text-sm text-low',
-        isClickable && 'cursor-pointer',
-        className
-      )}
-      onClick={isClickable ? handleClick : undefined}
-      role={isClickable ? 'button' : undefined}
+    <ChatStep
+      state={chatStepStateFromStatus(status)}
+      label={label}
+      detail={canExpand && expanded ? undefined : detail}
+      time={time}
+      expanded={canExpand ? Boolean(expanded) : undefined}
+      onActivate={onViewContent ?? (canExpand ? onToggle : undefined)}
+      className={className}
     >
-      <span className="relative shrink-0 pt-0.5">
-        <Icon className="size-icon-base" />
-        {status && (
-          <ToolStatusDot
-            status={status}
-            className="absolute -bottom-0.5 -left-0.5"
-          />
-        )}
-      </span>
-      <span
-        ref={ref}
-        className={cn(
-          !expanded && 'truncate',
-          expanded && 'whitespace-pre-wrap break-all'
-        )}
-      >
-        {summary}
-      </span>
-    </div>
+      {canExpand && expanded && (
+        <pre
+          className={cn(
+            'mt-0.5 whitespace-pre-wrap break-all font-mono text-[12.5px] text-low'
+          )}
+        >
+          {fullDetail}
+        </pre>
+      )}
+      {children}
+    </ChatStep>
   );
-});
+}

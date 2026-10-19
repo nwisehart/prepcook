@@ -16,6 +16,7 @@ import {
   SettingsCard,
   SettingsField,
   SettingsInput,
+  SettingsLoading,
 } from './SettingsComponents';
 import { useSettingsMachineClient } from './SettingsHostContext';
 
@@ -103,21 +104,13 @@ export function SecretsSettingsSection() {
   };
 
   if (secretsQuery.isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.secrets.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.secrets.loading')} />;
   }
 
   if (secretsQuery.error || !secretsQuery.data) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {secretsQuery.error instanceof Error
             ? secretsQuery.error.message
             : t('settings.secrets.loadError')}
@@ -131,13 +124,13 @@ export function SecretsSettingsSection() {
   return (
     <>
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
 
       {savedName && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.secrets.add.success', { name: savedName })}
         </div>
       )}
@@ -150,7 +143,7 @@ export function SecretsSettingsSection() {
           label={t('settings.secrets.file.label')}
           description={t('settings.secrets.file.helper')}
         >
-          <div className="text-sm text-low font-ibm-plex-mono bg-secondary px-base py-half rounded-sm break-all">
+          <div className="flex min-h-9 items-center break-all rounded border border-border bg-surface-raised px-3 py-1.5 font-mono text-[13px] text-normal">
             {file}
           </div>
         </SettingsField>
@@ -161,17 +154,17 @@ export function SecretsSettingsSection() {
               {t('settings.secrets.list.empty')}
             </p>
           ) : (
-            <div className="rounded-sm border border-border divide-y divide-border">
+            <div className="divide-y divide-divider rounded-lg border border-border">
               {names.map((secretName) => (
                 <div
                   key={secretName}
-                  className="flex items-center justify-between gap-base px-base py-half"
+                  className="flex items-center justify-between gap-3 px-3 py-2"
                 >
-                  <span className="text-sm text-normal font-ibm-plex-mono break-all">
+                  <span className="break-all font-mono text-[13px] text-high">
                     {secretName}
                   </span>
                   <PrimaryButton
-                    variant="tertiary"
+                    variant="secondary"
                     value={t('settings.secrets.list.remove')}
                     actionIcon={
                       removeMutation.isPending &&
@@ -204,6 +197,7 @@ export function SecretsSettingsSection() {
             placeholder={t('settings.secrets.add.name.placeholder')}
             error={nameInvalid}
             autoComplete="off"
+            monospace
           />
         </SettingsField>
 
@@ -220,7 +214,7 @@ export function SecretsSettingsSection() {
           />
         </SettingsField>
 
-        <div>
+        <div className="flex">
           <PrimaryButton
             value={t('settings.secrets.add.button')}
             actionIcon={setMutation.isPending ? 'spinner' : undefined}
@@ -268,11 +262,8 @@ function RequiredSecretsCard() {
       description={t('settings.secrets.required.description')}
     >
       {reposQuery.isLoading || isLoading ? (
-        <div className="flex items-center gap-half py-half">
-          <SpinnerIcon
-            className="size-icon-xs animate-spin text-low"
-            weight="bold"
-          />
+        <div className="flex items-center gap-2 py-1">
+          <SpinnerIcon className="size-3.5 animate-spin text-low" />
           <span className="text-sm text-low">
             {t('settings.secrets.required.loading')}
           </span>
@@ -282,22 +273,20 @@ function RequiredSecretsCard() {
           {t('settings.secrets.required.allSet')}
         </p>
       ) : (
-        <div className="space-y-base">
+        <div className="flex flex-col gap-3">
           {reposWithMissing.map(({ repo, missing }) => (
-            <div key={repo.id} className="space-y-half">
-              <p className="text-sm font-medium text-normal">
+            <div key={repo.id} className="flex flex-col gap-1.5">
+              <p className="text-sm font-semibold text-high">
                 {repo.display_name}
               </p>
-              <div className="flex flex-wrap gap-half">
+              <div className="flex flex-wrap gap-2">
                 {missing.map((secretName) => (
                   <span
                     key={secretName}
-                    className="inline-flex items-center gap-half rounded-sm bg-secondary border border-border px-half py-0.5 text-sm"
+                    className="inline-flex h-[22px] items-center gap-1.5 rounded-full bg-error-soft px-2 text-xs font-medium text-error"
                   >
-                    <span className="size-dot rounded-full bg-error" />
-                    <span className="font-ibm-plex-mono text-normal">
-                      {secretName}
-                    </span>
+                    <span className="size-2 rounded-full bg-error" />
+                    <span className="font-mono">{secretName}</span>
                   </span>
                 ))}
               </div>

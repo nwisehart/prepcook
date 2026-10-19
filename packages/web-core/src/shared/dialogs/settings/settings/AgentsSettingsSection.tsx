@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  SpinnerIcon,
   PlusIcon,
   TrashIcon,
   DotsThreeIcon,
@@ -22,12 +21,14 @@ import type { BaseCodingAgent, ExecutorConfigs } from 'shared/types';
 import { cn } from '@/shared/lib/utils';
 import { toPrettyCase } from '@/shared/lib/string';
 import {
+  SettingsCard,
+  SettingsLoading,
   SettingsSaveBar,
   TwoColumnPicker,
-  TwoColumnPickerColumn,
-  TwoColumnPickerItem,
   TwoColumnPickerBadge,
+  TwoColumnPickerColumn,
   TwoColumnPickerEmpty,
+  TwoColumnPickerItem,
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import { useSettingsMachineClient } from './SettingsHostContext';
@@ -339,15 +340,7 @@ export function AgentsSettingsSection() {
   };
 
   if (profilesLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.agents.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.agents.loading')} />;
   }
 
   const executorsMap =
@@ -357,7 +350,7 @@ export function AgentsSettingsSection() {
     <>
       {/* Status messages */}
       {!!profilesError && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error mb-4">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {profilesError instanceof Error
             ? profilesError.message
             : String(profilesError)}
@@ -365,20 +358,23 @@ export function AgentsSettingsSection() {
       )}
 
       {profilesSuccess && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium mb-4">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.agents.save.success')}
         </div>
       )}
 
       {saveError && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error mb-4">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {saveError}
         </div>
       )}
 
       {localParsedProfiles?.executors ? (
         /* Two-column layout: agents and variants on top, config form below */
-        <div className="space-y-4">
+        <SettingsCard
+          title={t('settings.agents.title')}
+          description={t('settings.agents.description')}
+        >
           {/* Two-column selector - Finder-like style, stacked on mobile */}
           <TwoColumnPicker>
             {/* Agents column */}
@@ -430,12 +426,12 @@ export function AgentsSettingsSection() {
               headerAction={
                 selectedExecutorType && (
                   <button
-                    className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
+                    className="rounded p-1 text-low hover:bg-panel hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
                     onClick={() => handleCreateConfig(selectedExecutorType)}
                     disabled={profilesSaving}
                     title={t('settings.agents.editor.createNew')}
                   >
-                    <PlusIcon className="size-icon-2xs" weight="bold" />
+                    <PlusIcon className="size-3.5" />
                   </button>
                 )
               }
@@ -489,7 +485,7 @@ export function AgentsSettingsSection() {
 
           {/* Config form */}
           {selectedExecutorType && selectedConfiguration && (
-            <div className="bg-secondary/50 border border-border rounded-sm p-4">
+            <div className="rounded-lg border border-border px-4 py-1">
               <ExecutorConfigForm
                 key={`${selectedExecutorType}-${selectedConfiguration}`}
                 executor={selectedExecutorType}
@@ -509,7 +505,7 @@ export function AgentsSettingsSection() {
               />
             </div>
           )}
-        </div>
+        </SettingsCard>
       ) : null}
 
       <SettingsSaveBar
@@ -547,8 +543,8 @@ function ConfigActionsDropdown({
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            'p-half rounded-sm hover:bg-panel text-low hover:text-normal',
-            'opacity-0 group-hover:opacity-100 transition-opacity'
+            'rounded p-1 text-low hover:bg-border hover:text-high',
+            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity'
           )}
           onClick={(e) => e.stopPropagation()}
         >

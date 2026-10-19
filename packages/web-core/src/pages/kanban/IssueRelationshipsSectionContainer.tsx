@@ -43,7 +43,11 @@ export function IssueRelationshipsSectionContainer({
         issueId,
         getRelationshipsForIssue(issueId),
         issuesById
-      ),
+      ).map((relationship) => ({
+        ...relationship,
+        relatedIssueTitle:
+          issuesById.get(relationship.relatedIssueId)?.title ?? null,
+      })),
     [issueId, getRelationshipsForIssue, issuesById]
   );
 
@@ -85,14 +89,13 @@ export function IssueRelationshipsSectionContainer({
   const headerExtra = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <span
-          role="button"
-          tabIndex={0}
-          className="text-low hover:text-normal"
+        <button
+          type="button"
+          className="flex size-6 items-center justify-center rounded-sm text-low transition-colors hover:bg-panel hover:text-high"
           onClick={(e) => e.stopPropagation()}
         >
-          <PlusIcon className="size-icon-xs" weight="bold" />
-        </span>
+          <PlusIcon className="size-3.5" weight="bold" />
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem

@@ -1,5 +1,9 @@
-import { ListMagnifyingGlassIcon, CaretRightIcon } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
+import {
+  ChatStep,
+  chatStepStateFromStatus,
+  worstChatStepState,
+} from './ChatStep';
 import { ToolStatusDot, type ToolStatusLike } from './ToolStatusDot';
 
 export interface AggregatedEntry {
@@ -13,145 +17,84 @@ export interface AggregatedEntry {
 interface ChatAggregatedToolEntriesProps {
   entries: AggregatedEntry[];
   expanded: boolean;
-  isHovered: boolean;
   onToggle: () => void;
-  onHoverChange: (hovered: boolean) => void;
-  /** Label to show before the count (e.g., "Read", "Search") */
+  /** Step label, e.g. "Read 5 files" */
   label: string;
-  /** Unit label for counting (e.g., "file", "URL") - will be pluralized automatically */
-  unit: string;
-  icon?: React.ElementType;
+  /** Muted line under the label, e.g. the first few paths */
+  detail?: React.ReactNode;
+  time?: string;
   className?: string;
   onViewContent?: (index: number) => void;
 }
 
+/**
+ * Consecutive reads, searches or fetches as one step. A single entry is a
+ * plain step; several are a disclosure listing each one, and each listed
+ * entry opens its own output.
+ */
 export function ChatAggregatedToolEntries({
   entries,
   expanded,
-  isHovered,
   onToggle,
-  onHoverChange,
   label,
-  unit,
-  icon: Icon = ListMagnifyingGlassIcon,
+  detail,
+  time,
   className,
   onViewContent,
 }: ChatAggregatedToolEntriesProps) {
   if (entries.length === 0) return null;
 
-  // If only one entry, don't aggregate
   if (entries.length === 1) {
-    const entry = entries[0];
     return (
-      <div
-        className={cn(
-          'flex items-center gap-base text-sm text-low',
-          onViewContent && 'cursor-pointer',
-          className
-        )}
-        onClick={onViewContent ? () => onViewContent(0) : undefined}
-        role={onViewContent ? 'button' : undefined}
-      >
-        <span className="relative shrink-0 pt-0.5">
-          <Icon className="size-icon-base" />
-          {entry.status && (
-            <ToolStatusDot
-              status={entry.status}
-              className="absolute -bottom-0.5 -left-0.5"
-            />
-          )}
-        </span>
-        <span className="truncate">{entry.summary}</span>
-      </div>
+      <ChatStep
+        state={chatStepStateFromStatus(entries[0].status)}
+        label={label}
+        detail={detail}
+        time={time}
+        onActivate={onViewContent ? () => onViewContent(0) : undefined}
+        className={className}
+      />
     );
   }
 
-  // Get the worst status among all entries for the aggregate indicator
-  const aggregateStatus = entries.reduce<ToolStatusLike | undefined>(
-    (worst, entry) => {
-      if (!entry.status) return worst;
-      if (!worst) return entry.status;
-
-      // Priority: failed > denied > timed_out > pending_approval > created > success
-      const statusPriority: Record<string, number> = {
-        failed: 6,
-        denied: 5,
-        timed_out: 4,
-        pending_approval: 3,
-        created: 2,
-        success: 1,
-      };
-
-      const worstPriority = statusPriority[worst.status] || 0;
-      const currentPriority = statusPriority[entry.status.status] || 0;
-
-      return currentPriority > worstPriority ? entry.status : worst;
-    },
-    undefined
+  const state = worstChatStepState(
+    entries.map((entry) => chatStepStateFromStatus(entry.status))
   );
 
   return (
-    <div className={cn('flex flex-col', className)}>
-      {/* Header row - clickable to expand/collapse */}
-      <div
-        className="flex items-center gap-base text-sm text-low cursor-pointer group"
-        onClick={onToggle}
-        onMouseEnter={() => onHoverChange(true)}
-        onMouseLeave={() => onHoverChange(false)}
-        role="button"
-        aria-expanded={expanded}
-        data-scroll-anchor-target=""
-      >
-        <span className="relative shrink-0 pt-0.5">
-          {isHovered ? (
-            <CaretRightIcon
-              className={cn(
-                'size-icon-base transition-transform duration-150',
-                expanded && 'rotate-90'
-              )}
-            />
-          ) : (
-            <Icon className="size-icon-base" />
-          )}
-          {aggregateStatus && (
-            <ToolStatusDot
-              status={aggregateStatus}
-              className="absolute -bottom-0.5 -left-0.5"
-            />
-          )}
-        </span>
-        <span className="truncate">
-          {label} · {entries.length} {entries.length === 1 ? unit : `${unit}s`}
-        </span>
-      </div>
-
-      {/* Expanded content */}
+    <ChatStep
+      state={state}
+      label={label}
+      detail={expanded ? undefined : detail}
+      time={time}
+      expanded={expanded}
+      onActivate={onToggle}
+      className={className}
+    >
       {expanded && (
-        <div className="ml-6 pt-1 flex flex-col gap-0.5">
+        <ul className="mt-0.5 flex flex-col">
           {entries.map((entry, index) => (
-            <div
-              key={entry.expansionKey}
-              className={cn(
-                'flex items-center gap-base text-sm text-low pl-base',
-                onViewContent && 'cursor-pointer hover:text-normal'
-              )}
-              onClick={onViewContent ? () => onViewContent(index) : undefined}
-              role={onViewContent ? 'button' : undefined}
-            >
-              <span className="relative shrink-0 pt-0.5">
-                <Icon className="size-icon-base" />
-                {entry.status && (
-                  <ToolStatusDot
-                    status={entry.status}
-                    className="absolute -bottom-0.5 -left-0.5"
-                  />
+            <li key={entry.expansionKey} className="min-w-0">
+              <button
+                type="button"
+                onClick={onViewContent ? () => onViewContent(index) : undefined}
+                disabled={!onViewContent}
+                className={cn(
+                  'flex w-full min-w-0 items-center gap-2 rounded-sm py-0.5 text-left font-mono text-[12.5px] text-low',
+                  onViewContent && 'hover:text-high',
+                  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
+                  'disabled:cursor-default'
                 )}
-              </span>
-              <span className="truncate">{entry.summary}</span>
-            </div>
+              >
+                {entry.status && (
+                  <ToolStatusDot status={entry.status} className="shrink-0" />
+                )}
+                <span className="min-w-0 truncate">{entry.summary}</span>
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </ChatStep>
   );
 }

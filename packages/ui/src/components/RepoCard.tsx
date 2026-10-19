@@ -120,8 +120,8 @@ export function RepoCard({
   }, [availableActionOptions, selectedAction]);
 
   return (
-    <div className="bg-primary rounded-sm my-base p-base space-y-base">
-      <div className="font-medium">{name}</div>
+    <div className="my-base flex flex-col gap-2.5 rounded-lg border border-border bg-secondary px-3.5 py-3">
+      <div className="truncate text-sm font-semibold text-high">{name}</div>
       {/* Branch row */}
       <div className="flex items-center gap-base">
         <div className="min-w-0 flex-1">
@@ -155,41 +155,41 @@ export function RepoCard({
         {/* Commits ahead/behind indicators */}
         {commitsAhead > 0 && (
           <span className="inline-flex items-center gap-0.5 text-xs text-success shrink-0">
-            <ArrowUpIcon className="size-icon-xs" weight="bold" />
-            <span className="font-medium">{commitsAhead}</span>
+            <ArrowUpIcon className="size-3.5" />
+            <span className="font-mono font-medium">{commitsAhead}</span>
           </span>
         )}
         {commitsBehind > 0 && (
           <span className="inline-flex items-center gap-0.5 text-xs text-error shrink-0">
-            <ArrowDownIcon className="size-icon-xs" weight="bold" />
-            <span className="font-medium">{commitsBehind}</span>
+            <ArrowDownIcon className="size-3.5" />
+            <span className="font-mono font-medium">{commitsBehind}</span>
           </span>
         )}
 
         <button
           onClick={onMoreClick}
-          className="flex items-center justify-center p-1.5 rounded hover:bg-tertiary text-low hover:text-base transition-colors shrink-0"
+          className="flex size-8 items-center justify-center rounded text-low transition-colors hover:bg-panel hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand shrink-0"
           title={tCommon('workspaces.more')}
         >
-          <DotsThreeIcon className="size-icon-base" weight="bold" />
+          <DotsThreeIcon className="size-4" weight="bold" />
         </button>
       </div>
 
       {/* PR status row */}
       {prNumber && (
-        <div className="flex items-center gap-half my-base">
+        <div className="flex flex-wrap items-center gap-2">
           {prStatus === 'merged' ? (
             prUrl ? (
               <button
                 onClick={() => window.open(prUrl, '_blank')}
-                className="inline-flex items-center gap-half px-base py-half rounded-sm bg-panel text-success hover:bg-tertiary text-sm font-medium transition-colors"
+                className="inline-flex h-7 items-center gap-1.5 rounded px-2.5 bg-success-soft text-success hover:bg-success/15 text-sm font-semibold transition-colors"
               >
                 <CheckCircleIcon className="size-icon-xs" weight="fill" />
                 {t('git.pr.merged', { prNumber })}
                 <ArrowSquareOutIcon className="size-icon-xs" weight="bold" />
               </button>
             ) : (
-              <span className="inline-flex items-center gap-half px-base py-half rounded-sm bg-panel text-success text-sm font-medium">
+              <span className="inline-flex h-7 items-center gap-1.5 rounded px-2.5 bg-success-soft text-success text-sm font-semibold">
                 <CheckCircleIcon className="size-icon-xs" weight="fill" />
                 {t('git.pr.merged', { prNumber })}
               </span>
@@ -197,14 +197,14 @@ export function RepoCard({
           ) : prUrl ? (
             <button
               onClick={() => window.open(prUrl, '_blank')}
-              className="inline-flex items-center gap-half px-base py-half rounded-sm bg-panel text-normal hover:bg-tertiary text-sm font-medium transition-colors"
+              className="inline-flex h-7 items-center gap-1.5 rounded px-2.5 bg-panel text-high hover:bg-border text-sm font-semibold transition-colors"
             >
               <GitPullRequestIcon className="size-icon-xs" weight="fill" />
               {t('git.pr.open', { number: prNumber })}
               <ArrowSquareOutIcon className="size-icon-xs" weight="bold" />
             </button>
           ) : (
-            <span className="inline-flex items-center gap-half px-base py-half rounded-sm bg-panel text-normal text-sm font-medium">
+            <span className="inline-flex h-7 items-center gap-1.5 rounded px-2.5 bg-panel text-high text-sm font-semibold">
               <GitPullRequestIcon className="size-icon-xs" weight="fill" />
               {t('git.pr.open', { number: prNumber })}
             </span>
@@ -217,12 +217,12 @@ export function RepoCard({
             <button
               onClick={onPushClick}
               disabled={isPushPending || isPushSuccess || isPushError}
-              className={`inline-flex items-center gap-half px-base py-half rounded-sm text-sm font-medium transition-colors disabled:cursor-not-allowed ${
+              className={`inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed ${
                 isPushSuccess
-                  ? 'bg-success/20 text-success'
+                  ? 'bg-success-soft text-success'
                   : isPushError
-                    ? 'bg-error/20 text-error'
-                    : 'bg-panel text-normal hover:bg-tertiary disabled:opacity-50'
+                    ? 'bg-error-soft text-error'
+                    : 'bg-panel text-high hover:bg-border disabled:opacity-50'
               }`}
             >
               {isPushPending ? (
@@ -248,7 +248,7 @@ export function RepoCard({
 
       {/* Actions row - only show when there are available actions */}
       {availableActionOptions.length > 0 && (
-        <div className="my-base">
+        <div>
           <SplitButton
             options={availableActionOptions}
             selectedValue={effectiveSelectedAction}

@@ -35,7 +35,28 @@ import {
   buildWorkspaceCreateInitialState,
   buildWorkspaceCreatePrompt,
 } from '@/shared/lib/workspaceCreateState';
-import { resolveStagePlaybook } from '@/shared/lib/stagePlaybooks';
+import {
+  parseIssueExtMetadata,
+  resolveStagePlaybook,
+} from '@/shared/lib/stagePlaybooks';
+import { cardWorkClass } from '@/shared/lib/workClass';
+import {
+  columnDotTone,
+  latestMergedPullRequest,
+  needsYouReason,
+  priorityChipLabel,
+  workClassChipTone,
+  workflowStageKey,
+} from '@/features/kanban/model/cardSignals';
+import {
+  needsYouLabel,
+  planGateDetail,
+  pullRequestLabel,
+} from '@/features/kanban/model/cardCopy';
+import { postPlanDecision } from '@/features/kanban/model/planDecisionsApi';
+import { formatRelativeTime } from '@prepcook/ui/components/KanbanRelativeTime';
+import type { IssueExtraProperty } from '@prepcook/ui/components/IssuePropertyRow';
+import type { KanbanIssuePanelDecision } from '@prepcook/ui/components/KanbanIssuePanel';
 import {
   createBlankCreateFormData,
   createInitialKanbanIssuePanelFormState,
@@ -489,11 +510,15 @@ export function KanbanIssuePanelContainer({
   }, [mode, selectedKanbanIssueId, createFormData?.title]);
 
   // Display ID: use real simple_id in edit mode, placeholder for create mode
+  // The tracker key when the card has one (as the card face shows it).
   const displayId = useMemo(() => {
     if (mode === 'edit' && selectedIssue) {
-      return selectedIssue.simple_id;
+      return (
+        parseIssueExtMetadata(selectedIssue.extension_metadata)?.jira?.key ??
+        selectedIssue.simple_id
+      );
     }
-    return t('kanban.newIssue');
+    return t('kanban.newCard');
   }, [mode, selectedIssue, t]);
 
   // Compute display values based on mode
@@ -1352,6 +1377,281 @@ export function KanbanIssuePanelContainer({
     t,
   ]);
 
+  // --- Card facts for the panel header and the decision block -------------
+
+  const selectedMeta = useMemo(
+    () =>
+      selectedIssue
+        ? parseIssueExtMetadata(selectedIssue.extension_metadata)
+        : null,
+    [selectedIssue]
+  );
+  const selectedStatusName = selectedIssue
+    ? (statuses.find((status) => status.id === selectedIssue.status_id)?.name ??
+      null)
+    : null;
+  const selectedStage = workflowStageKey(selectedStatusName);
+  const selectedWorkClass = useMemo(() => {
+    if (!selectedIssue) return null;
+    const tagNamesById = new Map(tags.map((tag) => [tag.id, tag.name]));
+    return cardWorkClass(
+      selectedMeta,
+      getTagsForIssue(selectedIssue.id)
+        .map((issueTag) => tagNamesById.get(issueTag.tag_id))
+        .filter((name): name is string => name != null)
+    );
+  }, [selectedIssue, selectedMeta, tags, getTagsForIssue]);
+  const selectedPullRequests = useMemo(
+    () => (selectedIssue ? getPullRequestsForIssue(selectedIssue.id) : []),
+    [selectedIssue, getPullRequestsForIssue]
+  );
+
+  const trackerName = t(
+    `kanban.trackerNames.${config?.ticketing?.kind ?? 'jira'}`
+  );
+  const trackerRef = selectedMeta?.jira ?? null;
+  const classChip = selectedWorkClass
+    ? {
+        name: t(`kanban.trackerImport.workClass.${selectedWorkClass}`),
+        tone: workClassChipTone(selectedWorkClass),
+      }
+    : null;
+
+  const implBranch = implWorkspaceId
+    ? (activeWorkspaces.find((workspace) => workspace.id === implWorkspaceId)
+        ?.branch ??
+      archivedWorkspaces.find((workspace) => workspace.id === implWorkspaceId)
+        ?.branch ??
+      null)
+    : null;
+
+  const extraProperties = useMemo(() => {
+    const properties: IssueExtraProperty[] = [];
+    if (
+      classChip &&
+      selectedStatusName &&
+      (selectedStage === 'plan' ||
+        selectedStage === 'execute' ||
+        selectedStage === 'review' ||
+        selectedStage === 'pushMr')
+    ) {
+      properties.push({
+        key: 'playbook',
+        label: t('kanban.panel.playbook'),
+        value: t('kanban.panel.playbookValue', {
+          workClass: classChip.name,
+          stage: selectedStatusName,
+        }),
+      });
+    }
+    if (trackerRef?.key) {
+      properties.push({
+        key: 'tracker',
+        label: t('kanban.panel.tracker'),
+        value: `${trackerName} · ${trackerRef.key}`,
+      });
+    }
+    if (implBranch) {
+      properties.push({
+        key: 'branch',
+        label: t('kanban.panel.branch'),
+        value: implBranch,
+        mono: true,
+        wide: true,
+      });
+    }
+    return properties;
+  }, [
+    classChip,
+    selectedStatusName,
+    selectedStage,
+    trackerRef,
+    trackerName,
+    implBranch,
+    t,
+  ]);
+
+  const [isDecisionSubmitting, setIsDecisionSubmitting] = useState(false);
+  useEffect(() => {
+    setIsDecisionSubmitting(false);
+  }, [selectedKanbanIssueId]);
+
+  const showDecisionError = useCallback(
+    (error: unknown, fallback: string) =>
+      ConfirmDialog.show({
+        title: t('common:error'),
+        message:
+          error instanceof Error && error.message ? error.message : fallback,
+        confirmText: t('common:ok'),
+        showCancelButton: false,
+      }),
+    [t]
+  );
+
+  // Approve and request changes go through the approvals endpoint
+  // (docs/approvals.md): the same decision a tracker or card comment makes.
+  const submitPlanDecision = useCallback(
+    async (
+      decision: 'approve' | 'request_changes',
+      comment?: string
+    ): Promise<boolean> => {
+      if (!selectedKanbanIssueId) return false;
+      setIsDecisionSubmitting(true);
+      try {
+        await postPlanDecision(selectedKanbanIssueId, decision, comment);
+        return true;
+      } catch (error) {
+        await showDecisionError(error, t('kanban.needsYou.decisionFailed'));
+        return false;
+      } finally {
+        setIsDecisionSubmitting(false);
+      }
+    },
+    [selectedKanbanIssueId, showDecisionError, t]
+  );
+
+  // Moves the card on through a status change, as Move to… does.
+  const moveSelectedIssueTo = useCallback(
+    async (statusId: string) => {
+      if (!selectedKanbanIssueId) return;
+      setIsDecisionSubmitting(true);
+      try {
+        await updateIssue(selectedKanbanIssueId, { status_id: statusId })
+          .persisted;
+      } catch (error) {
+        await showDecisionError(error, t('kanban.workflow.moveRejected'));
+      } finally {
+        setIsDecisionSubmitting(false);
+      }
+    },
+    [selectedKanbanIssueId, updateIssue, showDecisionError, t]
+  );
+
+  const statusIdForStage = useCallback(
+    (stage: 'close' | 'cleanUp') =>
+      sortedStatuses.find((status) => workflowStageKey(status.name) === stage)
+        ?.id ?? null,
+    [sortedStatuses]
+  );
+
+  // "Open the RCA": the live review page when the gate is open, else the
+  // session that wrote the plan.
+  const openPlan = useMemo(() => {
+    if (lavishSession?.url) {
+      const url = lavishSession.url;
+      return () => {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      };
+    }
+    if (implWorkspaceId && selectedKanbanIssueId) {
+      return () =>
+        appNavigation.goToProjectIssueWorkspace(
+          projectId,
+          selectedKanbanIssueId,
+          implWorkspaceId
+        );
+    }
+    return null;
+  }, [
+    lavishSession?.url,
+    implWorkspaceId,
+    selectedKanbanIssueId,
+    appNavigation,
+    projectId,
+  ]);
+
+  const decision = useMemo((): KanbanIssuePanelDecision | null => {
+    if (mode !== 'edit' || !selectedIssue) return null;
+    const reason = needsYouReason(
+      selectedStage,
+      selectedMeta,
+      selectedPullRequests
+    );
+    if (!reason) return null;
+    if (reason.kind === 'plan') {
+      return {
+        kind: 'plan',
+        label: needsYouLabel(t, reason),
+        detail: planGateDetail(t, reason.gate) || null,
+        onApprove: () => void submitPlanDecision('approve'),
+        onRequestChanges: (comment) =>
+          submitPlanDecision('request_changes', comment),
+        onOpenPlan: openPlan,
+        openPlanLabel:
+          reason.gate.planKind === 'rca'
+            ? t('kanban.needsYou.openRca')
+            : t('kanban.needsYou.openPlan'),
+        isSubmitting: isDecisionSubmitting,
+      };
+    }
+    const cleanUpStatusId = statusIdForStage('cleanUp');
+    const merged = latestMergedPullRequest(selectedPullRequests);
+    if (!cleanUpStatusId) return null;
+    return {
+      kind: 'close',
+      label: needsYouLabel(t, reason),
+      statusLine: merged
+        ? {
+            tone: 'merged',
+            link: {
+              label: pullRequestLabel(t, merged.number),
+              url: merged.url,
+            },
+            text: t('kanban.card.status.mergedWhen', {
+              when: formatRelativeTime(
+                t,
+                merged.merged_at ?? merged.created_at
+              ),
+            }),
+          }
+        : null,
+      closeLabel: t('kanban.closeCard'),
+      onClose: () => void moveSelectedIssueTo(cleanUpStatusId),
+      isSubmitting: isDecisionSubmitting,
+    };
+  }, [
+    mode,
+    selectedIssue,
+    selectedStage,
+    selectedMeta,
+    selectedPullRequests,
+    submitPlanDecision,
+    openPlan,
+    isDecisionSubmitting,
+    statusIdForStage,
+    moveSelectedIssueTo,
+    t,
+  ]);
+
+  // Footer "Close card": a card in Close moves on to Clean up; any other
+  // workflow card can be closed by hand (the workflow allows a move to
+  // Close from every stage).
+  const closeCardAction = useMemo(() => {
+    if (mode !== 'edit' || !selectedIssue || decision?.kind === 'close') {
+      return null;
+    }
+    if (!selectedStage || selectedStage === 'cleanUp') return null;
+    const targetStatusId =
+      selectedStage === 'close'
+        ? statusIdForStage('cleanUp')
+        : statusIdForStage('close');
+    if (!targetStatusId) return null;
+    return {
+      label: t('kanban.closeCard'),
+      onClick: () => void moveSelectedIssueTo(targetStatusId),
+      disabled: isDecisionSubmitting,
+    };
+  }, [
+    mode,
+    selectedIssue,
+    decision,
+    selectedStage,
+    statusIdForStage,
+    moveSelectedIssueTo,
+    isDecisionSubmitting,
+    t,
+  ]);
+
   // Loading state
   const isLoading = projectLoading || orgLoading;
   const isResolvingExpectedIssue =
@@ -1380,6 +1680,25 @@ export function KanbanIssuePanelContainer({
       statusLocked={mode === 'create' && lockedCreateStatusId != null}
       tags={tags}
       issueId={selectedKanbanIssueId}
+      classChip={mode === 'edit' ? classChip : null}
+      priorityLabel={priorityChipLabel(displayData.priority)}
+      trackerLink={
+        mode === 'edit' && trackerRef?.url
+          ? {
+              label: t('kanban.panel.openInTracker', { tracker: trackerName }),
+              url: trackerRef.url,
+            }
+          : null
+      }
+      statusDot={(() => {
+        const stage = workflowStageKey(
+          statuses.find((status) => status.id === displayData.statusId)?.name
+        );
+        return stage ? columnDotTone(stage) : undefined;
+      })()}
+      extraProperties={mode === 'edit' ? extraProperties : []}
+      decision={decision}
+      closeCardAction={closeCardAction}
       creatorUser={issueCreator}
       parentIssue={parentIssue}
       onParentIssueClick={handleParentIssueClick}
@@ -1420,6 +1739,11 @@ export function KanbanIssuePanelContainer({
           : undefined
       }
       reopeningReview={isReopeningReview}
+      approvedPlanUrl={
+        mode === 'edit' && selectedKanbanIssueId && specStatus?.approvedAt
+          ? `/api/remote/issues/${selectedKanbanIssueId}/spec`
+          : null
+      }
       onClose={closeKanbanIssuePanel}
       onSubmit={handleSubmit}
       onCmdEnterSubmit={handleCmdEnterSubmit}

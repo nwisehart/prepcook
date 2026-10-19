@@ -198,8 +198,8 @@ function ProviderAccordion({
                   className={cn(
                     'group gap-2 px-base py-half rounded-sm',
                     'text-sm font-medium text-low',
-                    'hover:bg-secondary/60 transition-colors',
-                    'focus:outline-none focus-visible:ring-1 focus-visible:ring-brand'
+                    'hover:bg-panel transition-colors',
+                    'focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
                   )}
                 >
                   <ModelProviderIcon
@@ -248,10 +248,10 @@ function ProviderAccordion({
             className={cn(
               'group flex items-center rounded-sm mx-half',
               'transition-colors duration-100',
-              'focus-within:bg-secondary',
+              'focus-within:bg-panel',
               isDefaultSelected
-                ? 'bg-secondary text-high'
-                : cn('text-normal', 'hover:bg-secondary/60')
+                ? 'bg-panel text-high'
+                : 'text-normal hover:bg-panel'
             )}
           >
             <button
@@ -259,7 +259,7 @@ function ProviderAccordion({
               onClick={() => onSelectDefault?.()}
               className={cn(
                 'flex-1 min-w-0 py-half pl-base pr-half text-left',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-brand'
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
               )}
             >
               <span
@@ -376,8 +376,8 @@ export function ModelSelectorPopover({
       >
         <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
           {error && (
-            <div className="px-base py-half bg-red-500/10 border-b border-red-500/20">
-              <span className="text-sm text-red-600">{error}</span>
+            <div className="border-b bg-error-soft px-base py-half">
+              <span className="text-sm text-error">{error}</span>
             </div>
           )}
           <DropdownMenuLabel>{t('modelSelector.model')}</DropdownMenuLabel>

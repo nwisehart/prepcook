@@ -101,7 +101,7 @@ export function InputField({
   return (
     <div
       className={cn(
-        'bg-secondary border rounded-sm px-base py-half flex items-center gap-base transition-colors',
+        'flex min-h-9 items-center gap-base rounded border bg-secondary px-3 transition-colors',
         getBorderClass(),
         className
       )}
@@ -127,34 +127,29 @@ export function InputField({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="flex-1 text-sm text-high bg-transparent placeholder:text-low placeholder:opacity-80 focus:outline-none min-w-0"
+          className="flex-1 text-sm text-high bg-transparent placeholder:text-low focus:outline-none min-w-0"
         />
       ) : (
         <span className="flex-1 text-sm text-normal truncate min-w-0">
-          {value || <span className="text-low opacity-80">{placeholder}</span>}
+          {value || <span className="text-low">{placeholder}</span>}
         </span>
       )}
 
       {/* Editable variant icons */}
       {variant === 'editable' && justSaved && (
-        <CheckIcon
-          className="size-icon-sm text-success shrink-0"
-          weight="bold"
-        />
+        <CheckIcon className="size-icon-sm text-success shrink-0" />
       )}
       {variant === 'editable' && isEditing && !justSaved && (
         <>
           <ArrowCounterClockwiseIcon
-            className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-normal"
-            weight="bold"
+            className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-high"
             onMouseDown={(e) => {
               e.preventDefault();
               handleCancel();
             }}
           />
           <CheckIcon
-            className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-normal"
-            weight="bold"
+            className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-high"
             onMouseDown={(e) => {
               e.preventDefault();
               handleSave();
@@ -164,7 +159,7 @@ export function InputField({
       )}
       {variant === 'editable' && !isEditing && !justSaved && (
         <PencilSimpleLineIcon
-          className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-normal"
+          className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-high"
           weight="regular"
           onClick={() => setIsEditing(true)}
         />
@@ -176,9 +171,9 @@ export function InputField({
           type="button"
           onClick={onAction}
           disabled={disabled}
-          className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-normal flex items-center justify-center"
+          className="size-icon-sm text-low shrink-0 cursor-pointer hover:text-high flex items-center justify-center"
         >
-          <ActionIcon className="size-icon-sm" weight="bold" />
+          <ActionIcon className="size-icon-sm" />
         </button>
       )}
     </div>

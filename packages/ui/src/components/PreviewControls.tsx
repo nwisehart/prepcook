@@ -44,7 +44,7 @@ export function PreviewControls({
           <button
             type="button"
             onClick={onViewFullLogs}
-            className="flex items-center gap-half text-xs text-brand hover:text-brand-hover"
+            className="flex items-center gap-half rounded-sm text-xs font-semibold text-brand-secondary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
           >
             <span>{t('preview.logs.viewFull')}</span>
             <ArrowSquareOutIcon className="size-icon-xs" />
@@ -56,11 +56,12 @@ export function PreviewControls({
             {processTabs.map((process) => (
               <button
                 key={process.id}
+                type="button"
                 className={cn(
                   'px-base py-half text-xs border-b-2 transition-colors',
                   activeProcessId === process.id
-                    ? 'border-brand text-normal'
-                    : 'border-transparent text-low hover:text-normal'
+                    ? 'border-brand font-semibold text-high'
+                    : 'border-transparent text-low hover:text-high'
                 )}
                 onClick={() => onTabChange(process.id)}
               >

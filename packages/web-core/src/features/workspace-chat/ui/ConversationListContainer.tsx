@@ -43,6 +43,7 @@ import type { WorkspaceWithSession } from '@/shared/types/attempt';
 import type { RepoWithTargetBranch } from 'shared/types';
 import { ChatEmptyState } from '@prepcook/ui/components/ChatEmptyState';
 import { ChatScriptPlaceholder } from '@prepcook/ui/components/ChatScriptPlaceholder';
+import { PlanDecisionContainer } from './PlanDecisionContainer';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { useReposScripts } from '@/shared/hooks/useRepoScripts';
 
@@ -779,9 +780,9 @@ export const ConversationList = forwardRef<
           style={{ overflowAnchor: 'none', contain: 'strict' }}
           onClickCapture={handleConversationClickCapture}
         >
-          <div className="pt-2">
+          <div className="pt-4">
             {showSetupPlaceholder && (
-              <div className="my-base px-double">
+              <div className="px-6">
                 <ChatScriptPlaceholder
                   type="setup"
                   onConfigure={canConfigure ? handleConfigureSetup : undefined}
@@ -791,19 +792,19 @@ export const ConversationList = forwardRef<
           </div>
 
           {isLoadingHistory && !showLoader && (
-            <div className="flex flex-col items-center gap-2 px-double py-3">
+            <div className="flex flex-col items-center gap-2 px-6 py-3">
               <div className="flex w-full max-w-md flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <div className="h-2.5 w-16 animate-pulse rounded-full bg-foreground/10" />
-                  <div className="h-2.5 flex-1 animate-pulse rounded-full bg-foreground/[0.06]" />
+                  <div className="h-2.5 w-16 animate-pulse rounded-full bg-panel" />
+                  <div className="h-2.5 flex-1 animate-pulse rounded-full bg-panel/70" />
                 </div>
                 <div className="flex items-center gap-2">
                   <div
-                    className="h-2.5 w-24 animate-pulse rounded-full bg-foreground/[0.07]"
+                    className="h-2.5 w-24 animate-pulse rounded-full bg-panel/80"
                     style={{ animationDelay: '150ms' }}
                   />
                   <div
-                    className="h-2.5 w-32 animate-pulse rounded-full bg-foreground/[0.05]"
+                    className="h-2.5 w-32 animate-pulse rounded-full bg-panel/60"
                     style={{ animationDelay: '150ms' }}
                   />
                 </div>
@@ -815,7 +816,7 @@ export const ConversationList = forwardRef<
           )}
 
           {showEmptyState && (
-            <div className="flex min-h-full items-center justify-center px-double py-12">
+            <div className="flex min-h-full items-center justify-center px-6 py-12">
               <ChatEmptyState
                 title={t('conversation.emptyTitle', {
                   defaultValue: 'Send a message to start the conversation.',
@@ -874,15 +875,17 @@ export const ConversationList = forwardRef<
             );
           })}
 
+          <PlanDecisionContainer workspaceId={attempt.id} />
+
           {/* Plan-reveal spacer: provides extra scroll room so plan-reveal
               can align the plan entry to the top of the viewport. Height is set
               imperatively in scrollToAbsoluteIndex and cleared on scrollToBottom. */}
           <div ref={planRevealSpacerRef} style={{ height: 0 }} />
 
           {/* Footer placeholder */}
-          <div className="pb-2">
+          <div className="pb-4">
             {showCleanupPlaceholder && (
-              <div className="my-base px-double">
+              <div className="px-6">
                 <ChatScriptPlaceholder
                   type="cleanup"
                   onConfigure={

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ChatDotsIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { CaretDownIcon, ChatDotsIcon } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/cn';
 
@@ -17,25 +17,20 @@ export interface ChatCollapsedThinkingRenderProps {
 interface ChatCollapsedThinkingProps {
   entries: ThinkingEntry[];
   expanded: boolean;
-  isHovered: boolean;
   onToggle: () => void;
-  onHoverChange: (hovered: boolean) => void;
   className?: string;
   workspaceId?: string;
   renderMarkdown: (props: ChatCollapsedThinkingRenderProps) => ReactNode;
 }
 
 /**
- * A collapsible group for thinking entries in previous conversation turns.
- * When collapsed, shows "Thinking" with the thinking icon.
- * When expanded, shows all thinking entries with their full content.
+ * Thinking from an earlier turn, folded to one muted "Thinking" line; when
+ * expanded, every thinking entry on a quiet 8px-radius block.
  */
 export function ChatCollapsedThinking({
   entries,
   expanded,
-  isHovered,
   onToggle,
-  onHoverChange,
   className,
   workspaceId,
   renderMarkdown,
@@ -45,46 +40,45 @@ export function ChatCollapsedThinking({
   if (entries.length === 0) return null;
 
   return (
-    <div className={cn('flex flex-col', className)}>
-      {/* Header row - clickable to expand/collapse */}
-      <div
-        className="flex items-center gap-base text-sm text-low cursor-pointer group"
-        onClick={onToggle}
-        onMouseEnter={() => onHoverChange(true)}
-        onMouseLeave={() => onHoverChange(false)}
-        role="button"
-        aria-expanded={expanded}
-        data-scroll-anchor-target=""
-      >
-        <span className="shrink-0 pt-0.5">
-          {isHovered ? (
-            <CaretRightIcon
-              className={cn(
-                'size-icon-base transition-transform duration-150',
-                expanded && 'rotate-90'
-              )}
-            />
-          ) : (
-            <ChatDotsIcon className="size-icon-base" />
+    <div className={cn('flex items-start gap-3 py-1.5', className)}>
+      <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-panel text-low">
+        <ChatDotsIcon className="size-3.5" aria-hidden />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          data-scroll-anchor-target=""
+          className={cn(
+            'flex items-center gap-1.5 self-start rounded-sm pt-0.5 text-sm font-medium text-low hover:text-normal',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
           )}
-        </span>
-        <span className="truncate">{t('conversation.thinking')}</span>
+        >
+          <span>{t('conversation.thinking')}</span>
+          <CaretDownIcon
+            className={cn(
+              'size-3 transition-transform',
+              !expanded && '-rotate-90'
+            )}
+            weight="bold"
+            aria-hidden
+          />
+        </button>
+        {expanded && (
+          <div className="flex flex-col gap-2 rounded bg-panel/60 px-3 py-2">
+            {entries.map((entry) => (
+              <div key={entry.expansionKey} className="text-[13px] text-low">
+                {renderMarkdown({
+                  content: entry.content,
+                  workspaceId: workspaceId,
+                  className: 'text-[13px] text-low',
+                })}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* Expanded content */}
-      {expanded && (
-        <div className="ml-6 pt-1 flex flex-col gap-base">
-          {entries.map((entry) => (
-            <div key={entry.expansionKey} className="text-sm text-low pl-base">
-              {renderMarkdown({
-                content: entry.content,
-                workspaceId: workspaceId,
-                className: 'text-sm',
-              })}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

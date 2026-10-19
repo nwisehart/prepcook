@@ -1,13 +1,36 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { Button } from '@prepcook/ui/components/Button';
 import {
-  kbApi,
-  type KbDocumentSummaryT,
-  type KbEdgeT,
-  type KbNodeT,
-} from '@/shared/lib/api';
+  PROJECT_ISSUES_SHAPE,
+  PROJECT_PROJECT_STATUSES_SHAPE,
+  type Issue,
+} from 'shared/remote-types';
+import { kbApi, type KbDocumentSummaryT } from '@/shared/lib/api';
+import { useShape } from '@/shared/integrations/electric/hooks';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import {
+  KnowledgeHeader,
+  type ExportFormat,
+  type KnowledgeViewMode,
+} from './KnowledgeHeader';
+import { KnowledgeTotals, type StatTile } from './KnowledgeTotals';
+import { KnowledgeNodeRanking } from './KnowledgeNodeRanking';
+import { KnowledgeRcaList, type RcaListItem } from './KnowledgeRcaList';
+import { KnowledgeWeb } from './KnowledgeWeb';
+import {
+  calendarDaysAgo,
+  countUnlinked,
+  draftDocumentIds,
+  humanizeTagValue,
+  isInDayRange,
+  nodeStats,
+  rankedNodes,
+  sortByNewest,
+  tagValueCounts,
+  type DayRange,
+} from './knowledgeStats';
 
 const KIND_ORDER = [
   'root_cause_class',
@@ -17,276 +40,32 @@ const KIND_ORDER = [
   'infra',
 ] as const;
 
-const KIND_LABELS: Record<string, string> = {
-  root_cause_class: 'Root-cause classes',
-  product_area: 'Product areas',
-  component: 'Components',
-  data_model: 'Data models',
-  infra: 'Infrastructure',
-};
+const ROOT_CAUSE_CLASS = 'root_cause_class';
 
-/** Aggregates tag counts across documents, grouped by "namespace:" prefix. */
-function tagCounts(documents: KbDocumentSummaryT[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const doc of documents) {
-    for (const tag of doc.tags) {
-      counts.set(tag, (counts.get(tag) ?? 0) + 1);
-    }
-  }
-  return counts;
-}
-
-const KIND_COLORS: Record<string, string> = {
-  root_cause_class: 'hsl(var(--error))',
-  product_area: 'hsl(var(--brand))',
-  component: 'hsl(var(--success))',
-  data_model: 'hsl(var(--warning))',
-  infra: 'hsl(var(--low))',
-};
-
-interface WebPoint {
-  x: number;
-  y: number;
-}
+/** RCA cards shown in the right column before "All N" expands it. */
+const RECENT_LIMIT = 5;
 
 /**
- * Tiny static force layout (repulsion + link springs + centering), computed
- * synchronously — the graphs here are dozens of nodes, so no dependency or
- * animation loop is warranted. Deterministic: initial positions come from
- * the node order, not randomness.
- */
-function computeWebLayout(
-  ids: string[],
-  links: Array<[string, string]>,
-  width: number,
-  height: number
-): Map<string, WebPoint> {
-  const positions = new Map<string, WebPoint>();
-  const cx = width / 2;
-  const cy = height / 2;
-  ids.forEach((id, index) => {
-    const angle = (index / Math.max(ids.length, 1)) * Math.PI * 2;
-    const radius = Math.min(width, height) * 0.35;
-    positions.set(id, {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    });
-  });
-
-  const REPULSION = 4000;
-  const SPRING = 0.02;
-  const REST = 80;
-  const CENTER_PULL = 0.01;
-
-  for (let iteration = 0; iteration < 250; iteration++) {
-    const forces = new Map<string, WebPoint>(
-      ids.map((id) => [id, { x: 0, y: 0 }])
-    );
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        const a = positions.get(ids[i])!;
-        const b = positions.get(ids[j])!;
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
-        const distSq = Math.max(dx * dx + dy * dy, 25);
-        const dist = Math.sqrt(distSq);
-        dx /= dist;
-        dy /= dist;
-        const force = REPULSION / distSq;
-        const fa = forces.get(ids[i])!;
-        const fb = forces.get(ids[j])!;
-        fa.x += dx * force;
-        fa.y += dy * force;
-        fb.x -= dx * force;
-        fb.y -= dy * force;
-      }
-    }
-    for (const [from, to] of links) {
-      const a = positions.get(from);
-      const b = positions.get(to);
-      if (!a || !b) continue;
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-      const force = SPRING * (dist - REST);
-      const fa = forces.get(from)!;
-      const fb = forces.get(to)!;
-      fa.x += (dx / dist) * force;
-      fa.y += (dy / dist) * force;
-      fb.x -= (dx / dist) * force;
-      fb.y -= (dy / dist) * force;
-    }
-    const cooling = 1 - iteration / 250;
-    for (const id of ids) {
-      const point = positions.get(id)!;
-      const force = forces.get(id)!;
-      force.x += (cx - point.x) * CENTER_PULL;
-      force.y += (cy - point.y) * CENTER_PULL;
-      point.x += force.x * cooling;
-      point.y += force.y * cooling;
-      point.x = Math.min(Math.max(point.x, 20), width - 20);
-      point.y = Math.min(Math.max(point.y, 20), height - 20);
-    }
-  }
-  return positions;
-}
-
-function KnowledgeWeb({
-  nodes,
-  documents,
-  edges,
-  selectedNodeId,
-  onSelectNode,
-}: {
-  nodes: KbNodeT[];
-  documents: KbDocumentSummaryT[];
-  edges: KbEdgeT[];
-  selectedNodeId: string | null;
-  onSelectNode: (nodeId: string) => void;
-}) {
-  const WIDTH = 460;
-  const HEIGHT = 420;
-
-  const { positions, concepts, docs, links } = useMemo(() => {
-    const concepts = nodes.filter((node) => node.edge_count > 0);
-    const conceptIds = new Set(concepts.map((node) => node.id));
-    const linkedDocIds = new Set(
-      edges
-        .filter((edge) => conceptIds.has(edge.node_id))
-        .map((edge) => edge.document_id)
-    );
-    const docs = documents.filter((doc) => linkedDocIds.has(doc.id));
-    const links: Array<[string, string]> = edges
-      .filter(
-        (edge) =>
-          conceptIds.has(edge.node_id) && linkedDocIds.has(edge.document_id)
-      )
-      .map((edge) => [edge.node_id, edge.document_id]);
-    const ids = [
-      ...concepts.map((node) => node.id),
-      ...docs.map((doc) => doc.id),
-    ];
-    return {
-      positions: computeWebLayout(ids, links, WIDTH, HEIGHT),
-      concepts,
-      docs,
-      links,
-    };
-  }, [nodes, documents, edges]);
-
-  const highlighted = useMemo(() => {
-    if (!selectedNodeId) return null;
-    const docIds = new Set(
-      edges
-        .filter((edge) => edge.node_id === selectedNodeId)
-        .map((edge) => edge.document_id)
-    );
-    return { nodeId: selectedNodeId, docIds };
-  }, [edges, selectedNodeId]);
-
-  return (
-    <svg
-      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-      className="w-full border rounded-sm bg-secondary/30"
-    >
-      {links.map(([from, to], index) => {
-        const a = positions.get(from);
-        const b = positions.get(to);
-        if (!a || !b) return null;
-        const dimmed =
-          highlighted != null &&
-          from !== highlighted.nodeId &&
-          !highlighted.docIds.has(to);
-        return (
-          <line
-            key={index}
-            x1={a.x}
-            y1={a.y}
-            x2={b.x}
-            y2={b.y}
-            stroke="hsl(var(--low))"
-            strokeOpacity={dimmed ? 0.12 : 0.4}
-          />
-        );
-      })}
-      {docs.map((doc) => {
-        const point = positions.get(doc.id);
-        if (!point) return null;
-        const dimmed = highlighted != null && !highlighted.docIds.has(doc.id);
-        return (
-          <circle
-            key={doc.id}
-            cx={point.x}
-            cy={point.y}
-            r={4}
-            fill="hsl(var(--low))"
-            fillOpacity={dimmed ? 0.25 : 0.8}
-          >
-            <title>{doc.jira_key ?? doc.title}</title>
-          </circle>
-        );
-      })}
-      {concepts.map((node) => {
-        const point = positions.get(node.id);
-        if (!point) return null;
-        const radius = 8 + Math.min(node.edge_count, 12) * 1.5;
-        const dimmed = highlighted != null && node.id !== highlighted.nodeId;
-        return (
-          <g
-            key={node.id}
-            className="cursor-pointer"
-            onClick={() => onSelectNode(node.id)}
-          >
-            <circle
-              cx={point.x}
-              cy={point.y}
-              r={radius}
-              fill={KIND_COLORS[node.kind] ?? 'hsl(var(--brand))'}
-              fillOpacity={dimmed ? 0.25 : 0.85}
-              stroke={
-                node.id === selectedNodeId
-                  ? 'hsl(var(--high))'
-                  : node.investigation_jira_key
-                    ? 'hsl(var(--warning))'
-                    : 'none'
-              }
-              strokeWidth={2}
-            >
-              <title>{`${node.name} (${node.edge_count})`}</title>
-            </circle>
-            <text
-              x={point.x}
-              y={point.y - radius - 4}
-              textAnchor="middle"
-              fontSize={9}
-              fill="hsl(var(--normal))"
-              fillOpacity={dimmed ? 0.35 : 1}
-              pointerEvents="none"
-            >
-              {node.name.length > 24 ? `${node.name.slice(0, 22)}…` : node.name}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-/**
- * Knowledge (RCA graph) for one project: tag-count dashboard, node ranking /
- * force-web toggle, and per-node drill-down. Rendered as a full page (see
+ * Knowledge (RCA graph) for one project: the RCA count and tag tiles, the
+ * node ranking or force web, and the recent RCAs or one node's RCAs. The date
+ * range scopes all of it and the export alike. Rendered as a full page (see
  * KnowledgePage); fetches on mount.
  */
 export function KnowledgeView({ projectId }: { projectId: string }) {
-  const { t } = useTranslation('common');
-  // Export controls: whole-day UTC bounds on created_at; empty = unbounded.
-  const [exportSince, setExportSince] = useState('');
-  const [exportUntil, setExportUntil] = useState('');
-  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
+  const { t, i18n } = useTranslation('common');
+  const { config } = useUserSystem();
+
+  // Whole-day UTC bounds on created_at; empty = unbounded.
+  const [range, setRange] = useState<DayRange>({ since: '', until: '' });
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('json');
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [view, setView] = useState<KnowledgeViewMode>('ranking');
+  const [showAllRecent, setShowAllRecent] = useState(false);
+
   const handleExport = () => {
     const params = new URLSearchParams({ project_id: projectId });
-    if (exportSince) params.set('since', exportSince);
-    if (exportUntil) params.set('until', exportUntil);
+    if (range.since) params.set('since', range.since);
+    if (range.until) params.set('until', range.until);
     params.set('format', exportFormat);
     const link = document.createElement('a');
     link.href = `/api/knowledge/export?${params.toString()}`;
@@ -295,9 +74,6 @@ export function KnowledgeView({ projectId }: { projectId: string }) {
     link.click();
     link.remove();
   };
-  const { config } = useUserSystem();
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [view, setView] = useState<'ranking' | 'web'>('ranking');
 
   const nodesQuery = useQuery({
     queryKey: ['kbNodes', projectId],
@@ -311,89 +87,106 @@ export function KnowledgeView({ projectId }: { projectId: string }) {
     queryKey: ['kbEdges', projectId],
     queryFn: () => kbApi.listEdges(projectId),
   });
+  // The board's cards, for draft state and board keys. Optional: until they
+  // sync (or if they cannot), RCAs simply show as filed.
+  const { data: issues } = useShape(PROJECT_ISSUES_SHAPE, {
+    project_id: projectId,
+  });
+  const { data: statuses } = useShape(PROJECT_PROJECT_STATUSES_SHAPE, {
+    project_id: projectId,
+  });
 
   const nodes = useMemo(() => nodesQuery.data?.nodes ?? [], [nodesQuery.data]);
-  const documents = useMemo(
+  const allDocuments = useMemo(
     () => documentsQuery.data?.documents ?? [],
     [documentsQuery.data]
   );
   const edges = useMemo(() => edgesQuery.data?.edges ?? [], [edgesQuery.data]);
 
-  const documentsById = useMemo(() => {
-    const map = new Map<string, KbDocumentSummaryT>();
-    for (const doc of documents) map.set(doc.id, doc);
-    return map;
-  }, [documents]);
-
-  const nodesByKind = useMemo(() => {
-    const map = new Map<string, KbNodeT[]>();
-    for (const node of nodes) {
-      const list = map.get(node.kind) ?? [];
-      list.push(node);
-      map.set(node.kind, list);
-    }
-    return map;
-  }, [nodes]);
-
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId]
+  const documents = useMemo(
+    () => allDocuments.filter((doc) => isInDayRange(doc.created_at, range)),
+    [allDocuments, range]
   );
-  const selectedNodeEdges = useMemo(
-    () =>
-      selectedNode
-        ? edges.filter((edge: KbEdgeT) => edge.node_id === selectedNode.id)
-        : [],
-    [edges, selectedNode]
+  const documentsById = useMemo(
+    () => new Map(documents.map((doc) => [doc.id, doc])),
+    [documents]
+  );
+  const issuesById = useMemo(
+    () => new Map<string, Issue>(issues.map((issue) => [issue.id, issue])),
+    [issues]
   );
 
-  const counts = useMemo(() => tagCounts(documents), [documents]);
-  const originCounts = useMemo(
-    () =>
-      [...counts.entries()]
-        .filter(([tag]) => tag.startsWith('origin:'))
-        .sort((a, b) => b[1] - a[1]),
-    [counts]
+  const stats = useMemo(
+    () => nodeStats(nodes, edges, documentsById),
+    [nodes, edges, documentsById]
   );
-  const detectableCounts = useMemo(
-    () =>
-      [...counts.entries()]
-        .filter(([tag]) => tag.startsWith('detectable-by:'))
-        .sort((a, b) => b[1] - a[1]),
-    [counts]
+  const counts = useMemo(
+    () => new Map([...stats.values()].map((s) => [s.node.id, s.count])),
+    [stats]
   );
+  const rankingsByKind = useMemo(
+    () => KIND_ORDER.map((kind) => ({ kind, stats: rankedNodes(stats, kind) })),
+    [stats]
+  );
+  const classRanking =
+    rankingsByKind.find((ranking) => ranking.kind === ROOT_CAUSE_CLASS)
+      ?.stats ?? [];
+  const otherRankings = rankingsByKind.filter(
+    (ranking) => ranking.kind !== ROOT_CAUSE_CLASS && ranking.stats.length > 0
+  );
+  const legendKinds = rankingsByKind
+    .filter((ranking) => ranking.stats.length > 0)
+    .map((ranking) => ranking.kind);
+  const unclassifiedCount = useMemo(
+    () => countUnlinked(documents, edges, nodes, ROOT_CAUSE_CLASS),
+    [documents, edges, nodes]
+  );
+  const drafts = useMemo(
+    () => draftDocumentIds(documents, issuesById, statuses),
+    [documents, issuesById, statuses]
+  );
+
+  const tile = (
+    id: string,
+    label: string,
+    namespace: string,
+    order: 'count' | 'value' = 'count'
+  ): StatTile => ({
+    id,
+    label,
+    rows: tagValueCounts(documents, namespace, order).map((row) => ({
+      key: row.value,
+      label: humanizeTagValue(row.value),
+      count: row.count,
+    })),
+  });
+  const primaryTiles = [
+    tile('origin', t('kanban.knowledge.origin', 'Origin'), 'origin'),
+    tile(
+      'detectable-by',
+      t('kanban.knowledge.detectableBy', 'Could have been caught by'),
+      'detectable-by'
+    ),
+    // p0…p3 read best in priority order, not by count.
+    tile(
+      'severity',
+      t('kanban.knowledge.severity', 'Severity'),
+      'severity',
+      'value'
+    ),
+    tile('fix-type', t('kanban.knowledge.fixType', 'Fix type'), 'fix-type'),
+  ];
   // Regression attribution: culprit:orchestrator vs culprit:human. Only set on
   // RCAs already tagged origin:regression, so this reads as "of the regressions
   // we attributed, how many were the orchestrator's own commits."
-  const culpritCounts = useMemo(
-    () =>
-      [...counts.entries()]
-        .filter(([tag]) => tag.startsWith('culprit:'))
-        .sort((a, b) => b[1] - a[1]),
-    [counts]
-  );
-
-  const areaCounts = useMemo(
-    () =>
-      [...counts.entries()]
-        .filter(([tag]) => tag.startsWith('area:'))
-        .sort((a, b) => b[1] - a[1]),
-    [counts]
-  );
-  const fixTypeCounts = useMemo(
-    () =>
-      [...counts.entries()]
-        .filter(([tag]) => tag.startsWith('fix-type:'))
-        .sort((a, b) => b[1] - a[1]),
-    [counts]
-  );
-  const severityCounts = useMemo(
-    () =>
-      [...counts.entries()]
-        .filter(([tag]) => tag.startsWith('severity:'))
-        .sort((a, b) => a[0].localeCompare(b[0])),
-    [counts]
-  );
+  const secondaryTiles = [
+    tile('area', t('kanban.knowledge.area', 'Product area'), 'area'),
+    tile(
+      'culprit',
+      t('kanban.knowledge.regressionCulprit', 'Regression introduced by'),
+      'culprit'
+    ),
+  ].filter((secondary) => secondary.rows.length > 0);
 
   const ticketing = config?.ticketing;
   const jiraSite = ticketing?.site?.trim() || 'example.atlassian.net';
@@ -420,390 +213,323 @@ export function KnowledgeView({ projectId }: { projectId: string }) {
   const openDocument = (documentId: string) => {
     window.open(`/api/knowledge/documents/${documentId}/html`, '_blank');
   };
+  const cardKey = (doc: KbDocumentSummaryT): string | null =>
+    doc.jira_key ??
+    (doc.issue_id ? issuesById.get(doc.issue_id)?.simple_id : null) ??
+    null;
+
+  const kindLabel = (kind: string): string => {
+    switch (kind) {
+      case 'root_cause_class':
+        return t('kanban.knowledge.kinds.rootCauseClass', 'Root-cause classes');
+      case 'product_area':
+        return t('kanban.knowledge.kinds.productArea', 'Product areas');
+      case 'component':
+        return t('kanban.knowledge.kinds.component', 'Components');
+      case 'data_model':
+        return t('kanban.knowledge.kinds.dataModel', 'Data models');
+      case 'infra':
+        return t('kanban.knowledge.kinds.infra', 'Infrastructure');
+      default:
+        return kind;
+    }
+  };
+
+  const formatDay = (day: string) => {
+    const date = new Date(`${day}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return day;
+    return date.toLocaleDateString(i18n.language, {
+      month: 'short',
+      day: 'numeric',
+      year:
+        date.getUTCFullYear() === new Date().getUTCFullYear()
+          ? undefined
+          : 'numeric',
+      timeZone: 'UTC',
+    });
+  };
+  const rangeLabel =
+    range.since && range.until
+      ? t('kanban.knowledge.range.between', '{{from}} – {{to}}', {
+          from: formatDay(range.since),
+          to: formatDay(range.until),
+        })
+      : range.since
+        ? t('kanban.knowledge.range.since', 'Since {{date}}', {
+            date: formatDay(range.since),
+          })
+        : range.until
+          ? t('kanban.knowledge.range.until', 'Until {{date}}', {
+              date: formatDay(range.until),
+            })
+          : t('kanban.knowledge.range.allTime', 'All time');
+
+  const now = new Date();
+  const filedLabel = (timestamp: string) => {
+    const days = calendarDaysAgo(timestamp, now);
+    if (days <= 0) return t('kanban.knowledge.relative.today', 'today');
+    if (days === 1)
+      return t('kanban.knowledge.relative.yesterday', 'yesterday');
+    if (days < 7)
+      return t('kanban.knowledge.relative.daysAgo', '{{days}} d ago', {
+        days,
+      });
+    const date = new Date(timestamp);
+    return date.toLocaleDateString(i18n.language, {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+    });
+  };
+  const toListItem = (
+    doc: KbDocumentSummaryT,
+    key: string,
+    note?: string | null
+  ): RcaListItem => ({
+    key,
+    doc,
+    cardKey: cardKey(doc),
+    keyUrl: doc.jira_key ? jiraUrl(doc.jira_key) : null,
+    isDraft: drafts.has(doc.id),
+    filedLabel: filedLabel(doc.created_at),
+    filedTitle: new Date(doc.created_at).toLocaleString(i18n.language),
+    note,
+  });
+
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId]
+  );
+  const newestDocuments = useMemo(() => sortByNewest(documents), [documents]);
+
+  let rcaColumn: ReactElement;
+  if (selectedNode) {
+    const linked = edges
+      .filter((edge) => edge.node_id === selectedNode.id)
+      .map((edge) => ({ edge, doc: documentsById.get(edge.document_id) }))
+      .filter(
+        (entry): entry is typeof entry & { doc: KbDocumentSummaryT } =>
+          entry.doc != null
+      )
+      .sort(
+        (a, b) => Date.parse(b.doc.created_at) - Date.parse(a.doc.created_at)
+      );
+    rcaColumn = (
+      <KnowledgeRcaList
+        heading={selectedNode.name}
+        action={{
+          label: t('kanban.knowledge.allRcas', 'All RCAs'),
+          onClick: () => setSelectedNodeId(null),
+        }}
+        description={selectedNode.description}
+        items={linked.map(({ edge, doc }) =>
+          toListItem(
+            doc,
+            edge.id,
+            [
+              edge.rationale,
+              edge.confidence &&
+                t('kanban.knowledge.linkConfidence', '{{level}} confidence', {
+                  level: edge.confidence,
+                }),
+            ]
+              .filter(Boolean)
+              .join(' · ') || null
+          )
+        )}
+        emptyLabel={t(
+          'kanban.knowledge.noLinkedRcas',
+          'No RCAs linked to this in the selected range.'
+        )}
+        onOpenDocument={openDocument}
+      />
+    );
+  } else {
+    const canExpand = newestDocuments.length > RECENT_LIMIT;
+    const shown =
+      showAllRecent || !canExpand
+        ? newestDocuments
+        : newestDocuments.slice(0, RECENT_LIMIT);
+    rcaColumn = (
+      <KnowledgeRcaList
+        heading={t('kanban.knowledge.recentRcas', 'Recent RCAs')}
+        action={
+          canExpand
+            ? {
+                label: showAllRecent
+                  ? t('kanban.knowledge.showRecent', 'Recent only')
+                  : t('kanban.knowledge.showAll', 'All {{count}}', {
+                      count: newestDocuments.length,
+                    }),
+                onClick: () => setShowAllRecent((current) => !current),
+              }
+            : null
+        }
+        items={shown.map((doc) => toListItem(doc, doc.id))}
+        emptyLabel={t(
+          'kanban.knowledge.emptyRange',
+          'No RCAs were filed in this range.'
+        )}
+        onOpenDocument={openDocument}
+      />
+    );
+  }
 
   const isLoading =
     nodesQuery.isLoading || documentsQuery.isLoading || edgesQuery.isLoading;
+  const isError =
+    nodesQuery.isError || documentsQuery.isError || edgesQuery.isError;
+  const retry = () => {
+    void nodesQuery.refetch();
+    void documentsQuery.refetch();
+    void edgesQuery.refetch();
+  };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-end gap-2 flex-wrap">
-        <div className="flex items-center gap-1 text-xs text-low">
-          <input
-            type="date"
-            value={exportSince}
-            onChange={(event) => setExportSince(event.target.value)}
-            aria-label={t('kanban.knowledge.exportFrom', 'Export from')}
-            className="bg-transparent border rounded-sm px-1.5 py-1"
-          />
-          <span>–</span>
-          <input
-            type="date"
-            value={exportUntil}
-            onChange={(event) => setExportUntil(event.target.value)}
-            aria-label={t('kanban.knowledge.exportTo', 'Export to')}
-            className="bg-transparent border rounded-sm px-1.5 py-1"
-          />
-          <select
-            value={exportFormat}
-            onChange={(event) =>
-              setExportFormat(event.target.value as 'json' | 'csv')
-            }
-            aria-label={t('kanban.knowledge.exportFormat', 'Export format')}
-            className="bg-transparent border rounded-sm px-1.5 py-1"
-          >
-            <option value="json">JSON</option>
-            <option value="csv">CSV</option>
-          </select>
-          <button
-            type="button"
-            onClick={handleExport}
-            className="px-2 py-1 rounded-sm border text-brand hover:bg-brand/10 transition-colors"
-          >
-            {t('kanban.knowledge.export', 'Export')}
-          </button>
-        </div>
-        <div className="flex rounded-sm border overflow-hidden text-xs">
-          <button
-            type="button"
-            onClick={() => setView('ranking')}
-            className={`px-2 py-1 transition-colors ${
-              view === 'ranking'
-                ? 'bg-brand/15 text-brand'
-                : 'text-low hover:text-normal'
-            }`}
-          >
-            {t('kanban.knowledge.viewRanking', 'Ranking')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('web')}
-            className={`px-2 py-1 transition-colors border-l ${
-              view === 'web'
-                ? 'bg-brand/15 text-brand'
-                : 'text-low hover:text-normal'
-            }`}
-          >
-            {t('kanban.knowledge.viewWeb', 'Web')}
-          </button>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <p className="text-low text-sm py-8 text-center">
-          {t('states.loading')}
-        </p>
-      ) : documents.length === 0 ? (
-        <p className="text-low text-sm py-8 text-center">
+  let body: ReactElement;
+  if (isLoading) {
+    body = (
+      <p className="py-12 text-center text-sm text-low">
+        {t('states.loading')}
+      </p>
+    );
+  } else if (isError) {
+    body = (
+      <div className="flex flex-col items-center gap-3 rounded-lg border bg-secondary px-4 py-10 text-center">
+        <p className="text-sm text-error">
           {t(
-            'kanban.knowledge.empty',
-            'No RCAs stored yet. Approved bug RCAs are filed here automatically.'
+            'kanban.knowledge.loadError',
+            'The knowledge store could not be loaded.'
           )}
         </p>
-      ) : (
-        <>
-          {/* Process metrics: tag counts */}
-          <div className="flex flex-wrap gap-4 text-sm">
-            <div className="rounded-sm border px-3 py-2">
-              <div className="text-low text-xs mb-1">
-                {t('kanban.knowledge.rcaCount', 'RCAs stored')}
-              </div>
-              <div className="text-lg font-medium">{documents.length}</div>
-            </div>
-            {originCounts.length > 0 && (
-              <div className="rounded-sm border px-3 py-2">
-                <div className="text-low text-xs mb-1">
-                  {t('kanban.knowledge.origin', 'Origin')}
-                </div>
-                <div className="flex gap-3">
-                  {originCounts.map(([tag, count]) => (
-                    <span key={tag}>
-                      <span className="font-medium">{count}</span>{' '}
-                      <span className="text-low">
-                        {tag.replace('origin:', '')}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {detectableCounts.length > 0 && (
-              <div className="rounded-sm border px-3 py-2">
-                <div className="text-low text-xs mb-1">
-                  {t(
-                    'kanban.knowledge.detectableBy',
-                    'Could have been caught by'
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  {detectableCounts.map(([tag, count]) => (
-                    <span key={tag}>
-                      <span className="font-medium">{count}</span>{' '}
-                      <span className="text-low">
-                        {tag.replace('detectable-by:', '')}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {culpritCounts.length > 0 && (
-              <div className="rounded-sm border px-3 py-2">
-                <div className="text-low text-xs mb-1">
-                  {t(
-                    'kanban.knowledge.regressionCulprit',
-                    'Regression introduced by'
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  {culpritCounts.map(([tag, count]) => (
-                    <span key={tag}>
-                      <span className="font-medium">{count}</span>{' '}
-                      <span className="text-low">
-                        {tag.replace('culprit:', '')}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {severityCounts.length > 0 && (
-              <div className="rounded-sm border px-3 py-2">
-                <div className="text-low text-xs mb-1">
-                  {t('kanban.knowledge.severity', 'Severity')}
-                </div>
-                <div className="flex gap-3">
-                  {severityCounts.map(([tag, count]) => (
-                    <span key={tag}>
-                      <span className="font-medium">{count}</span>{' '}
-                      <span className="text-low">
-                        {tag.replace('severity:', '')}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {areaCounts.length > 0 && (
-              <div className="rounded-sm border px-3 py-2">
-                <div className="text-low text-xs mb-1">
-                  {t('kanban.knowledge.area', 'Product area')}
-                </div>
-                <div className="flex gap-3 flex-wrap">
-                  {areaCounts.map(([tag, count]) => (
-                    <span key={tag}>
-                      <span className="font-medium">{count}</span>{' '}
-                      <span className="text-low">
-                        {tag.replace('area:', '')}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {fixTypeCounts.length > 0 && (
-              <div className="rounded-sm border px-3 py-2">
-                <div className="text-low text-xs mb-1">
-                  {t('kanban.knowledge.fixType', 'Fix type')}
-                </div>
-                <div className="flex gap-3">
-                  {fixTypeCounts.map(([tag, count]) => (
-                    <span key={tag}>
-                      <span className="font-medium">{count}</span>{' '}
-                      <span className="text-low">
-                        {tag.replace('fix-type:', '')}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+        <Button variant="secondary" onClick={retry}>
+          {t('buttons.retry')}
+        </Button>
+      </div>
+    );
+  } else if (allDocuments.length === 0) {
+    body = (
+      <p className="rounded-lg border bg-secondary px-4 py-10 text-center text-sm text-low">
+        {t(
+          'kanban.knowledge.empty',
+          'No RCAs stored yet. Approved bug RCAs are filed here automatically.'
+        )}
+      </p>
+    );
+  } else {
+    body = (
+      <>
+        <KnowledgeTotals
+          total={documents.length}
+          footnote={
+            drafts.size > 0
+              ? t('kanban.knowledge.draftsAtGate', {
+                  count: drafts.size,
+                  defaultValue: '{{count}} drafts at the gate',
+                })
+              : null
+          }
+          primaryTiles={primaryTiles}
+          secondaryTiles={secondaryTiles}
+        />
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Node ranking or force web */}
+        <div className="flex flex-1 flex-wrap items-stretch gap-5">
+          <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-3">
             {view === 'web' ? (
-              <div>
-                <KnowledgeWeb
-                  nodes={nodes}
-                  documents={documents}
-                  edges={edges}
+              <KnowledgeWeb
+                nodes={nodes}
+                documents={documents}
+                edges={edges}
+                counts={counts}
+                legendKinds={legendKinds}
+                kindLabel={kindLabel}
+                title={t('kanban.knowledge.webTitle', 'Graph')}
+                hint={t(
+                  'kanban.knowledge.webHint',
+                  'Select a node to see its RCAs'
+                )}
+                selectedNodeId={selectedNodeId}
+                onSelectNode={(nodeId) =>
+                  setSelectedNodeId((current) =>
+                    current === nodeId ? null : nodeId
+                  )
+                }
+              />
+            ) : (
+              <>
+                <KnowledgeNodeRanking
+                  // Alone, the card stretches to the column height with its
+                  // footer at the bottom; above other kinds it keeps its own
+                  // height so the spare space is not trapped inside it.
+                  className={otherRankings.length === 0 ? 'flex-1' : undefined}
+                  title={kindLabel(ROOT_CAUSE_CLASS)}
+                  subtitle={t(
+                    'kanban.knowledge.classesSubtitle',
+                    'RCAs per class · most recent card'
+                  )}
+                  stats={classRanking}
                   selectedNodeId={selectedNodeId}
-                  onSelectNode={(nodeId) =>
-                    setSelectedNodeId((current) =>
-                      current === nodeId ? null : nodeId
-                    )
+                  onSelectNode={setSelectedNodeId}
+                  cardKey={cardKey}
+                  ticketUrl={jiraUrl}
+                  emptyLabel={
+                    documents.length === 0
+                      ? t(
+                          'kanban.knowledge.emptyRange',
+                          'No RCAs were filed in this range.'
+                        )
+                      : t(
+                          'kanban.knowledge.noClasses',
+                          'No RCA is linked to a root-cause class yet. Run Analyze RCAs from the board menu to link them.'
+                        )
+                  }
+                  footer={
+                    classRanking.length > 0 && unclassifiedCount > 0 ? (
+                      <span>
+                        {t('kanban.knowledge.unclassified', {
+                          count: unclassifiedCount,
+                          defaultValue: '{{count}} RCAs have no class yet.',
+                        })}
+                      </span>
+                    ) : null
                   }
                 />
-                <div className="flex flex-wrap gap-3 mt-2 text-xs text-low">
-                  {KIND_ORDER.filter((kind) =>
-                    (nodesByKind.get(kind) ?? []).some(
-                      (node) => node.edge_count > 0
-                    )
-                  ).map((kind) => (
-                    <span key={kind} className="flex items-center gap-1">
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: KIND_COLORS[kind] }}
-                      />
-                      {KIND_LABELS[kind] ?? kind}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {KIND_ORDER.filter((kind) =>
-                  (nodesByKind.get(kind) ?? []).some(
-                    (node) => node.edge_count > 0
-                  )
-                ).map((kind) => (
-                  <div key={kind}>
-                    <div className="text-xs text-low uppercase tracking-wide mb-1">
-                      {KIND_LABELS[kind] ?? kind}
-                    </div>
-                    <div className="space-y-half">
-                      {(nodesByKind.get(kind) ?? [])
-                        .filter((node) => node.edge_count > 0)
-                        .map((node) => (
-                          <button
-                            key={node.id}
-                            type="button"
-                            onClick={() => setSelectedNodeId(node.id)}
-                            className={`w-full flex items-center gap-2 px-2 py-1 rounded-sm text-left text-sm transition-colors ${
-                              selectedNodeId === node.id
-                                ? 'bg-brand/10'
-                                : 'hover:bg-secondary'
-                            }`}
-                          >
-                            <span className="inline-flex items-center justify-center min-w-6 h-5 px-1 rounded-sm bg-panel text-xs font-medium">
-                              {node.edge_count}
-                            </span>
-                            <span className="truncate flex-1">{node.name}</span>
-                            {node.investigation_jira_key && (
-                              <a
-                                href={jiraUrl(node.investigation_jira_key)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="shrink-0 px-1.5 py-0.5 rounded text-xs bg-warning/15 text-warning hover:bg-warning/25"
-                              >
-                                {node.investigation_jira_key}
-                              </a>
-                            )}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Detail: selected node's linked RCAs, or the full RCA list */}
-            <div className="space-y-2">
-              {selectedNode ? (
-                <>
-                  <div>
-                    <div className="text-sm font-medium">
-                      {selectedNode.name}
-                    </div>
-                    {selectedNode.description && (
-                      <p className="text-xs text-low mt-half">
-                        {selectedNode.description}
-                      </p>
+                {otherRankings.map((ranking) => (
+                  <KnowledgeNodeRanking
+                    key={ranking.kind}
+                    title={kindLabel(ranking.kind)}
+                    subtitle={t(
+                      'kanban.knowledge.nodesSubtitle',
+                      'RCAs linked · most recent card'
                     )}
-                  </div>
-                  {selectedNodeEdges.map((edge) => {
-                    const doc = documentsById.get(edge.document_id);
-                    if (!doc) return null;
-                    return (
-                      <div
-                        key={edge.id}
-                        className="rounded-sm border px-2 py-1.5 text-sm"
-                      >
-                        <div className="flex items-center gap-2">
-                          {doc.jira_key && (
-                            <a
-                              href={jiraUrl(doc.jira_key)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-brand hover:underline shrink-0"
-                            >
-                              {doc.jira_key}
-                            </a>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => openDocument(doc.id)}
-                            className="truncate flex-1 text-left hover:underline"
-                            title={doc.title}
-                          >
-                            {doc.summary ?? doc.title}
-                          </button>
-                          {edge.confidence && (
-                            <span className="shrink-0 text-xs text-low">
-                              {edge.confidence}
-                            </span>
-                          )}
-                        </div>
-                        {edge.rationale && (
-                          <p className="text-xs text-low mt-half">
-                            {edge.rationale}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </>
-              ) : (
-                <>
-                  <div className="text-xs text-low uppercase tracking-wide">
-                    {t('kanban.knowledge.allRcas', 'All RCAs')}
-                  </div>
-                  {documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="rounded-sm border px-2 py-1.5 text-sm"
-                    >
-                      <div className="flex items-center gap-2">
-                        {doc.jira_key && (
-                          <a
-                            href={jiraUrl(doc.jira_key)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-brand hover:underline shrink-0"
-                          >
-                            {doc.jira_key}
-                          </a>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => openDocument(doc.id)}
-                          className="truncate flex-1 text-left hover:underline"
-                          title={doc.title}
-                        >
-                          {doc.summary ?? doc.title}
-                        </button>
-                      </div>
-                      {doc.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-half">
-                          {doc.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="px-1.5 py-0.5 rounded-sm bg-panel text-xs text-low"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
+                    stats={ranking.stats}
+                    selectedNodeId={selectedNodeId}
+                    onSelectNode={setSelectedNodeId}
+                    cardKey={cardKey}
+                    ticketUrl={jiraUrl}
+                  />
+                ))}
+              </>
+            )}
           </div>
-        </>
-      )}
+          {rcaColumn}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-5">
+      <KnowledgeHeader
+        range={range}
+        rangeLabel={rangeLabel}
+        onRangeChange={setRange}
+        view={view}
+        onViewChange={setView}
+        exportFormat={exportFormat}
+        onExportFormatChange={setExportFormat}
+        onExport={handleExport}
+      />
+      {body}
     </div>
   );
 }

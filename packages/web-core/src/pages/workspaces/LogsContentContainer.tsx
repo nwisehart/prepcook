@@ -84,7 +84,7 @@ export function LogsContentContainer({ className }: LogsContentContainerProps) {
           {content.toolName}
         </div>
         {content.command && (
-          <div className="px-4 py-2 font-mono text-xs text-low border-b border-border bg-tertiary shrink-0">
+          <div className="px-4 py-2 font-mono text-xs text-low border-b border-border bg-primary shrink-0">
             $ {content.command}
           </div>
         )}
@@ -112,13 +112,14 @@ export function LogsContentContainer({ className }: LogsContentContainerProps) {
           <button
             type="button"
             onClick={collapseTerminal}
-            className="text-low hover:text-normal transition-colors"
+            className="rounded-sm text-low transition-colors hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
             title={t('actions.collapse')}
+            aria-label={t('actions.collapse')}
           >
             <ArrowsInSimpleIcon className="size-icon-sm" weight="bold" />
           </button>
         </div>
-        <div className="flex-1 flex min-h-0 border-t border-border">
+        <div className="flex-1 flex min-h-0 border-t border-border bg-[hsl(var(--console-background))]">
           <div className="flex-1 min-h-0 w-full">
             <TerminalPanelContainer />
           </div>

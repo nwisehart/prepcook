@@ -24,7 +24,7 @@ const DialogOverlay = React.forwardRef<
     ref={ref}
     data-tauri-drag-region
     className={cn(
-      'fixed inset-0 z-[9998] bg-black/50',
+      'fixed inset-0 z-[9998] bg-scrim/45',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       className
@@ -47,7 +47,7 @@ const DialogContent = React.forwardRef<
         ref={ref}
         className={cn(
           'fixed left-[50%] top-[50%] z-[9999] translate-x-[-50%] translate-y-[-50%]',
-          'w-full max-w-lg bg-panel border border-border rounded-sm shadow-lg',
+          'w-full max-w-lg bg-secondary border border-border rounded-xl shadow-overlay',
           'data-[state=open]:animate-in data-[state=closed]:animate-out',
           'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
           'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -60,8 +60,8 @@ const DialogContent = React.forwardRef<
       >
         {children}
         {!hideCloseButton && (
-          <DialogPrimitive.Close className="absolute right-base top-base rounded-sm opacity-70 ring-offset-panel transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:pointer-events-none">
-            <X className="h-4 w-4 text-normal" />
+          <DialogPrimitive.Close className="absolute right-base top-base rounded-sm p-1 text-low transition-colors hover:bg-panel hover:text-high focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand disabled:pointer-events-none">
+            <X className="h-4 w-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
@@ -106,7 +106,7 @@ const DialogTitle = React.forwardRef<
   <DialogPrimitive.Title
     ref={ref}
     className={cn(
-      'text-lg font-semibold leading-none tracking-tight text-high',
+      'text-lg font-bold leading-tight tracking-[-0.01em] text-high',
       className
     )}
     {...props}

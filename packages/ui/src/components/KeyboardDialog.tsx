@@ -137,20 +137,20 @@ const Dialog = React.forwardRef<
     <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 overflow-y-auto">
       <div
         data-tauri-drag-region
-        className="fixed inset-0 bg-black/50"
+        className="fixed inset-0 bg-scrim/45"
         onClick={() => (uncloseable ? {} : onOpenChange?.(false))}
       />
       <div
         ref={setDialogRef}
         className={cn(
-          'relative z-[10000] flex flex-col w-full max-w-xl gap-4 bg-primary p-6 shadow-lg duration-200 sm:rounded-lg my-8',
+          'relative z-[10000] flex flex-col w-full max-w-xl gap-4 bg-secondary border border-border rounded-xl p-6 shadow-overlay duration-200 my-8',
           className
         )}
         {...props}
       >
         {!uncloseable && (
           <button
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-10"
+            className="absolute right-4 top-4 rounded-sm p-1 text-low transition-colors hover:bg-panel hover:text-high focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand z-10"
             onClick={() => onOpenChange?.(false)}
           >
             <X className="h-4 w-4" />
@@ -186,7 +186,7 @@ const DialogTitle = React.forwardRef<
   <h3
     ref={ref}
     className={cn(
-      'text-lg font-semibold leading-none tracking-tight',
+      'text-lg font-bold leading-tight tracking-[-0.01em] text-high',
       className
     )}
     {...props}
@@ -198,11 +198,7 @@ const DialogDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <p
-    ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
-    {...props}
-  />
+  <p ref={ref} className={cn('text-sm text-normal', className)} {...props} />
 ));
 DialogDescription.displayName = 'DialogDescription';
 

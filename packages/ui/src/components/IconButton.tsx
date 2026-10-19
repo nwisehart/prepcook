@@ -25,14 +25,15 @@ export function IconButton({
   const variantStyles = disabled
     ? 'opacity-40 cursor-not-allowed'
     : variant === 'default'
-      ? 'text-low hover:text-normal hover:bg-secondary/50'
-      : 'bg-panel hover:bg-secondary text-normal';
+      ? 'text-low hover:text-high hover:bg-panel'
+      : 'bg-panel hover:bg-border text-normal hover:text-high';
 
   return (
     <button
       type="button"
       className={cn(
-        'flex items-center justify-center p-half rounded-sm transition-colors',
+        'flex items-center justify-center p-half rounded transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
         variantStyles,
         className
       )}
@@ -41,10 +42,7 @@ export function IconButton({
       aria-label={ariaLabel}
       title={title}
     >
-      <IconComponent
-        className={cn('size-icon-sm', iconClassName)}
-        weight="bold"
-      />
+      <IconComponent className={cn('size-icon-sm', iconClassName)} />
     </button>
   );
 }

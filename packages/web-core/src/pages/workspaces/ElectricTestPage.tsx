@@ -200,7 +200,7 @@ function MutationPanel({
           <button
             onClick={onCreate}
             disabled={disabled}
-            className="px-base py-half text-sm bg-success text-white rounded-sm hover:bg-success/80 disabled:bg-panel disabled:text-low disabled:cursor-not-allowed"
+            className="px-base py-half text-sm bg-success text-on-brand rounded-sm hover:bg-success/80 disabled:bg-panel disabled:text-low disabled:cursor-not-allowed"
           >
             Create
           </button>
@@ -218,7 +218,7 @@ function MutationPanel({
           <button
             onClick={onDelete}
             disabled={disabled || !selectedId}
-            className="px-base py-half text-sm bg-error text-white rounded-sm hover:bg-error/80 disabled:bg-panel disabled:text-low disabled:cursor-not-allowed"
+            className="px-base py-half text-sm bg-error text-on-brand rounded-sm hover:bg-error/80 disabled:bg-panel disabled:text-low disabled:cursor-not-allowed"
           >
             Delete Selected
           </button>
@@ -333,7 +333,7 @@ function ProjectsList({
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
               placeholder="Project name"
-              className="px-base py-half text-sm border rounded-sm bg-primary text-normal focus:outline-none focus:ring-1 focus:ring-brand"
+              className="px-base py-half text-sm border rounded-sm bg-primary text-normal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
             />
           </div>
           <div>
@@ -546,7 +546,7 @@ function TagsList({ projectId }: { projectId: string }) {
               value={newTagName}
               onChange={(e) => setNewTagName(e.target.value)}
               placeholder="Tag name"
-              className="px-base py-half text-sm border rounded-sm bg-primary text-normal focus:outline-none focus:ring-1 focus:ring-brand"
+              className="px-base py-half text-sm border rounded-sm bg-primary text-normal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
             />
           </div>
           <div>
@@ -756,7 +756,7 @@ function CommentsList({ issueId }: { issueId: string }) {
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Enter comment message..."
             rows={2}
-            className="w-full px-base py-half text-sm border rounded-sm bg-primary text-normal focus:outline-none focus:ring-1 focus:ring-brand resize-none"
+            className="w-full px-base py-half text-sm border rounded-sm bg-primary text-normal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand resize-none"
           />
         </div>
       </MutationPanel>
@@ -900,7 +900,7 @@ export function ElectricTestPage() {
                 setSelectedIssue(null);
               }}
               disabled={isConnected}
-              className="w-full px-base py-half border rounded-sm bg-primary text-normal focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand disabled:bg-secondary disabled:text-low"
+              className="w-full px-base py-half border rounded-sm bg-primary text-normal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand disabled:bg-secondary disabled:text-low"
             >
               <option value="">Select an organization...</option>
               {organizations.map((org) => (
@@ -916,14 +916,14 @@ export function ElectricTestPage() {
               <button
                 onClick={() => setIsConnected(true)}
                 disabled={!selectedOrgId}
-                className="px-base py-half bg-brand text-on-brand rounded-sm hover:bg-brand-hover focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:bg-panel disabled:text-low disabled:cursor-not-allowed"
+                className="px-base py-half bg-brand text-on-brand rounded-sm hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand disabled:bg-panel disabled:text-low disabled:cursor-not-allowed"
               >
                 Connect
               </button>
             ) : (
               <button
                 onClick={handleDisconnect}
-                className="px-base py-half bg-error text-on-brand rounded-sm focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2"
+                className="px-base py-half bg-error text-on-brand rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
               >
                 Disconnect
               </button>
@@ -937,7 +937,7 @@ export function ElectricTestPage() {
         </div>
 
         {selectedOrgId && (
-          <div className="text-xs text-low font-ibm-plex-mono">
+          <div className="text-xs text-low font-mono">
             Organization ID: {selectedOrgId}
             {userId && <span className="ml-base">User ID: {userId}</span>}
           </div>

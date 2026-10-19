@@ -195,6 +195,29 @@ interface SessionChatBoxProps<TExecutor extends string = string> {
   dropzone?: DropzoneProps;
 }
 
+/** "3 files changed +41 −7": the label, then mono counts in diff colours. */
+function DiffStatsText({
+  label,
+  linesAdded,
+  linesRemoved,
+}: {
+  label: string;
+  linesAdded?: number;
+  linesRemoved?: number;
+}) {
+  return (
+    <>
+      <span>{label}</span>
+      {linesAdded !== undefined && (
+        <span className="ml-1.5 font-mono text-success">+{linesAdded}</span>
+      )}
+      {linesRemoved !== undefined && (
+        <span className="ml-1 font-mono text-error">−{linesRemoved}</span>
+      )}
+    </>
+  );
+}
+
 function defaultExecutorLabel(executor: string) {
   return executor
     .replace(/[_-]+/g, ' ')
@@ -300,16 +323,16 @@ export function SessionChatBox<TExecutor extends string = string>({
     editor.value.trim().length === 0;
 
   const placeholder = isInFeedbackMode
-    ? 'Provide feedback for the plan...'
+    ? t('conversation.placeholders.feedback')
     : isInEditMode
-      ? 'Edit your message...'
+      ? t('conversation.placeholders.edit')
       : isInApprovalMode
-        ? 'Provide feedback to request changes...'
+        ? t('conversation.placeholders.requestChanges')
         : isInAskQuestionMode
-          ? 'Type a different answer...'
+          ? t('conversation.placeholders.otherAnswer')
           : session.isNewSessionMode
-            ? 'Start a new conversation...'
-            : 'Continue working on this task...';
+            ? t('conversation.placeholders.newSession')
+            : t('conversation.placeholders.reply');
 
   // Cmd+Enter handler
   const handleCmdEnter = () => {
@@ -585,20 +608,22 @@ export function SessionChatBox<TExecutor extends string = string>({
       banners.push(
         <div
           key="review-comments"
-          className="bg-accent/5 border-b px-double py-base flex items-center gap-base"
+          className="flex items-center gap-2 rounded border bg-brand-soft/60 px-3 py-2"
         >
-          <ChatCircleIcon className="h-4 w-4 text-brand flex-shrink-0" />
-          <span className="text-sm text-normal flex-1">
+          <ChatCircleIcon className="size-4 shrink-0 text-brand" />
+          <span className="flex-1 text-sm text-normal">
             {t('conversation.reviewComments.count', {
               count: reviewComments.count,
             })}
           </span>
           <button
+            type="button"
             onClick={reviewComments.onClear}
-            className="text-low hover:text-normal transition-colors p-1 -m-1"
+            className="-m-1 rounded-sm p-1 text-low transition-colors hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
             title={t('conversation.actions.clearReviewComments')}
+            aria-label={t('conversation.actions.clearReviewComments')}
           >
-            <TrashIcon className="h-4 w-4" />
+            <TrashIcon className="size-4" />
           </button>
         </div>
       );
@@ -624,9 +649,9 @@ export function SessionChatBox<TExecutor extends string = string>({
       banners.push(
         <div
           key="queued"
-          className="bg-secondary border-b px-double py-base flex items-center gap-base"
+          className="flex items-center gap-2 rounded border bg-secondary px-3 py-2"
         >
-          <ClockIcon className="h-4 w-4 text-low" />
+          <ClockIcon className="size-4 shrink-0 text-low" />
           <span className="text-sm text-low">
             {t('followUp.queuedMessage')}
           </span>
@@ -677,7 +702,7 @@ export function SessionChatBox<TExecutor extends string = string>({
           {/* New session mode: agent icon + executor dropdown */}
           {isNewSessionMode && executor && (
             <>
-              {renderAgentIcon?.(agent, 'size-icon-xl')}
+              {renderAgentIcon?.(agent, 'size-icon-sm')}
               <ToolbarDropdown
                 label={
                   executor.selected
@@ -704,8 +729,8 @@ export function SessionChatBox<TExecutor extends string = string>({
           {!isNewSessionMode && (
             <>
               {isRunning && inProgressTodo ? (
-                <span className="text-sm flex items-center gap-1 min-w-0">
-                  <SpinnerIcon className="size-icon-sm animate-spin flex-shrink-0" />
+                <span className="flex min-w-0 items-center gap-1.5 font-medium text-brand-secondary">
+                  <SpinnerIcon className="size-3.5 shrink-0 animate-spin text-brand" />
                   <span className="truncate">{inProgressTodo.content}</span>
                 </span>
               ) : (
@@ -713,11 +738,11 @@ export function SessionChatBox<TExecutor extends string = string>({
                   {stats?.hasConflicts && (
                     <button
                       type="button"
-                      className="flex items-center gap-1 text-warning text-sm min-w-0 cursor-pointer hover:underline"
+                      className="flex min-w-0 cursor-pointer items-center gap-1 rounded-sm font-semibold text-attention-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
                       title={t('conversation.approval.conflictWarning')}
                       onClick={stats.onResolveConflicts}
                     >
-                      <WarningIcon className="size-icon-sm flex-shrink-0" />
+                      <WarningIcon className="size-3.5 shrink-0" />
                       <span className="truncate">
                         {t('conversation.approval.conflicts', {
                           count: stats.conflictedFilesCount,
@@ -729,53 +754,30 @@ export function SessionChatBox<TExecutor extends string = string>({
                     <PrimaryButton
                       variant="secondary"
                       onClick={onOpenWorkspace}
-                      value="Open Workspace"
+                      value={t('conversation.actions.openSession')}
                       actionIcon={ArrowsOutIcon}
                       className="min-w-0"
                     />
                   ) : onViewCode ? (
-                    <PrimaryButton
-                      variant="tertiary"
+                    <button
+                      type="button"
                       onClick={onViewCode}
-                      className="min-w-0"
+                      title={t('conversation.actions.openDiff')}
+                      className="min-w-0 truncate whitespace-nowrap rounded-sm text-low hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
                     >
-                      <span className="text-sm space-x-half whitespace-nowrap truncate">
-                        <span>
-                          {t('diff.filesChanged', { count: filesChanged })}
-                        </span>
-                        {(linesAdded !== undefined ||
-                          linesRemoved !== undefined) && (
-                          <span className="space-x-half">
-                            {linesAdded !== undefined && (
-                              <span className="text-success">
-                                +{linesAdded}
-                              </span>
-                            )}
-                            {linesRemoved !== undefined && (
-                              <span className="text-error">
-                                -{linesRemoved}
-                              </span>
-                            )}
-                          </span>
-                        )}
-                      </span>
-                    </PrimaryButton>
+                      <DiffStatsText
+                        label={t('diff.filesChanged', { count: filesChanged })}
+                        linesAdded={linesAdded}
+                        linesRemoved={linesRemoved}
+                      />
+                    </button>
                   ) : (
-                    <span className="text-sm text-low space-x-half whitespace-nowrap truncate min-w-0">
-                      <span>
-                        {t('diff.filesChanged', { count: filesChanged })}
-                      </span>
-                      {(linesAdded !== undefined ||
-                        linesRemoved !== undefined) && (
-                        <span className="space-x-half">
-                          {linesAdded !== undefined && (
-                            <span className="text-success">+{linesAdded}</span>
-                          )}
-                          {linesRemoved !== undefined && (
-                            <span className="text-error">-{linesRemoved}</span>
-                          )}
-                        </span>
-                      )}
+                    <span className="min-w-0 truncate whitespace-nowrap">
+                      <DiffStatsText
+                        label={t('diff.filesChanged', { count: filesChanged })}
+                        linesAdded={linesAdded}
+                        linesRemoved={linesRemoved}
+                      />
                     </span>
                   )}
                 </>
@@ -805,7 +807,7 @@ export function SessionChatBox<TExecutor extends string = string>({
                   />
                 </TurnNavigationPopup>
               )}
-              {renderAgentIcon?.(agent, 'size-icon-xl')}
+              {renderAgentIcon?.(agent, 'size-icon-sm')}
             </>
           )}
           {/* Todo progress popup - always rendered, disabled when no todos */}
@@ -844,7 +846,7 @@ export function SessionChatBox<TExecutor extends string = string>({
                     <span className="flex items-center gap-1.5 max-w-[200px]">
                       {renderAgentIcon?.(
                         s.executor ?? null,
-                        'size-icon shrink-0'
+                        'size-icon-xs shrink-0'
                       )}
                       <span className="truncate">
                         {s.name
@@ -900,8 +902,8 @@ export function SessionChatBox<TExecutor extends string = string>({
           {onPrCommentClick && (
             <ToolbarIconButton
               icon={GithubLogoIcon}
-              aria-label="Add PR Comments"
-              title="Insert PR comments into message"
+              aria-label={t('conversation.actions.insertPrComments')}
+              title={t('conversation.actions.insertPrComments')}
               onClick={onPrCommentClick}
               disabled={areContentInsertActionsDisabled}
             />

@@ -74,10 +74,9 @@ const AssigneeAvatar = ({ user }: { user: KanbanAssigneeUser }) => {
   return (
     <Tooltip content={label}>
       <div
-        className={cn(
-          'flex size-icon-base shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-secondary text-xs font-medium text-low',
-          'h-5 w-5 text-[10px] ring-1 ring-background'
-        )}
+        // 22px brand-soft circle with bold initials, ringed by the card
+        // surface so stacked avatars read as separate.
+        className="flex size-[22px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[10px] font-bold leading-none text-brand-soft-foreground ring-2 ring-secondary"
         aria-label={label}
       >
         {imageUrl && (
@@ -104,7 +103,10 @@ export const KanbanAssignee = ({
   if (assignees.length === 0) {
     return (
       <div
-        className={cn('flex items-center justify-center', 'h-6 w-6', className)}
+        className={cn(
+          'flex size-[22px] items-center justify-center',
+          className
+        )}
         aria-label="Unassigned"
       >
         <UsersIcon className="size-icon-xs text-low" weight="bold" />
@@ -116,14 +118,14 @@ export const KanbanAssignee = ({
   const remainingCount = assignees.length - MAX_VISIBLE_AVATARS;
 
   return (
-    <div className={cn('flex items-center h-6', className)}>
-      <div className="flex -space-x-1">
+    <div className={cn('flex h-[22px] items-center', className)}>
+      <div className="flex -space-x-1.5">
         {visibleAssignees.map((assignee) => (
           <AssigneeAvatar key={assignee.user_id} user={assignee} />
         ))}
       </div>
       {remainingCount > 0 && (
-        <span className="ml-half text-xs text-low">+{remainingCount}</span>
+        <span className="ml-1 text-xs text-low">+{remainingCount}</span>
       )}
     </div>
   );

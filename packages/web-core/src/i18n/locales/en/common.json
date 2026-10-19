@@ -41,18 +41,56 @@
     "deniedByUser": "{{toolName}} denied by user",
     "tool": "Tool",
     "thinking": "Thinking",
-    "toolSummary": {
-      "read": "Read {{path}}",
-      "searched": "Searched for \"{{query}}\"",
-      "fetched": "Fetched {{url}}",
-      "ranCommand": "Ran command",
-      "createdTask": "Created task: {{description}}",
-      "todoOperation": "{{operation}} todos"
-    },
     "subagent": {
       "defaultType": "Subagent"
     },
-    "loadingEarlierMessages": "Loading earlier messages"
+    "loadingEarlierMessages": "Loading earlier messages",
+    "assistantName": "Prepcook",
+    "steps": {
+      "readFile": "Read a file",
+      "readFiles_one": "Read {{count}} file",
+      "readFiles_other": "Read {{count}} files",
+      "searched": "Searched the code",
+      "searchedMany_one": "Ran {{count}} search",
+      "searchedMany_other": "Ran {{count}} searches",
+      "fetched": "Fetched a page",
+      "fetchedMany_one": "Fetched {{count}} page",
+      "fetchedMany_other": "Fetched {{count}} pages",
+      "ranCommand": "Ran a command",
+      "ranCommands_one": "Ran {{count}} command",
+      "ranCommands_other": "Ran {{count}} commands",
+      "more": "+{{count}} more",
+      "postedComment": "Posted a comment on the card",
+      "editedFile": "Edited {{file}}",
+      "createdFile": "Created {{file}}",
+      "deletedFile": "Deleted {{file}}",
+      "renamedFile": "Renamed {{file}}",
+      "editCount_one": "{{count}} edit",
+      "editCount_other": "{{count}} edits",
+      "updatedTodos": "Updated the to-do list",
+      "todosDone": "{{done}} of {{total}} done"
+    },
+    "decision": {
+      "planTitle": "Your decision on the plan",
+      "toolTitle": "{{tool}} is waiting for your approval",
+      "planHelper": "Approving lets the agent carry out this plan. Requesting changes sends your note back to this session.",
+      "toolHelper": "Approving lets the agent go ahead. Requesting changes sends your note back to this session.",
+      "gateHelper": "Approving moves the card to Execute once the plan passes the gate. Requesting changes sends your note back to this session.",
+      "noteLabel": "A note for the agent",
+      "notePlaceholder": "A note for the agent (needed to request changes)",
+      "gateNotePlaceholder": "A note for the agent (optional to approve, needed to request changes)",
+      "approve": "Approve",
+      "requestChanges": "Request changes",
+      "approved": "Approved",
+      "changesRequested": "Changes requested",
+      "timedOut": "Timed out",
+      "openRca": "Open the RCA",
+      "openSpec": "Open the spec",
+      "openPlanDocument": "Open the plan document",
+      "confidence": "confidence · {{level}}",
+      "openQuestions_one": "{{count}} open question",
+      "openQuestions_other": "{{count}} open questions"
+    }
   },
   "folderPicker": {
     "legend": "Click folder names to navigate • Use action buttons to select",
@@ -86,7 +124,10 @@
     "banner": "Claude seat expired — agents are paused until it's re-authenticated on the runner."
   },
   "launchPaused": {
-    "banner": "Claude usage window exhausted — agent launches resume in about {{minutes}} min."
+    "banner": "Claude usage window exhausted — agent launches resume in about {{minutes}} min.",
+    "checking": "Checking the seat…",
+    "resume": "Check the seat and resume",
+    "queued": "{{count}} stalled session(s) queued — they go back in one at a time."
   },
   "toolbar": {
     "sortBy": "Sort by",
@@ -102,7 +143,6 @@
     "label": "Label"
   },
   "workspaces": {
-    "title": "Workspaces",
     "searchPlaceholder": "Search...",
     "active": "Active",
     "archived": "Archived",
@@ -117,10 +157,7 @@
     "draft": "Draft",
     "viewArchive": "View Archive",
     "backToActive": "Back to Active",
-    "noArchived": "No archived workspaces",
-    "noWorkspaces": "No workspaces",
     "newWorkspace": "New workspace",
-    "needsAttention": "Needs Attention",
     "idle": "Idle",
     "running": "Running",
     "pin": "Pin",
@@ -151,6 +188,70 @@
       "deleteBranchLabel": "Delete branch",
       "cannotDeleteOpenPr": "Cannot delete branch while PR is open",
       "unlinkFromIssueLabel": "Also unlink from issue"
+    },
+    "sessionsTitle": "Sessions",
+    "todayCount": "{{count}} today",
+    "groupByStatus": "Group by status",
+    "newSession": "New session",
+    "noSessions": "No sessions",
+    "noArchivedSessions": "No archived sessions",
+    "scrollToBottom": "Scroll to bottom",
+    "groups": {
+      "needsYou": "Needs you",
+      "doneToday": "Done today",
+      "earlier": "Earlier"
+    },
+    "status": {
+      "waitingApproval": "Waiting for your approval",
+      "rcaReady": "RCA ready",
+      "specReady": "Spec ready",
+      "mergedReadyToClose": "Merged · ready to close",
+      "idleFor": "idle {{duration}}",
+      "ago": "{{duration}} ago",
+      "planning": "Planning",
+      "writingFix": "Writing the fix",
+      "implementing": "Implementing",
+      "reviewing": "Reviewing",
+      "updatingPr": "Updating the pull request",
+      "working": "Working",
+      "lastRunFailed": "Last run failed",
+      "merged": "Merged",
+      "prOpened": "PR #{{number}} opened",
+      "prOpen": "PR open",
+      "lastActive": "Last active {{duration}} ago",
+      "noRuns": "No runs yet"
+    },
+    "duration": {
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h",
+      "days": "{{count}} d"
+    },
+    "header": {
+      "breadcrumb": "Breadcrumb",
+      "reviewPlan": "Review plan"
+    },
+    "rightPanel": {
+      "label": "Review and terminal",
+      "reviewTab": "Review",
+      "previewTab": "Preview",
+      "fileCount_one": "{{count}} file",
+      "fileCount_other": "{{count}} files",
+      "moreFiles_one": "{{count}} more file in the diff",
+      "moreFiles_other": "{{count}} more files in the diff",
+      "newFile": "new",
+      "noChanges": "No changes yet.",
+      "openDiff": "Open the diff",
+      "onBranch": "On <mono>{{branch}}</mono>.",
+      "branchRebased": "On <mono>{{branch}}</mono>, rebased on {{target}}.",
+      "branchBehind_one": "On <mono>{{branch}}</mono>, {{count}} commit behind {{target}}.",
+      "branchBehind_other": "On <mono>{{branch}}</mono>, {{count}} commits behind {{target}}.",
+      "noPrYet": "No pull request yet; it opens at Push MR.",
+      "prOpen": "PR #{{number}} is open.",
+      "prMerged": "PR #{{number}} merged.",
+      "terminalTitle": "Terminal · worktree",
+      "expandTerminal": "Open the terminal in the large panel",
+      "terminalExpanded": "The terminal is open in the large panel.",
+      "showTerminalHere": "Show it here"
     }
   },
   "fileTree": {
@@ -398,8 +499,6 @@
     "noPrCreated": "No PR created",
     "noCommentsYet": "No comments yet",
     "createdBy": "Created by",
-    "comments": "Comments",
-    "enterCommentPlaceholder": "Enter your comment here...",
     "attachFile": "Attach file",
     "attachFileHint": "Attach files (max 20MB each)",
     "dropFilesHere": "Drop files here",
@@ -410,12 +509,9 @@
     "moreActions": "More actions",
     "closePanel": "Close panel",
     "copyLink": "Copy link",
-    "issueTitlePlaceholder": "Issue Title...",
     "issueDescriptionPlaceholder": "Enter task description here...",
     "createDraftWorkspaceImmediately": "Create draft workspace immediately",
     "createDraftWorkspaceDescription": "After creating the issue, open the workspace creation form pre-filled with the issue details",
-    "createIssue": "Create Issue",
-    "newIssue": "New Issue",
     "runPlanningAgent": "Run planning agent",
     "runExecutionAgent": "Run execution agent",
     "specApproved": "Spec approved",
@@ -436,7 +532,6 @@
     "analyzeRcasMissingPlaybook": "No 'rca_analysis' playbook configured (Settings > Playbooks).",
     "knowledgeMenu": "Knowledge",
     "knowledge": {
-      "title": "Knowledge — RCA graph",
       "empty": "No RCAs stored yet. Approved bug RCAs are filed here automatically.",
       "rcaCount": "RCAs stored",
       "origin": "Origin",
@@ -444,13 +539,57 @@
       "allRcas": "All RCAs",
       "viewRanking": "Ranking",
       "viewWeb": "Web",
-      "export": "Export",
-      "exportFrom": "Export from",
-      "exportTo": "Export to",
       "exportFormat": "Export format",
       "severity": "Severity",
       "area": "Product area",
-      "fixType": "Fix type"
+      "fixType": "Fix type",
+      "heading": "Knowledge",
+      "subtitle": "Every approved bug RCA, linked by product area, component and root-cause class. A cause that keeps coming back shows up here first.",
+      "exportAs": "Export {{format}}",
+      "regressionCulprit": "Regression introduced by",
+      "draftChip": "draft · at the gate",
+      "draftsAtGate_one": "{{count}} draft at the gate",
+      "draftsAtGate_other": "{{count}} drafts at the gate",
+      "notTagged": "Not tagged yet",
+      "moreValues": "+{{count}} more",
+      "kinds": {
+        "rootCauseClass": "Root-cause classes",
+        "productArea": "Product areas",
+        "component": "Components",
+        "dataModel": "Data models",
+        "infra": "Infrastructure"
+      },
+      "classesSubtitle": "RCAs per class · most recent card",
+      "nodesSubtitle": "RCAs linked · most recent card",
+      "unclassified_one": "{{count}} RCA has no class yet.",
+      "unclassified_other": "{{count}} RCAs have no class yet.",
+      "noClasses": "No RCA is linked to a root-cause class yet. Run Analyze RCAs from the board menu to link them.",
+      "recentRcas": "Recent RCAs",
+      "showAll": "All {{count}}",
+      "showRecent": "Recent only",
+      "linkConfidence": "{{level}} confidence",
+      "patternReview": "Pattern review",
+      "noLinkedRcas": "No RCAs linked to this in the selected range.",
+      "emptyRange": "No RCAs were filed in this range.",
+      "loadError": "The knowledge store could not be loaded.",
+      "webTitle": "Graph",
+      "webHint": "Select a node to see its RCAs",
+      "range": {
+        "title": "Date range",
+        "help": "Shows and exports the RCAs filed on these days (UTC). Leave a side empty to leave it open.",
+        "from": "From",
+        "to": "To",
+        "clear": "Clear",
+        "allTime": "All time",
+        "between": "{{from}} – {{to}}",
+        "since": "Since {{date}}",
+        "until": "Until {{date}}"
+      },
+      "relative": {
+        "today": "today",
+        "yesterday": "yesterday",
+        "daysAgo": "{{days}} d ago"
+      }
     },
     "reopenReview": "Reopen review",
     "reopeningReview": "Opening…",
@@ -460,7 +599,6 @@
     "agentQueuedHint": "The orchestrator picks this ticket up on its next poll (within seconds) and starts the stage automation.",
     "mrCommentsError": "Failed to send the MR comments to the agent. Please try again.",
     "pushStates": {
-      "pushing": "Pushing…",
       "pushed": "Pushed",
       "failed": "Push failed",
       "failedHint": "The MR could not be created — check the app log, fix the cause (e.g. uncommitted changes), then move the ticket back to Review and forward into Push MR again to retry."
@@ -473,11 +611,7 @@
       "startAgentCancel": "Not now",
       "moveRejected": "This move is not allowed by the project workflow."
     },
-    "previewCodeBlock": "[Code block]",
-    "previewImage": "[Image]",
-    "previewImageWithName": "[Image: {{name}}]",
     "previewFile": "[File]",
-    "previewFileWithName": "[File: {{name}}]",
     "imageAttachmentNameFallback": "Attachment",
     "removeImage": "Remove image",
     "maxFilesAtOnce": "Maximum {{count}} files at once",
@@ -501,7 +635,6 @@
     },
     "team": "Team",
     "personal": "Personal",
-    "searchPlaceholder": "Search issues...",
     "filters": "Filters",
     "clearFilters": "Clear filters",
     "filtersDescription": "Adjust filters and sorting for this board view.",
@@ -536,7 +669,6 @@
     "workspacesFilterLabel": "Workspaces",
     "selectAssignees": "Select assignees...",
     "agentBadge": "agent",
-    "relationships": "Relationships",
     "noRelationships": "No relationships",
     "openProjectsGuide": "Projects guide",
     "editProjectSettings": "Edit project settings",
@@ -576,7 +708,146 @@
     "verdictWhyNotHigher": "Why not higher:",
     "takeoverPaused": "Paused",
     "takeoverBy": "Taken over by {{name}} — automation is hands-off until re-armed",
-    "takeoverByUnknown": "Taken over in Jira — automation is hands-off until re-armed"
+    "takeoverByUnknown": "Taken over in Jira — automation is hands-off until re-armed",
+    "searchCards": "Search cards",
+    "clearSearch": "Clear search",
+    "closeSearch": "Close search",
+    "newCard": "New card",
+    "createCard": "Create card",
+    "closeCard": "Close card",
+    "projectMenu": "Project menu",
+    "cardCount_one": "{{count}} card",
+    "cardCount_other": "{{count}} cards",
+    "importsFromTracker": "imports from {{tracker}}",
+    "trackerNames": {
+      "jira": "Jira",
+      "github_issues": "GitHub",
+      "linear": "Linear",
+      "pagerduty": "PagerDuty"
+    },
+    "columnHelpers": {
+      "todo": "Waiting for you to send it to Plan",
+      "plan": "Reproduce it, then explain it",
+      "execute": "The smallest fix, with tests",
+      "review": "Fresh eyes on the fix",
+      "pushMr": "Pull request open, people reviewing",
+      "close": "Merged; you close it",
+      "cleanUp": "Worktrees archived"
+    },
+    "needsYou": {
+      "count_one": "{{count}} needs you",
+      "count_other": "{{count}} need you",
+      "showOnly": "Show only the cards that need you",
+      "showAll": "Show all cards",
+      "rcaReady": "Needs you · the RCA is ready",
+      "planReady": "Needs you · the plan is ready",
+      "readyToClose": "Needs you · merged, ready to close",
+      "confidence": "Confidence {{level}}",
+      "confidenceLevels": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "noOpenQuestions": "no open questions",
+      "approve": "Approve",
+      "requestChanges": "Request changes",
+      "requestChangesPlaceholder": "What should the plan change? Your note goes to the planning session.",
+      "sendRequest": "Send request",
+      "openRca": "Open the RCA",
+      "openPlan": "Open the plan",
+      "panelNote": "Approving moves the card to Execute once the plan passes the gate; requesting changes clears any approval and sends your note to the planning session.",
+      "decisionFailed": "The decision could not be recorded. Please try again."
+    },
+    "card": {
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "pullRequest": "PR #{{number}}",
+      "takenOver": "Taken over",
+      "status": {
+        "planning": "Planning",
+        "writingFix": "Writing the fix",
+        "creatingSubtasks": "Creating sub-tasks",
+        "implementing": "Implementing",
+        "reviewing": "Reviewing",
+        "fixRound": "fix round {{n}}",
+        "openingPr": "Opening the pull request",
+        "cleaningUp": "Cleaning up",
+        "working": "Working",
+        "waitingApproval": "Waiting for your approval",
+        "agentFailed": "Agent failed",
+        "mergedWhen": "merged {{when}}",
+        "openedWhen": "· opened {{when}}",
+        "prClosed": "closed",
+        "planApproved": "Plan approved {{when}}",
+        "agentFinished": "Agent finished {{when}}",
+        "sessionFailed": "Session failed {{when}}",
+        "imported": "Imported {{when}}",
+        "added": "Added {{when}}"
+      }
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{n}} min ago",
+      "hoursAgo": "{{n}} h ago",
+      "yesterday": "yesterday",
+      "daysAgo": "{{n}} d ago"
+    },
+    "duration": {
+      "minutes": "{{n}} min",
+      "hours": "{{n}} h",
+      "days": "{{n}} d"
+    },
+    "cleanUp": {
+      "searchPlaceholder": "Search cleaned-up cards",
+      "thisWeek": "This week",
+      "earlier": "Earlier",
+      "fold": "Fold the {{name}} column",
+      "unfold_one": "{{name}}: {{count}} card archived. Show it",
+      "unfold_other": "{{name}}: {{count}} cards archived. Show them",
+      "showMore": "Show {{n}} more",
+      "noMatches": "No cleaned-up cards match",
+      "empty": "Nothing cleaned up yet",
+      "rcaLink": "RCA"
+    },
+    "panel": {
+      "stage": "Stage",
+      "owner": "Owner",
+      "playbook": "Playbook",
+      "playbookValue": "{{workClass}} · {{stage}} stage",
+      "tracker": "Tracker",
+      "branch": "Branch",
+      "selectStage": "Select a stage",
+      "removeParent": "Remove the parent",
+      "openInTracker": "Open in {{tracker}}",
+      "titlePlaceholder": "Card title",
+      "description": "Description",
+      "plan": "Plan",
+      "planKindFallback": "plan",
+      "activity": "Activity",
+      "commented": "commented",
+      "commentPlaceholder": "Add a comment",
+      "post": "Post",
+      "react": "Add a reaction",
+      "related": "Related",
+      "removeRelationship": "Remove the link",
+      "moveTo": "Move to…",
+      "deleteDraft": "Delete draft"
+    },
+    "sessions": {
+      "title": "Sessions on this card",
+      "waiting": "Waiting",
+      "failed": "Failed",
+      "untitled": "Untitled session",
+      "devServer": "Dev server running",
+      "none": "No sessions on this card yet",
+      "newSession": "New session"
+    },
+    "bulkSelectedCount": "{{count}} selected",
+    "bulkChangeStatus": "Status",
+    "bulkChangePriority": "Priority",
+    "bulkChangeAssignees": "Assignee",
+    "bulkDelete": "Delete",
+    "bulkClearSelection": "Clear selection"
   },
   "createMode": {
     "headings": {
@@ -622,12 +893,40 @@
     "remoteAuthUnavailable": "Remote authentication is temporarily unavailable. Some remote features may not work until it recovers."
   },
   "appBar": {
-    "kanban": {
-      "tooltip": "Kanban boards need a board",
-      "title": "Kanban Boards",
-      "description": "Connect a board to organise your coding agents with kanban boards: run prepcook up, or set PREPCOOK_BOARD_SECRET for a board on another machine.",
-      "action": "Board settings"
-    }
+    "productName": "Prepcook",
+    "closeMenu": "Close menu",
+    "account": "Account",
+    "nav": {
+      "label": "Main",
+      "board": "Board",
+      "sessions": "Sessions",
+      "runningSessions": "{{count}} running"
+    },
+    "projects": {
+      "label": "Projects",
+      "placeholder": "Select a project",
+      "empty": "No projects yet",
+      "create": "New project",
+      "export": "Export data"
+    },
+    "mode": {
+      "label": "Mode",
+      "chef": {
+        "title": "Chef mode",
+        "description": "Prepcook does the prep. You approve plans and move the cards.",
+        "switch": "Switch to Prep mode"
+      },
+      "prep": {
+        "title": "Prep mode",
+        "description": "Prepcook drives tickets through the gates.",
+        "switch": "Switch to Chef mode"
+      }
+    },
+    "board": {
+      "up": "Board up",
+      "down": "Board down"
+    },
+    "updateTo": "Update to v{{version}}"
   },
   "askQuestion": {
     "title": "Agent is asking a question",
@@ -636,5 +935,83 @@
     "submitting": "Submitting answers...",
     "answeredCount": "Answered {{count}} question",
     "answeredCount_other": "Answered {{count}} questions"
+  },
+  "navbar": {
+    "breadcrumb": "Breadcrumb",
+    "newSession": "New session"
+  },
+  "onboarding": {
+    "productName": "Prepcook",
+    "docs": "Docs",
+    "github": "GitHub",
+    "status": {
+      "local": "running locally",
+      "boardUp": "board up",
+      "boardDown": "board not answering",
+      "noBoard": "no board"
+    },
+    "title": "Set up Prepcook",
+    "lead": "A prep cook does the prep so the chef can cook. Pick the coding agent that does the work, the editor you open its worktrees in, and the sound that tells you a session has finished. Three steps, about a minute.",
+    "steps": {
+      "agent": {
+        "name": "Coding agent",
+        "question": "Which coding agent does the work?",
+        "helper": "Every stage starts from this agent. You can give a stage its own agent or variant later in Settings → Agents."
+      },
+      "editor": {
+        "name": "Editor",
+        "question": "Where do you open code?",
+        "helper": "“Open in editor” opens a session's worktree in this editor. You can change it later in Settings → General.",
+        "customCommand": "Custom command"
+      },
+      "sound": {
+        "name": "Sound",
+        "question": "What should a finished session sound like?",
+        "helper": "Prepcook plays this when a session finishes running. Pick one to hear it.",
+        "none": "No sound"
+      }
+    },
+    "back": "Back",
+    "stepCount": "Step {{current}} of {{total}}",
+    "saving": "Saving…",
+    "permissionsNote": "Prepcook runs coding agents with <code>--dangerously-skip-permissions</code> / <code>--yolo</code> by default. Always review what agents are doing.",
+    "journey": {
+      "title": "What happens to a bug here",
+      "helper": "Each stage is a column on the board. A card moves left to right; Prepcook works the middle, you hold the ends."
+    },
+    "stages": {
+      "todo": {
+        "name": "To Do",
+        "description": "You import a ticket or make a card, and send it to Plan."
+      },
+      "plan": {
+        "name": "Plan",
+        "description": "Reproduces the bug against a local build and writes an RCA. Waits for your approval."
+      },
+      "execute": {
+        "name": "Execute",
+        "description": "The smallest fix for the mechanism the RCA isolated, with regression tests."
+      },
+      "review": {
+        "name": "Review",
+        "description": "An independent review in a fresh worktree; request-changes goes back as a fix round."
+      },
+      "pushMr": {
+        "name": "Push MR",
+        "description": "Pushes the branch and opens the pull request, reproduction attached."
+      },
+      "close": {
+        "name": "Close",
+        "description": "Merged. You close the card once it has shipped."
+      },
+      "cleanUp": {
+        "name": "Clean up",
+        "description": "Worktrees archived; the RCA stays in Knowledge."
+      }
+    },
+    "noTracker": {
+      "title": "No tracker? That's fine.",
+      "description": "Without one, every card is made on the board and the card is the only record. Connect Jira, GitHub Issues or PagerDuty later in Settings → Ticketing."
+    }
   }
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { twMerge } from 'tailwind-merge';
 import { cn } from '../lib/cn';
 import { Tooltip } from './Tooltip';
 
@@ -71,9 +72,13 @@ export const UserAvatar = ({ user, className }: UserAvatarProps) => {
   return (
     <Tooltip content={label}>
       <div
-        className={cn(
-          'flex size-icon-base shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-secondary text-xs font-medium text-low',
-          className
+        // 22px brand-soft circle with 11px bold initials; callers shrink it
+        // with h-/w-/text- classes, which twMerge lets win over these.
+        className={twMerge(
+          cn(
+            'flex size-[22px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[11px] font-bold leading-none text-brand-soft-foreground',
+            className
+          )
         )}
         aria-label={label}
       >

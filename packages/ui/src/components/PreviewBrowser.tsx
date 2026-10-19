@@ -169,13 +169,13 @@ export function PreviewBrowser({
   return (
     <div
       className={cn(
-        'bg-brand/20 w-full h-full flex flex-col overflow-hidden',
+        'bg-primary w-full h-full flex flex-col overflow-hidden',
         className
       )}
     >
       {/* Floating Toolbar */}
       <div className="p-double">
-        <div className="backdrop-blur-sm bg-primary/80 border border-brand/20 flex items-center gap-base p-base rounded-md shadow-md shrink-0">
+        <div className="bg-secondary border flex items-center gap-base p-base rounded-lg shrink-0">
           {/* Mobile: URL expanded mode — full-width URL input with submit/close */}
           {isMobile && mobileUrlExpanded ? (
             <>
@@ -485,7 +485,7 @@ export function PreviewBrowser({
             {screenSize === 'mobile' ? (
               // Phone frame for mobile mode - scales down to fit container
               <div
-                className="bg-primary rounded-[2rem] p-3 shadow-xl origin-center"
+                className="bg-secondary border rounded-[2rem] p-3 shadow-overlay origin-center"
                 style={{
                   transform:
                     mobileScale < 1 ? `scale(${mobileScale})` : undefined,
@@ -511,7 +511,7 @@ export function PreviewBrowser({
               <div
                 className={cn(
                   'rounded-sm border overflow-hidden relative',
-                  screenSize === 'responsive' && 'shadow-lg'
+                  screenSize === 'responsive' && 'shadow-overlay'
                 )}
                 style={getIframeContainerStyle()}
               >

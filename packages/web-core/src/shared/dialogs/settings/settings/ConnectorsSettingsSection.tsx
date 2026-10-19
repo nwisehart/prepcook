@@ -30,7 +30,7 @@ export function ConnectorsSettingsSection() {
       description={t('settings.connectors.description')}
       headerAction={
         <PrimaryButton
-          variant="tertiary"
+          variant="secondary"
           value={t('settings.connectors.refresh')}
           onClick={() => void refetch()}
           disabled={isFetching}
@@ -39,55 +39,53 @@ export function ConnectorsSettingsSection() {
       }
     >
       {isLoading ? (
-        <div className="flex items-center gap-2 py-4">
-          <SpinnerIcon
-            className="size-icon-lg animate-spin text-brand"
-            weight="bold"
-          />
-          <span className="text-normal">
+        <div className="flex items-center gap-2 py-2">
+          <SpinnerIcon className="size-4 animate-spin text-brand" />
+          <span className="text-sm text-normal">
             {t('settings.connectors.probing')}
           </span>
         </div>
       ) : !data?.available ? (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error text-sm">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.connectors.unavailable')}
           {data?.raw && (
-            <pre className="mt-2 whitespace-pre-wrap font-mono text-xs opacity-80">
+            <pre className="mt-2 whitespace-pre-wrap font-mono text-xs text-normal">
               {data.raw}
             </pre>
           )}
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {data.connectors.length === 0 && (
               <p className="text-sm text-low">
                 {t('settings.connectors.empty')}
               </p>
             )}
-            {data.connectors.map((connector) => (
+            {data.connectors.map((connector, index) => (
               <div
                 key={connector.name}
-                className="flex items-start gap-2 border border-border rounded-sm px-base py-half"
+                className={
+                  index > 0
+                    ? 'flex items-start gap-2.5 border-t border-divider py-2'
+                    : 'flex items-start gap-2.5 py-2'
+                }
               >
                 {connector.healthy === true ? (
                   <CheckCircleIcon
-                    className="size-icon-sm text-success mt-0.5 shrink-0"
+                    className="size-4 text-success mt-0.5 shrink-0"
                     weight="fill"
                   />
                 ) : connector.healthy === false ? (
                   <WarningCircleIcon
-                    className="size-icon-sm text-error mt-0.5 shrink-0"
+                    className="size-4 text-error mt-0.5 shrink-0"
                     weight="fill"
                   />
                 ) : (
-                  <QuestionIcon
-                    className="size-icon-sm text-low mt-0.5 shrink-0"
-                    weight="bold"
-                  />
+                  <QuestionIcon className="size-4 text-low mt-0.5 shrink-0" />
                 )}
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-high">
+                  <div className="text-sm font-semibold text-high">
                     {connector.name}
                   </div>
                   <div className="text-xs text-low break-all">
@@ -97,7 +95,7 @@ export function ConnectorsSettingsSection() {
               </div>
             ))}
           </div>
-          <p className="text-sm text-low">
+          <p className="text-[12.5px] leading-[1.45] text-low">
             {t('settings.connectors.fixHelper')}
           </p>
         </>

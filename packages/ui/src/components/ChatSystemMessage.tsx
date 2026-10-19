@@ -8,6 +8,7 @@ interface ChatSystemMessageProps {
   onToggle?: () => void;
 }
 
+/** A system notice: muted, aligned with the step column, one line until expanded. */
 export function ChatSystemMessage({
   content,
   className,
@@ -15,23 +16,22 @@ export function ChatSystemMessage({
   onToggle,
 }: ChatSystemMessageProps) {
   return (
-    <div
-      className={cn(
-        'flex items-start gap-base text-sm text-low cursor-pointer',
-        className
-      )}
-      onClick={onToggle}
-      role="button"
-    >
-      <InfoIcon className="shrink-0 size-icon-base pt-0.5" />
-      <span
+    <div className={cn('flex items-start gap-3 py-1', className)}>
+      <span className="inline-flex size-6 shrink-0 items-center justify-center text-low">
+        <InfoIcon className="size-4" aria-hidden />
+      </span>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
         className={cn(
-          !expanded && 'truncate',
-          expanded && 'whitespace-pre-wrap break-all'
+          'min-w-0 flex-1 rounded-sm pt-1 text-left text-[12.5px] text-low hover:text-normal',
+          'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
+          expanded ? 'whitespace-pre-wrap break-words' : 'truncate'
         )}
       >
         {content}
-      </span>
+      </button>
     </div>
   );
 }

@@ -397,7 +397,7 @@ export function WorkspacesLayout() {
           </Group>
 
           {isRightSidebarVisible && !isCreateMode && (
-            <div className="w-[300px] shrink-0 h-full overflow-hidden">
+            <div className="w-[340px] shrink-0 h-full overflow-hidden">
               <RightSidebar
                 rightMainPanelMode={rightMainPanelMode}
                 selectedWorkspace={selectedWorkspace}
@@ -413,7 +413,7 @@ export function WorkspacesLayout() {
   return (
     <div className="flex flex-1 min-h-0 h-full">
       {isLeftSidebarVisible && (
-        <div className="w-[300px] shrink-0 h-full overflow-hidden">
+        <div className="w-[272px] shrink-0 h-full overflow-hidden">
           <WorkspacesSidebarContainer onScrollToBottom={handleScrollToBottom} />
         </div>
       )}

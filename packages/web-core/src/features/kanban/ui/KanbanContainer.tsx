@@ -7,6 +7,7 @@ import {
   type MouseEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { useProjectContext } from '@/shared/hooks/useProjectContext';
 import { useOrgContext } from '@/shared/hooks/useOrgContext';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
@@ -19,8 +20,10 @@ import { useCurrentKanbanRouteState } from '@/shared/hooks/useCurrentKanbanRoute
 import {
   useUiPreferencesStore,
   resolveKanbanProjectState,
+  usePersistedExpanded,
   KANBAN_ASSIGNEE_FILTER_VALUES,
   KANBAN_PROJECT_VIEW_IDS,
+  PERSIST_KEYS,
   type KanbanFilterState,
   type KanbanSortField,
 } from '@/shared/stores/useUiPreferencesStore';
@@ -30,6 +33,27 @@ import {
   epicColorFromKey,
   PRIORITY_ORDER,
 } from '../model/hooks/useKanbanFilters';
+import {
+  columnDotTone,
+  implementationSession,
+  isTakenOver,
+  isWithinLastWeek,
+  latestPullRequest,
+  needsYouReason,
+  priorityChipLabel,
+  workClassChipTone,
+  workflowStageKey,
+  type NeedsYouReason,
+  type WorkflowStageKey,
+} from '../model/cardSignals';
+import {
+  buildStatusLine,
+  columnHelper,
+  needsYouLabel,
+  planGateDetail,
+  pullRequestLabel,
+} from '../model/cardCopy';
+import { postPlanDecision } from '../model/planDecisionsApi';
 import {
   bulkUpdateIssues,
   type BulkUpdateIssueItem,
@@ -49,7 +73,11 @@ import {
   KanbanBoard,
   KanbanCard,
   KanbanCards,
-  KanbanHeader,
+  KanbanColumnFoldButton,
+  KanbanColumnGroupLabel,
+  KanbanColumnHeader,
+  KanbanColumnSearch,
+  KanbanFoldedColumn,
   type DragStart,
   type DropResult,
 } from '@prepcook/ui/components/KanbanBoard';
@@ -68,26 +96,29 @@ import {
   resolveStage,
   resolveStagePlaybook,
 } from '@/shared/lib/stagePlaybooks';
-import { cardsApi, playbooksApi } from '@/shared/lib/api';
-import {
-  WORK_CLASS_STYLES,
-  cardOrigin,
-  cardWorkClass,
-} from '@/shared/lib/workClass';
+import { cardsApi, playbooksApi, repoApi } from '@/shared/lib/api';
+import { cardOrigin, cardWorkClass } from '@/shared/lib/workClass';
 import { parseIssueExtMetadata } from '@/shared/lib/stagePlaybooks';
 import {
   isTransitionAllowed,
   planningGateError,
 } from '@/shared/lib/workflowTransitions';
-import { KanbanCardContent } from '@prepcook/ui/components/KanbanCardContent';
 import {
-  IssueWorkspaceCard,
-  type WorkspaceWithStats,
-  type WorkspacePr,
+  KanbanArchivedCardContent,
+  KanbanCardContent,
+  type KanbanCardNeedsYou,
+  type KanbanClassLabel,
+} from '@prepcook/ui/components/KanbanCardContent';
+import { formatRelativeTime } from '@prepcook/ui/components/KanbanRelativeTime';
+import type {
+  WorkspacePr,
+  WorkspaceWithStats,
 } from '@prepcook/ui/components/IssueWorkspaceCard';
 import { resolveRelationshipsForIssue } from '@/shared/lib/resolveRelationships';
-import { useLavishSession } from '@/shared/hooks/useLavishSession';
-import { KanbanFilterBar } from '@prepcook/ui/components/KanbanFilterBar';
+import {
+  KanbanBoardTitle,
+  KanbanFilterBar,
+} from '@prepcook/ui/components/KanbanFilterBar';
 import { ViewNavTabs } from '@prepcook/ui/components/ViewNavTabs';
 import { IssueListView } from '@prepcook/ui/components/IssueListView';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
@@ -104,6 +135,16 @@ import type { IssuePriority } from 'shared/remote-types';
 import { useIssueMultiSelect } from '@/shared/hooks/useIssueMultiSelect';
 import { useIssueSelectionStore } from '@/shared/stores/useIssueSelectionStore';
 import { BulkActionBarContainer } from './BulkActionBarContainer';
+
+/** Cleaned-up cards shown before "Show N more". */
+const CLEAN_UP_PAGE_SIZE = 10;
+
+/** Tags the orchestrator sets; the card says them in its status instead. */
+const SYSTEM_TAG_NAMES = new Set([
+  'agent-failed',
+  'taken-over',
+  'needs-column',
+]);
 
 const areStringSetsEqual = (left: string[], right: string[]): boolean => {
   if (left.length !== right.length) {
@@ -150,43 +191,6 @@ function LoadingState() {
 }
 
 /**
- * Workspace chip on a ticket card, with the Open Review chip when a
- * lavish-axi session is live for the workspace's worktree (one polling
- * query per rendered card; react-query dedupes by workspace id).
- */
-function KanbanIssueWorkspaceCard({
-  workspace,
-  onClick,
-  statusName,
-}: {
-  workspace: WorkspaceWithStats;
-  onClick?: () => void;
-  statusName?: string;
-}) {
-  const { data: lavishSession } = useLavishSession(
-    workspace.localWorkspaceId ?? undefined
-  );
-  // In Executing, a finished agent turn means the work is ready to move to
-  // Reviewing — surfaced as a green dot instead of the generic orange.
-  const readyVariant = ['execute', 'executing'].includes(
-    statusName?.trim().toLowerCase() ?? ''
-  )
-    ? 'review'
-    : 'input';
-  return (
-    <IssueWorkspaceCard
-      workspace={workspace}
-      onClick={onClick}
-      showOwner={false}
-      showStatusBadge={false}
-      showNoPrText={false}
-      reviewUrl={lavishSession?.url ?? null}
-      readyVariant={readyVariant}
-    />
-  );
-}
-
-/**
  * KanbanContainer displays the kanban board using data from ProjectContext and OrgContext.
  * Must be rendered within both OrgProvider and ProjectProvider.
  */
@@ -214,6 +218,7 @@ export function KanbanContainer() {
     insertIssueTag,
     removeIssueTag,
     insertTag,
+    updateIssue,
     pullRequests,
     isLoading: projectLoading,
   } = useProjectContext();
@@ -366,9 +371,30 @@ export function KanbanContainer() {
   // Local state (resets on project switch), matching the cheap filter-tab
   // approach: subtasks are matched by extension_metadata.epic_key.
   const [epicFilter, setEpicFilter] = useState<string | null>(null);
+  // "N need you" header pill: when on, the board shows only the cards that
+  // wait on a person. Local, like the epic tabs; resets on project switch.
+  const [needsYouOnly, setNeedsYouOnly] = useState(false);
+  const [cleanUpQuery, setCleanUpQuery] = useState('');
+  const [showAllCleanedUp, setShowAllCleanedUp] = useState(false);
   useEffect(() => {
     setEpicFilter(null);
+    setNeedsYouOnly(false);
+    setCleanUpQuery('');
+    setShowAllCleanedUp(false);
   }, [projectId]);
+
+  // The Clean up column folds to a rail by default; unfolding persists.
+  const [isCleanUpExpanded, setCleanUpExpanded] = usePersistedExpanded(
+    PERSIST_KEYS.kanbanCleanUpExpanded,
+    false
+  );
+
+  // Status lines show elapsed and relative times: re-render once a minute.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Statuses counting as "done" for epic progress: the workflow's terminal
   // columns when present, otherwise the generic done set.
@@ -428,6 +454,39 @@ export function KanbanContainer() {
     currentUserId: userId,
     epicKey: epicFilter,
   });
+
+  // Workflow stage per column, matched on the stage names and their aliases.
+  const stageByStatusId = useMemo(() => {
+    const map = new Map<string, WorkflowStageKey | null>();
+    for (const status of statuses) {
+      map.set(status.id, workflowStageKey(status.name));
+    }
+    return map;
+  }, [statuses]);
+
+  // Why each card in the current view waits on a person: its plan is ready
+  // for a decision in Plan, or it sits in Close with its pull request
+  // merged. The header pill counts these and can filter the board to them.
+  const needsYouByIssueId = useMemo(() => {
+    const map = new Map<string, NeedsYouReason>();
+    for (const issue of filteredIssues) {
+      const reason = needsYouReason(
+        stageByStatusId.get(issue.status_id) ?? null,
+        parseIssueExtMetadata(issue.extension_metadata),
+        getPullRequestsForIssue(issue.id)
+      );
+      if (reason) map.set(issue.id, reason);
+    }
+    return map;
+  }, [filteredIssues, stageByStatusId, getPullRequestsForIssue]);
+
+  const boardIssues = useMemo(
+    () =>
+      needsYouOnly
+        ? filteredIssues.filter((issue) => needsYouByIssueId.has(issue.id))
+        : filteredIssues,
+    [needsYouOnly, filteredIssues, needsYouByIssueId]
+  );
 
   const setKanbanSearchQuery = useCallback(
     (searchQuery: string) => {
@@ -620,9 +679,7 @@ export function KanbanContainer() {
 
     for (const status of statuses) {
       // Filter issues for this status
-      let statusIssues = filteredIssues.filter(
-        (i) => i.status_id === status.id
-      );
+      let statusIssues = boardIssues.filter((i) => i.status_id === status.id);
 
       // Sort within column based on user preference
       statusIssues = [...statusIssues].sort((a, b) => {
@@ -656,7 +713,7 @@ export function KanbanContainer() {
       grouped[status.id] = statusIssues.map((i) => i.id);
     }
     setItems(grouped);
-  }, [filteredIssues, statuses, kanbanFilters]);
+  }, [boardIssues, statuses, kanbanFilters]);
 
   // Sync items from filtered issues when they change
   useEffect(() => {
@@ -988,8 +1045,13 @@ export function KanbanContainer() {
       // queued work, defeating eager evaluation), so the captured value
       // stayed empty and the bulk update silently sent zero changes —
       // cards moved visually while the server never heard about it.
+      // Locate the card by id rather than by index: the Clean up column
+      // lists its cards newest first (and filtered by its own search), so
+      // its visual positions need not match the stored order.
       const sourceItems = [...(items[sourceId] ?? [])];
-      const [moved] = sourceItems.splice(source.index, 1);
+      const sourceIndex = sourceItems.indexOf(draggableId);
+      if (sourceIndex === -1) return;
+      const [moved] = sourceItems.splice(sourceIndex, 1);
       if (!moved) return;
 
       let newItems: Record<string, string[]>;
@@ -1096,11 +1158,25 @@ export function KanbanContainer() {
   const setAnchor = useIssueSelectionStore((s) => s.setAnchor);
 
   // Compute ordered issue IDs for range selection
+  // A folded Clean up column shows no cards, so keyboard range selection
+  // skips them.
   const orderedIssueIds = useMemo(() => {
     const statusOrder =
-      kanbanViewMode === 'kanban' ? visibleStatuses : listViewStatuses;
+      kanbanViewMode === 'kanban'
+        ? visibleStatuses.filter(
+            (status) =>
+              isCleanUpExpanded || stageByStatusId.get(status.id) !== 'cleanUp'
+          )
+        : listViewStatuses;
     return statusOrder.flatMap((status) => items[status.id] ?? []);
-  }, [kanbanViewMode, visibleStatuses, listViewStatuses, items]);
+  }, [
+    kanbanViewMode,
+    visibleStatuses,
+    listViewStatuses,
+    items,
+    isCleanUpExpanded,
+    stageByStatusId,
+  ]);
 
   // Keep the store's ordered IDs in sync
   useEffect(() => {
@@ -1217,73 +1293,610 @@ export function KanbanContainer() {
     [insertTag, projectId]
   );
 
+  // --- Needs-you actions on the card face ---------------------------------
+
+  // Approve and Close card in flight, so their buttons cannot double-fire.
+  const [pendingCardActions, setPendingCardActions] = useState<Set<string>>(
+    () => new Set()
+  );
+  const setCardActionPending = useCallback(
+    (issueId: string, pending: boolean) => {
+      setPendingCardActions((previous) => {
+        const next = new Set(previous);
+        if (pending) next.add(issueId);
+        else next.delete(issueId);
+        return next;
+      });
+    },
+    []
+  );
+
+  const showActionError = useCallback(
+    (err: unknown, fallback: string) =>
+      ConfirmDialog.show({
+        title: t('common:error'),
+        message: err instanceof Error && err.message ? err.message : fallback,
+        confirmText: t('common:ok'),
+        showCancelButton: false,
+      }),
+    [t]
+  );
+
+  // Approve records the plan decision through the approvals endpoint, the
+  // same record a tracker or card decision writes: the spec approval is
+  // set and the card moves to Execute once the plan passes the gate.
+  const handleApprovePlan = useCallback(
+    async (issueId: string) => {
+      setCardActionPending(issueId, true);
+      try {
+        await postPlanDecision(issueId, 'approve');
+      } catch (err) {
+        await showActionError(err, t('kanban.needsYou.decisionFailed'));
+      } finally {
+        setCardActionPending(issueId, false);
+      }
+    },
+    [setCardActionPending, showActionError, t]
+  );
+
+  // Review opens the card's current session (where the plan was written);
+  // a card with no session on this machine opens its panel instead.
+  const handleReviewPlan = useCallback(
+    (issueId: string) => {
+      const session = implementationSession(
+        getWorkspacesForIssue(issueId).map((workspace) => ({
+          name: workspace.name,
+          localWorkspaceId: workspace.local_workspace_id,
+          updatedAt: workspace.updated_at,
+          createdAt: workspace.created_at,
+        })),
+        (localWorkspaceId) => localWorkspaceIds.has(localWorkspaceId)
+      );
+      if (session?.localWorkspaceId) {
+        openIssueWorkspace(issueId, session.localWorkspaceId);
+        return;
+      }
+      openIssue(issueId);
+    },
+    [getWorkspacesForIssue, localWorkspaceIds, openIssueWorkspace, openIssue]
+  );
+
+  // Close card moves a merged card from Close to Clean up, the same status
+  // change the Move to… menu makes; the server runs the clean-up from there.
+  const cleanUpStatusId = useMemo(
+    () =>
+      sortedStatuses.find(
+        (status) => workflowStageKey(status.name) === 'cleanUp'
+      )?.id ?? null,
+    [sortedStatuses]
+  );
+  const handleCloseCard = useCallback(
+    async (issueId: string) => {
+      if (!cleanUpStatusId) return;
+      setCardActionPending(issueId, true);
+      try {
+        await updateIssue(issueId, { status_id: cleanUpStatusId }).persisted;
+      } catch (err) {
+        await showActionError(err, t('kanban.workflow.moveRejected'));
+      } finally {
+        setCardActionPending(issueId, false);
+      }
+    },
+    [cleanUpStatusId, setCardActionPending, showActionError, t, updateIssue]
+  );
+
+  // --- Header facts ----------------------------------------------------------
+
+  // The board's repository (the first one the orchestrator checks out for
+  // it) names the repo and its default branch in the header.
+  const boardRepoId =
+    config?.orchestrator?.project_defaults?.[projectId]?.repo_ids[0] ?? null;
+  const { data: repos } = useQuery({
+    queryKey: ['repos'],
+    queryFn: () => repoApi.list(),
+    enabled: boardRepoId !== null,
+    staleTime: 60_000,
+  });
+  const boardRepo = boardRepoId
+    ? (repos?.find((repo) => repo.id === boardRepoId) ?? null)
+    : null;
+  const ticketing = config?.ticketing;
+  const importsFromTracker =
+    !!ticketing?.enabled && ticketing.project_id === projectId;
+  const activeCardCount = useMemo(
+    () =>
+      filteredIssues.filter((issue) => {
+        const stage = stageByStatusId.get(issue.status_id);
+        return stage !== 'cleanUp';
+      }).length,
+    [filteredIssues, stageByStatusId]
+  );
+  const headerFacts = useMemo(() => {
+    const facts: string[] = [];
+    if (boardRepo?.default_target_branch) {
+      facts.push(boardRepo.default_target_branch);
+    }
+    facts.push(t('kanban.cardCount', { count: activeCardCount }));
+    if (importsFromTracker && ticketing) {
+      facts.push(
+        t('kanban.importsFromTracker', {
+          tracker: t(`kanban.trackerNames.${ticketing.kind}`),
+        })
+      );
+    }
+    return facts;
+  }, [boardRepo, activeCardCount, importsFromTracker, ticketing, t]);
+
+  // --- Card face ---------------------------------------------------------------
+
+  const buildClassLabel = useCallback(
+    (issueId: string, workClass: ReturnType<typeof cardWorkClass>) => {
+      if (!workClass) return null;
+      const label: KanbanClassLabel = {
+        name: t(`kanban.trackerImport.workClass.${workClass}`),
+        tone: workClassChipTone(workClass),
+        actions:
+          workClass === 'investigation'
+            ? [
+                {
+                  label: t('kanban.workClassActions.convertToBug'),
+                  onSelect: () => void handleConvertCard(issueId, 'bug'),
+                },
+                {
+                  label: t('kanban.workClassActions.convertToStory'),
+                  onSelect: () => void handleConvertCard(issueId, 'story'),
+                },
+              ]
+            : undefined,
+      };
+      return label;
+    },
+    [handleConvertCard, t]
+  );
+
   const isLoading = projectLoading || orgLoading;
 
   if (isLoading) {
     return <LoadingState />;
   }
 
-  return (
-    <div className="flex flex-col h-full space-y-base">
-      <div
+  const needsYouCount = needsYouByIssueId.size;
+  const projectMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex size-7 items-center justify-center rounded text-low transition-colors hover:bg-panel hover:text-high"
+          aria-label={t('kanban.projectMenu')}
+        >
+          <DotsThreeIcon className="size-4" weight="bold" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem onClick={openProjectsGuide}>
+          {t('kanban.openProjectsGuide', 'Projects guide')}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => executeAction(Actions.ProjectSettings)}
+        >
+          {t('kanban.editProjectSettings', 'Edit project settings')}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => void ImportFromTrackerDialog.show({ projectId })}
+        >
+          {t('kanban.trackerImport.menuAction', 'Import from tracker')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void handleAnalyzeRcas()}>
+          {t('kanban.analyzeRcas', 'Analyze RCAs')}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => appNavigation.goToProjectKnowledge(projectId)}
+        >
+          {t('kanban.knowledgeMenu', 'Knowledge')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const renderIssueCard = (
+    issue: (typeof issues)[number],
+    index: number,
+    stage: WorkflowStageKey | null
+  ) => {
+    const meta = parseIssueExtMetadata(issue.extension_metadata);
+    const cardTags = getTagObjectsForIssue(issue.id);
+    const workClass = cardWorkClass(
+      meta,
+      cardTags.map((tag) => tag.name)
+    );
+    const cardPullRequests = getPullRequestsForIssue(issue.id);
+    const needsYou = needsYouByIssueId.get(issue.id) ?? null;
+    const sessions = workspacesByIssueId.get(issue.id) ?? [];
+    const runningSession = sessions.find((session) => session.isRunning);
+    const currentSession =
+      implementationSession(sessions, () => true) ?? sessions[0] ?? null;
+    const statusSession = runningSession ?? currentSession;
+    const takenOver =
+      isTakenOver(meta) ||
+      cardTags.some((tag) => tag.name.trim().toLowerCase() === 'taken-over');
+    const agentFailed = cardTags.some(
+      (tag) => tag.name.trim().toLowerCase() === 'agent-failed'
+    );
+
+    const { epicKey: cardEpicKey, jiraKey: cardJiraKey } = issueEpicKeys(issue);
+    const cardEpicSummary = cardJiraKey
+      ? epicSummaries.get(cardJiraKey)
+      : undefined;
+    const mrUrl = typeof meta?.mr_url === 'string' ? meta.mr_url : null;
+    // MR publication state in the Push MR column: claimed-without-url =
+    // pushing, mr_url = pushed, agent-failed tag without url = failed.
+    const pushState =
+      stage === 'pushMr'
+        ? mrUrl
+          ? ('pushed' as const)
+          : agentFailed
+            ? ('failed' as const)
+            : meta?.playbook_started_at != null
+              ? ('pushing' as const)
+              : null
+        : null;
+    // Instant feedback after a forward move into an automated column: the
+    // forward move cleared the claim marker, and the orchestrator (Auto
+    // mode, assignee == me, workflow ticket) claims within one poll tick,
+    // so unclaimed here means "agent starting shortly". Only for boards
+    // this machine's orchestrator actually scans: without that check the
+    // card promised an agent for a project never configured here.
+    const agentQueued =
+      config?.orchestrator?.mode === 'auto' &&
+      (config?.orchestrator?.project_defaults?.[projectId]?.repo_ids.length ??
+        0) > 0 &&
+      pushState == null &&
+      (stage === 'plan' ||
+        stage === 'execute' ||
+        stage === 'review' ||
+        stage === 'pushMr' ||
+        stage === 'cleanUp') &&
+      meta?.playbook_started_at == null &&
+      (meta?.jira != null || meta?.work_class != null) &&
+      (issueAssigneesMap[issue.id] ?? []).some(
+        (member) => member.user_id === userId
+      );
+    const filedFrom = cardOrigin(meta);
+    const origin = filedFrom
+      ? {
+          text: t('kanban.origin.filedBy', {
+            filer: t(`kanban.origin.kinds.${filedFrom.kind}`),
+          }),
+          linkText: filedFrom.url ? t('kanban.origin.thread') : filedFrom.ref,
+          url: filedFrom.url,
+        }
+      : null;
+
+    const statusLine = buildStatusLine(
+      t,
+      {
+        stage,
+        workClass,
+        meta,
+        createdAt: issue.created_at,
+        needsYou,
+        agentFailed,
+        pushState,
+        agentQueued,
+        pullRequests: cardPullRequests,
+        mrUrl,
+        session: statusSession,
+        origin,
+      },
+      now
+    );
+
+    const isActionPending = pendingCardActions.has(issue.id);
+    let needsYouProps: KanbanCardNeedsYou | null = null;
+    if (needsYou?.kind === 'plan') {
+      needsYouProps = {
+        label: needsYouLabel(t, needsYou),
+        detail: planGateDetail(t, needsYou.gate) || null,
+        actions: [
+          {
+            label: t('kanban.needsYou.approve'),
+            variant: 'primary',
+            disabled: isActionPending,
+            onClick: () => void handleApprovePlan(issue.id),
+          },
+          {
+            label: t('workspaces.review'),
+            variant: 'secondary',
+            onClick: () => handleReviewPlan(issue.id),
+          },
+        ],
+      };
+    } else if (needsYou?.kind === 'close') {
+      needsYouProps = {
+        label: needsYouLabel(t, needsYou),
+        actions: cleanUpStatusId
+          ? [
+              {
+                label: t('kanban.closeCard'),
+                variant: 'secondary',
+                disabled: isActionPending,
+                onClick: () => void handleCloseCard(issue.id),
+              },
+            ]
+          : [],
+      };
+    }
+
+    const diffSession = currentSession ?? runningSession ?? null;
+
+    return (
+      <KanbanCard
+        key={issue.id}
+        id={issue.id}
+        name={issue.title}
+        index={index}
+        className="group"
+        onClick={(e) => handleCardClick(issue.id, e)}
+        isOpen={selectedKanbanIssueId === issue.id}
+        isMobile={isMobile}
+        isSelected={selectedIssueIds.has(issue.id)}
+        dragDisabled={isMultiSelectActive}
+        tone={needsYouProps ? 'attention' : 'default'}
+      >
+        <KanbanCardContent
+          displayId={meta?.jira?.key ?? issue.simple_id}
+          title={issue.title}
+          priorityLabel={priorityChipLabel(issue.priority)}
+          classLabel={buildClassLabel(issue.id, workClass)}
+          takenOverLabel={takenOver ? t('kanban.card.takenOver') : null}
+          statusLine={statusLine}
+          needsYou={needsYouProps}
+          diffStats={
+            diffSession && diffSession.filesChanged > 0
+              ? {
+                  filesChanged: diffSession.filesChanged,
+                  linesAdded: diffSession.linesAdded,
+                  linesRemoved: diffSession.linesRemoved,
+                }
+              : null
+          }
+          epicKey={cardEpicKey}
+          epicColor={
+            cardEpicKey
+              ? epicColorFromKey(cardEpicKey)
+              : cardEpicSummary && cardJiraKey
+                ? epicColorFromKey(cardJiraKey)
+                : undefined
+          }
+          epicProgress={cardEpicSummary}
+          // The class chip and the status line already say what the class
+          // and the orchestrator's own tags would.
+          tags={cardTags.filter((tag) => {
+            const name = tag.name.trim().toLowerCase();
+            return name !== workClass && !SYSTEM_TAG_NAMES.has(name);
+          })}
+          assignees={issueAssigneesMap[issue.id] ?? []}
+          relationships={resolveRelationshipsForIssue(
+            issue.id,
+            getRelationshipsForIssue(issue.id),
+            issuesById
+          )}
+          isSubIssue={!!issue.parent_issue_id}
+          isMobile={isMobile}
+          onPriorityClick={(e) => {
+            e.stopPropagation();
+            handleCardPriorityClick(issue.id);
+          }}
+          onAssigneeClick={(e) => {
+            e.stopPropagation();
+            handleCardAssigneeClick(issue.id);
+          }}
+          onMoreActionsClick={() => handleCardMoreActionsClick(issue.id)}
+          tagEditProps={{
+            allTags: tags,
+            selectedTagIds: getTagsForIssue(issue.id).map((it) => it.tag_id),
+            onTagToggle: (tagId) => handleCardTagToggle(issue.id, tagId),
+            onCreateTag: handleCreateTag,
+            renderTagEditor: ({
+              allTags,
+              selectedTagIds,
+              onTagToggle,
+              onCreateTag,
+              trigger,
+            }) => (
+              <SearchableTagDropdownContainer
+                tags={allTags}
+                selectedTagIds={selectedTagIds}
+                onTagToggle={onTagToggle}
+                onCreateTag={onCreateTag}
+                disabled={false}
+                contentClassName=""
+                trigger={trigger}
+              />
+            ),
+          }}
+        />
+      </KanbanCard>
+    );
+  };
+
+  const renderArchivedCard = (
+    issue: (typeof issues)[number],
+    index: number
+  ) => {
+    const meta = parseIssueExtMetadata(issue.extension_metadata);
+    const workClass = cardWorkClass(
+      meta,
+      getTagObjectsForIssue(issue.id).map((tag) => tag.name)
+    );
+    const links: { label: string; url: string }[] = [];
+    const pr = latestPullRequest(getPullRequestsForIssue(issue.id));
+    if (pr) {
+      links.push({ label: pullRequestLabel(t, pr.number), url: pr.url });
+    }
+    if (meta?.spec?.approved_at) {
+      links.push({
+        label:
+          meta.planning?.kind === 'rca' || workClass === 'bug'
+            ? t('kanban.cleanUp.rcaLink')
+            : t('kanban.planChip'),
+        url: `/api/remote/issues/${issue.id}/spec`,
+      });
+    }
+    const classLabel = buildClassLabel(issue.id, workClass);
+    return (
+      <KanbanCard
+        key={issue.id}
+        id={issue.id}
+        name={issue.title}
+        index={index}
+        className="group"
+        onClick={(e) => handleCardClick(issue.id, e)}
+        isOpen={selectedKanbanIssueId === issue.id}
+        isMobile={isMobile}
+        isSelected={selectedIssueIds.has(issue.id)}
+        dragDisabled={isMultiSelectActive}
+        tone="archived"
+      >
+        <KanbanArchivedCardContent
+          displayId={meta?.jira?.key ?? issue.simple_id}
+          title={issue.title}
+          classLabel={classLabel ? { ...classLabel, actions: undefined } : null}
+          when={formatRelativeTime(t, issue.updated_at, now)}
+          links={links}
+        />
+      </KanbanCard>
+    );
+  };
+
+  const renderCleanUpColumn = (
+    status: (typeof visibleStatuses)[number],
+    issueIds: string[],
+    isDropAllowed: boolean
+  ) => {
+    const query = cleanUpQuery.trim().toLowerCase();
+    const cleanedUp = issueIds
+      .map((issueId) => issueMap[issueId])
+      .filter((issue): issue is (typeof issues)[number] => !!issue)
+      .filter((issue) => {
+        if (!query) return true;
+        const meta = parseIssueExtMetadata(issue.extension_metadata);
+        return [issue.title, issue.simple_id, meta?.jira?.key ?? '']
+          .join(' ')
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
+    const shown =
+      showAllCleanedUp || query
+        ? cleanedUp
+        : cleanedUp.slice(0, CLEAN_UP_PAGE_SIZE);
+    const hiddenCount = cleanedUp.length - shown.length;
+    const thisWeek = shown.filter((issue) =>
+      isWithinLastWeek(issue.updated_at, now)
+    );
+    const earlier = shown.filter(
+      (issue) => !isWithinLastWeek(issue.updated_at, now)
+    );
+
+    return (
+      <KanbanBoard
+        key={status.id}
         className={cn(
-          'px-double pt-double space-y-base',
-          isMobile && 'px-base pt-base'
+          'border-l border-dashed border-low/40 pl-3 transition-opacity',
+          !isDropAllowed && 'opacity-40'
         )}
       >
-        <div className="flex items-center gap-half">
-          <h2 className={cn('text-2xl font-medium', isMobile && 'text-lg')}>
-            {projectName}
-          </h2>
+        <KanbanColumnHeader
+          name={status.name}
+          count={issueIds.length}
+          dot={columnDotTone('cleanUp')}
+          helper={columnHelper(t, 'cleanUp')}
+          trailing={
+            <KanbanColumnFoldButton
+              label={t('kanban.cleanUp.fold', { name: status.name })}
+              onFold={() => setCleanUpExpanded(false)}
+            />
+          }
+        />
+        <KanbanColumnSearch
+          value={cleanUpQuery}
+          onChange={setCleanUpQuery}
+          placeholder={t('kanban.cleanUp.searchPlaceholder')}
+        />
+        <KanbanCards id={status.id} isDropDisabled={!isDropAllowed}>
+          {thisWeek.length > 0 && (
+            <KanbanColumnGroupLabel>
+              {t('kanban.cleanUp.thisWeek')}
+            </KanbanColumnGroupLabel>
+          )}
+          {thisWeek.map((issue, index) => renderArchivedCard(issue, index))}
+          {earlier.length > 0 && (
+            <KanbanColumnGroupLabel>
+              {t('kanban.cleanUp.earlier')}
+            </KanbanColumnGroupLabel>
+          )}
+          {earlier.map((issue, index) =>
+            renderArchivedCard(issue, thisWeek.length + index)
+          )}
+          {cleanedUp.length === 0 && (
+            <p className="m-0 px-0.5 text-xs text-low">
+              {query
+                ? t('kanban.cleanUp.noMatches')
+                : t('kanban.cleanUp.empty')}
+            </p>
+          )}
+        </KanbanCards>
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAllCleanedUp(true)}
+            className="self-start px-0.5 py-1 text-xs font-semibold text-brand-secondary hover:underline"
+          >
+            {t('kanban.cleanUp.showMore', { n: hiddenCount })}
+          </button>
+        )}
+      </KanbanBoard>
+    );
+  };
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="p-half rounded-sm text-low hover:text-normal hover:bg-secondary transition-colors"
-                aria-label="Project menu"
-              >
-                <DotsThreeIcon className="size-icon-sm" weight="bold" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={openProjectsGuide}>
-                {t('kanban.openProjectsGuide', 'Projects guide')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => executeAction(Actions.ProjectSettings)}
-              >
-                {t('kanban.editProjectSettings', 'Edit project settings')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => void ImportFromTrackerDialog.show({ projectId })}
-              >
-                {t('kanban.trackerImport.menuAction', 'Import from tracker')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void handleAnalyzeRcas()}>
-                {t('kanban.analyzeRcas', 'Analyze RCAs')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => appNavigation.goToProjectKnowledge(projectId)}
-              >
-                {t('kanban.knowledgeMenu', 'Knowledge')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div
+  return (
+    <div className="flex h-full flex-col gap-5 bg-primary">
+      <div
+        className={cn(
+          'flex flex-col gap-3 px-7 pt-[22px]',
+          isMobile && 'px-4 pt-4'
+        )}
+      >
+        <header
           className={cn(
-            'flex items-start gap-base',
-            isMobile ? 'flex-col' : 'flex-wrap'
+            'flex items-center gap-3',
+            isMobile ? 'flex-col items-stretch' : 'flex-wrap'
           )}
         >
-          <ViewNavTabs
-            activeView={kanbanViewMode}
-            onViewChange={setKanbanViewMode}
-            hiddenStatuses={hiddenStatuses}
-            selectedStatusId={listViewStatusFilter}
-            onStatusSelect={setListViewStatusFilter}
+          <KanbanBoardTitle
+            title={projectName}
+            isMobile={isMobile}
+            menu={projectMenu}
+            repo={boardRepo ? boardRepo.display_name || boardRepo.name : null}
+            facts={headerFacts}
+            needsYou={
+              needsYouCount > 0 || needsYouOnly
+                ? {
+                    label: t('kanban.needsYou.count', {
+                      count: needsYouCount,
+                    }),
+                    active: needsYouOnly,
+                    onToggle: () => setNeedsYouOnly((value) => !value),
+                    toggleLabel: needsYouOnly
+                      ? t('kanban.needsYou.showAll')
+                      : t('kanban.needsYou.showOnly'),
+                  }
+                : null
+            }
           />
           <KanbanFilterBar
             isFiltersDialogOpen={isFiltersDialogOpen}
@@ -1313,66 +1926,83 @@ export function KanbanContainer() {
             shouldAnimateCreateButton={shouldAnimateCreateButton}
             renderFiltersDialog={(props) => <KanbanFiltersDialog {...props} />}
             isMobile={isMobile}
+            viewSwitcher={
+              <ViewNavTabs
+                activeView={kanbanViewMode}
+                onViewChange={setKanbanViewMode}
+                hiddenStatuses={hiddenStatuses}
+                selectedStatusId={listViewStatusFilter}
+                onStatusSelect={setListViewStatusFilter}
+              />
+            }
           />
-        </div>
-      </div>
+        </header>
 
-      {/* Epic tabs: filter the board to one epic + its subtasks. */}
-      {epicSummaries.size > 0 && (
-        <div className="flex items-center gap-1 px-double py-half overflow-x-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => setEpicFilter(null)}
-            className={cn(
-              'shrink-0 rounded-sm px-2 py-0.5 text-xs border transition-colors',
-              epicFilter === null
-                ? 'border-brand text-high bg-brand/10'
-                : 'border-border text-low hover:text-high'
-            )}
-          >
-            {t('kanban.epicTabs.all')}
-          </button>
-          {[...epicSummaries.entries()].map(([key, summary]) => (
+        {/* Epic chips: filter the board to one epic + its subtasks. */}
+        {epicSummaries.size > 0 && (
+          <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto">
             <button
-              key={key}
               type="button"
-              onClick={() =>
-                setEpicFilter((current) => (current === key ? null : key))
-              }
-              title={summary.title}
+              onClick={() => setEpicFilter(null)}
+              aria-pressed={epicFilter === null}
               className={cn(
-                'shrink-0 inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs border transition-colors',
-                epicFilter === key
-                  ? 'border-brand text-high bg-brand/10'
-                  : 'border-border text-low hover:text-high'
+                'inline-flex h-[22px] shrink-0 items-center rounded-full border px-2.5 text-xs font-medium transition-colors',
+                epicFilter === null
+                  ? 'border-transparent bg-brand-soft text-brand-soft-foreground'
+                  : 'border-border bg-secondary text-normal hover:text-high'
               )}
             >
-              <span
-                className="h-2 w-2 rounded-full shrink-0"
-                style={{ backgroundColor: epicColorFromKey(key) }}
-              />
-              {key}
-              <span className="text-low">
-                {summary.done}/{summary.total}
-              </span>
+              {t('kanban.epicTabs.all')}
             </button>
-          ))}
-        </div>
-      )}
+            {[...epicSummaries.entries()].map(([key, summary]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() =>
+                  setEpicFilter((current) => (current === key ? null : key))
+                }
+                aria-pressed={epicFilter === key}
+                title={summary.title}
+                className={cn(
+                  'inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors',
+                  epicFilter === key
+                    ? 'border-transparent bg-brand-soft text-brand-soft-foreground'
+                    : 'border-border bg-secondary text-normal hover:text-high'
+                )}
+              >
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: epicColorFromKey(key) }}
+                />
+                <span className="font-mono">{key}</span>
+                <span className="text-low">
+                  {summary.done}/{summary.total}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {kanbanViewMode === 'kanban' ? (
         visibleStatuses.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-1 items-center justify-center">
             <p className="text-low">{t('kanban.noVisibleStatuses')}</p>
           </div>
         ) : (
-          <div className="flex-1 overflow-x-auto px-double">
+          <div
+            className={cn(
+              'min-h-0 flex-1 overflow-auto px-7 pb-7',
+              isMobile && 'px-4 pb-4'
+            )}
+          >
             <KanbanProvider
               onDragEnd={handleDragEnd}
               onDragStart={handleDragStart}
             >
               {visibleStatuses.map((status) => {
                 const issueIds = items[status.id] ?? [];
+                const stage = stageByStatusId.get(status.id) ?? null;
                 // During a drag, gray out and disable columns the workflow
                 // does not allow the dragged issue to move into.
                 const draggedIssue = draggedIssueId
@@ -1391,6 +2021,24 @@ export function KanbanContainer() {
                       draggedIssue?.extension_metadata
                     ) === null);
 
+                if (stage === 'cleanUp') {
+                  if (!isCleanUpExpanded) {
+                    return (
+                      <KanbanFoldedColumn
+                        key={status.id}
+                        name={status.name}
+                        count={issueIds.length}
+                        label={t('kanban.cleanUp.unfold', {
+                          name: status.name,
+                          count: issueIds.length,
+                        })}
+                        onUnfold={() => setCleanUpExpanded(true)}
+                      />
+                    );
+                  }
+                  return renderCleanUpColumn(status, issueIds, isDropAllowed);
+                }
+
                 return (
                   <KanbanBoard
                     key={status.id}
@@ -1399,283 +2047,19 @@ export function KanbanContainer() {
                       !isDropAllowed && 'opacity-40'
                     )}
                   >
-                    <KanbanHeader>
-                      <div className="border-t sticky border-b top-0 z-20 flex shrink-0 items-center gap-2 p-base bg-secondary">
-                        <div
-                          className="h-2 w-2 rounded-full shrink-0"
-                          style={{ backgroundColor: `hsl(${status.color})` }}
-                        />
-                        <p className="m-0 text-sm">{status.name}</p>
-                      </div>
-                    </KanbanHeader>
+                    <KanbanColumnHeader
+                      name={status.name}
+                      count={issueIds.length}
+                      dot={
+                        stage ? columnDotTone(stage) : { color: status.color }
+                      }
+                      helper={stage ? columnHelper(t, stage) : null}
+                    />
                     <KanbanCards id={status.id} isDropDisabled={!isDropAllowed}>
                       {issueIds.map((issueId, index) => {
                         const issue = issueMap[issueId];
                         if (!issue) return null;
-                        const issueWorkspaces =
-                          workspacesByIssueId.get(issue.id) ?? [];
-                        const workspaceIdsShownOnCard = new Set(
-                          issueWorkspaces.map((workspace) => workspace.id)
-                        );
-                        const issueCardPullRequests = getPullRequestsForIssue(
-                          issue.id
-                        ).filter((pr) => {
-                          if (!pr.workspace_id) {
-                            return true;
-                          }
-
-                          // If this PR is already visible under a workspace card,
-                          // do not render it again at the issue level.
-                          return !workspaceIdsShownOnCard.has(pr.workspace_id);
-                        });
-
-                        const { epicKey: cardEpicKey, jiraKey: cardJiraKey } =
-                          issueEpicKeys(issue);
-                        const cardEpicSummary = cardJiraKey
-                          ? epicSummaries.get(cardJiraKey)
-                          : undefined;
-                        // Approved plan chip: link to the persisted spec
-                        // artifact once the Lavish gate approved it.
-                        const cardMeta =
-                          issue.extension_metadata &&
-                          typeof issue.extension_metadata === 'object'
-                            ? (issue.extension_metadata as Record<
-                                string,
-                                unknown
-                              >)
-                            : {};
-                        const cardSpec =
-                          cardMeta.spec && typeof cardMeta.spec === 'object'
-                            ? (cardMeta.spec as Record<string, unknown>)
-                            : null;
-                        const cardSpecUrl =
-                          cardSpec?.approved_at != null
-                            ? `/api/remote/issues/${issue.id}/spec`
-                            : null;
-                        // MR publication state in the Push MR column:
-                        // claimed-without-url = pushing, mr_url = pushed,
-                        // agent-failed tag without url = failed.
-                        const cardMrUrl =
-                          typeof cardMeta.mr_url === 'string'
-                            ? cardMeta.mr_url
-                            : null;
-                        const cardPushState = ['push mr', 'pushed mr'].includes(
-                          status.name.trim().toLowerCase()
-                        )
-                          ? cardMrUrl
-                            ? ('pushed' as const)
-                            : getTagObjectsForIssue(issue.id).some(
-                                  (tag) =>
-                                    tag.name.toLowerCase() === 'agent-failed'
-                                )
-                              ? ('failed' as const)
-                              : cardMeta.playbook_started_at != null
-                                ? ('pushing' as const)
-                                : null
-                          : null;
-
-                        // Instant feedback after a forward move into an
-                        // automated column: the forward move cleared the
-                        // claim marker, and the orchestrator (Auto mode,
-                        // assignee == me, workflow ticket) claims within
-                        // one poll tick — so unclaimed here means "agent
-                        // starting shortly". Push MR's own chips take over
-                        // once claimed.
-                        const cardAgentQueued =
-                          config?.orchestrator?.mode === 'auto' &&
-                          // ...and this machine's orchestrator actually scans
-                          // this board. Without the check the chip promised an
-                          // agent for a project that was never configured here
-                          // (or whose id has gone stale), leaving tickets
-                          // "queued" indefinitely with the reason only visible
-                          // in the log.
-                          (config?.orchestrator?.project_defaults?.[projectId]
-                            ?.repo_ids.length ?? 0) > 0 &&
-                          cardPushState == null &&
-                          [
-                            'plan',
-                            'planning',
-                            'execute',
-                            'executing',
-                            'review',
-                            'reviewing',
-                            'push mr',
-                            'pushed mr',
-                            'clean up',
-                            'clean-up',
-                            'cleanup',
-                          ].includes(status.name.trim().toLowerCase()) &&
-                          cardMeta.playbook_started_at == null &&
-                          (cardMeta.jira != null ||
-                            cardMeta.work_class != null) &&
-                          (issueAssigneesMap[issue.id] ?? []).some(
-                            (member) => member.user_id === userId
-                          );
-
-                        const cardTags = getTagObjectsForIssue(issue.id);
-                        const cardExt = parseIssueExtMetadata(
-                          issue.extension_metadata
-                        );
-                        const cardClass = cardWorkClass(
-                          cardExt,
-                          cardTags.map((tag) => tag.name)
-                        );
-                        const cardClassLabel = cardClass
-                          ? {
-                              name: t(
-                                `kanban.trackerImport.workClass.${cardClass}`
-                              ),
-                              className: WORK_CLASS_STYLES[cardClass],
-                              actions:
-                                cardClass === 'investigation'
-                                  ? [
-                                      {
-                                        label: t(
-                                          'kanban.workClassActions.convertToBug'
-                                        ),
-                                        onSelect: () =>
-                                          void handleConvertCard(
-                                            issue.id,
-                                            'bug'
-                                          ),
-                                      },
-                                      {
-                                        label: t(
-                                          'kanban.workClassActions.convertToStory'
-                                        ),
-                                        onSelect: () =>
-                                          void handleConvertCard(
-                                            issue.id,
-                                            'story'
-                                          ),
-                                      },
-                                    ]
-                                  : undefined,
-                            }
-                          : null;
-                        const filedFrom = cardOrigin(cardExt);
-                        const cardOriginLine = filedFrom
-                          ? {
-                              text: t('kanban.origin.filedBy', {
-                                filer: t(
-                                  `kanban.origin.kinds.${filedFrom.kind}`
-                                ),
-                              }),
-                              linkText: filedFrom.url
-                                ? t('kanban.origin.thread')
-                                : filedFrom.ref,
-                              url: filedFrom.url,
-                            }
-                          : null;
-
-                        return (
-                          <KanbanCard
-                            key={issue.id}
-                            id={issue.id}
-                            name={issue.title}
-                            index={index}
-                            className="group"
-                            onClick={(e) => handleCardClick(issue.id, e)}
-                            isOpen={selectedKanbanIssueId === issue.id}
-                            isMobile={isMobile}
-                            isSelected={selectedIssueIds.has(issue.id)}
-                            dragDisabled={isMultiSelectActive}
-                          >
-                            <KanbanCardContent
-                              displayId={issue.simple_id}
-                              title={issue.title}
-                              description={issue.description}
-                              epicKey={cardEpicKey}
-                              epicColor={
-                                cardEpicKey
-                                  ? epicColorFromKey(cardEpicKey)
-                                  : cardEpicSummary && cardJiraKey
-                                    ? epicColorFromKey(cardJiraKey)
-                                    : undefined
-                              }
-                              epicProgress={cardEpicSummary}
-                              specUrl={cardSpecUrl}
-                              pushState={cardPushState}
-                              mrUrl={cardMrUrl}
-                              agentQueued={cardAgentQueued}
-                              classLabel={cardClassLabel}
-                              origin={cardOriginLine}
-                              priority={issue.priority}
-                              // The class label shows the class; its tag
-                              // would say it twice.
-                              tags={cardTags.filter(
-                                (tag) =>
-                                  tag.name.trim().toLowerCase() !== cardClass
-                              )}
-                              assignees={issueAssigneesMap[issue.id] ?? []}
-                              pullRequests={issueCardPullRequests}
-                              relationships={resolveRelationshipsForIssue(
-                                issue.id,
-                                getRelationshipsForIssue(issue.id),
-                                issuesById
-                              )}
-                              isSubIssue={!!issue.parent_issue_id}
-                              isMobile={isMobile}
-                              onPriorityClick={(e) => {
-                                e.stopPropagation();
-                                handleCardPriorityClick(issue.id);
-                              }}
-                              onAssigneeClick={(e) => {
-                                e.stopPropagation();
-                                handleCardAssigneeClick(issue.id);
-                              }}
-                              onMoreActionsClick={() =>
-                                handleCardMoreActionsClick(issue.id)
-                              }
-                              tagEditProps={{
-                                allTags: tags,
-                                selectedTagIds: getTagsForIssue(issue.id).map(
-                                  (it) => it.tag_id
-                                ),
-                                onTagToggle: (tagId) =>
-                                  handleCardTagToggle(issue.id, tagId),
-                                onCreateTag: handleCreateTag,
-                                renderTagEditor: ({
-                                  allTags,
-                                  selectedTagIds,
-                                  onTagToggle,
-                                  onCreateTag,
-                                  trigger,
-                                }) => (
-                                  <SearchableTagDropdownContainer
-                                    tags={allTags}
-                                    selectedTagIds={selectedTagIds}
-                                    onTagToggle={onTagToggle}
-                                    onCreateTag={onCreateTag}
-                                    disabled={false}
-                                    contentClassName=""
-                                    trigger={trigger}
-                                  />
-                                ),
-                              }}
-                            />
-                            {issueWorkspaces.length > 0 && (
-                              <div className="mt-base flex flex-col gap-half">
-                                {issueWorkspaces.map((workspace) => (
-                                  <KanbanIssueWorkspaceCard
-                                    key={workspace.id}
-                                    workspace={workspace}
-                                    statusName={status.name}
-                                    onClick={
-                                      workspace.localWorkspaceId
-                                        ? () =>
-                                            openIssueWorkspace(
-                                              issue.id,
-                                              workspace.localWorkspaceId!
-                                            )
-                                        : undefined
-                                    }
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </KanbanCard>
-                        );
+                        return renderIssueCard(issue, index, stage);
                       })}
                     </KanbanCards>
                   </KanbanBoard>
@@ -1685,7 +2069,7 @@ export function KanbanContainer() {
           </div>
         )
       ) : (
-        <div className="flex-1 overflow-y-auto px-double">
+        <div className={cn('flex-1 overflow-y-auto px-7', isMobile && 'px-4')}>
           <KanbanProvider onDragEnd={handleDragEnd} className="!block !w-full">
             <IssueListView
               statuses={listViewStatuses}

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep, isEqual } from 'lodash';
-import { SpinnerIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import type {
   EvidenceKind,
@@ -16,6 +15,7 @@ import {
   SettingsCard,
   SettingsCheckbox,
   SettingsField,
+  SettingsLoading,
   SettingsSaveBar,
   SettingsSelect,
 } from './SettingsComponents';
@@ -156,21 +156,13 @@ export function EvidenceSettingsSection() {
   };
 
   if (loading || descriptorsQuery.isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.general.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.general.loading')} />;
   }
 
   if (!config || descriptorsQuery.isError) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.general.loadError')}
         </div>
       </div>
@@ -187,14 +179,14 @@ export function EvidenceSettingsSection() {
   const boardIds = Object.keys(draft.boards);
 
   return (
-    <div className="space-y-6">
+    <>
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.evidence.save.success')}
         </div>
       )}
@@ -229,9 +221,9 @@ export function EvidenceSettingsSection() {
             return (
               <div
                 key={id}
-                className="space-y-4 rounded-sm border border-border p-base"
+                className="flex flex-col gap-4 rounded-lg border border-border px-4 py-3"
               >
-                <div className="text-sm font-medium text-high">
+                <div className="text-sm font-semibold text-high">
                   {boardName(id)}
                 </div>
                 <SettingsField
@@ -257,12 +249,13 @@ export function EvidenceSettingsSection() {
                         'settings.evidence.boards.skipGlobalHelper'
                       )}
                     >
-                      <div className="flex flex-wrap gap-4">
+                      <div className="flex flex-wrap gap-x-5 gap-y-2">
                         {descriptors.map((descriptor) => {
                           const kind = descriptor.kind as EvidenceKind;
                           return (
                             <SettingsCheckbox
                               key={kind}
+                              variant="checkbox"
                               id={`evidence-skip-${id}-${kind}`}
                               label={descriptor.display_name}
                               checked={board.skip_global.includes(kind)}
@@ -315,6 +308,6 @@ export function EvidenceSettingsSection() {
           setDirty(false);
         }}
       />
-    </div>
+    </>
   );
 }

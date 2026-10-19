@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isEqual } from 'lodash';
-import { SpinnerIcon } from '@phosphor-icons/react';
 import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
 import type { ProjectAutomationDefaults } from 'shared/types';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
@@ -9,6 +8,7 @@ import { DEFAULT_PLAYBOOKS } from '@/shared/lib/stagePlaybooks';
 import {
   SettingsCard,
   SettingsField,
+  SettingsLoading,
   SettingsSaveBar,
   SettingsSelect,
   SettingsTextarea,
@@ -145,6 +145,16 @@ export function PlaybooksSettingsSection() {
     [scope]
   );
 
+  // Puts the shipped text back for every stage that has one. Global scope
+  // only; a board's overrides are cleared one stage at a time.
+  const resetToShippedTexts = useCallback(() => {
+    setDirty(true);
+    setDraft((prev) => ({ ...prev, ...DEFAULT_PLAYBOOKS }));
+  }, []);
+  const atShippedTexts = Object.entries(DEFAULT_PLAYBOOKS).every(
+    ([key, text]) => draft[key] === text
+  );
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -188,21 +198,13 @@ export function PlaybooksSettingsSection() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.general.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.general.loading')} />;
   }
 
   if (!config) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.general.loadError')}
         </div>
       </div>
@@ -213,13 +215,13 @@ export function PlaybooksSettingsSection() {
     <>
       {/* Status messages */}
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.playbooks.save.success')}
         </div>
       )}
@@ -249,6 +251,7 @@ export function PlaybooksSettingsSection() {
                     : { kind: 'board', projectId: value }
                 )
               }
+              className="max-w-[360px]"
             />
           </SettingsField>
         )}
@@ -270,6 +273,7 @@ export function PlaybooksSettingsSection() {
             <SettingsField
               key={key}
               label={key}
+              className="[&>label]:font-mono [&>label]:text-[13px]"
               description={
                 scope.kind === 'global'
                   ? t('settings.playbooks.entry.helper')
@@ -287,7 +291,7 @@ export function PlaybooksSettingsSection() {
               {canReset && (
                 <div className="flex justify-end">
                   <PrimaryButton
-                    variant="tertiary"
+                    variant="secondary"
                     value={t('settings.playbooks.reset')}
                     onClick={() => updatePlaybook(key, defaultValue)}
                   />
@@ -296,7 +300,7 @@ export function PlaybooksSettingsSection() {
               {overridden && (
                 <div className="flex justify-end">
                   <PrimaryButton
-                    variant="tertiary"
+                    variant="secondary"
                     value={t('settings.playbooks.entry.useGlobal')}
                     onClick={() => clearOverride(key)}
                   />
@@ -312,6 +316,8 @@ export function PlaybooksSettingsSection() {
         saving={saving}
         onSave={handleSave}
         onDiscard={handleDiscard}
+        onReset={scope.kind === 'global' ? resetToShippedTexts : undefined}
+        resetDisabled={atShippedTexts}
       />
     </>
   );

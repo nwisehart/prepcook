@@ -31,7 +31,10 @@ const RELATIONSHIP_ICONS = {
   duplicated_by: CopyIcon,
 } as const;
 
-function getRelationshipLabel(displayType: RelationshipDisplayType): string {
+/** Short label for a relationship, as the badge and the panel show it. */
+export function relationshipLabel(
+  displayType: RelationshipDisplayType
+): string {
   switch (displayType) {
     case 'blocks':
       return 'blocks';
@@ -54,7 +57,7 @@ export function RelationshipBadge({
   onClick,
 }: RelationshipBadgeProps) {
   const Icon = RELATIONSHIP_ICONS[displayType];
-  const label = getRelationshipLabel(displayType);
+  const label = relationshipLabel(displayType);
   const isBlocking = displayType === 'blocks' || displayType === 'blocked_by';
 
   return (
@@ -73,18 +76,18 @@ export function RelationshipBadge({
           : undefined
       }
       className={cn(
-        'inline-flex items-center gap-half',
-        'h-5 px-half',
-        'rounded-sm',
-        'text-sm font-medium',
+        'inline-flex shrink-0 items-center gap-1',
+        'h-[22px] px-2',
+        'rounded-full',
+        'text-xs font-medium leading-none',
         'whitespace-nowrap',
-        isBlocking ? 'bg-error/10 text-error' : 'bg-panel text-low',
+        isBlocking ? 'bg-error-soft text-error' : 'bg-panel text-normal',
         onClick && 'cursor-pointer hover:opacity-80',
         className
       )}
     >
-      <Icon className="size-icon-xs" weight="bold" />
-      <span>
+      <Icon className="size-3" weight="bold" />
+      <span className={cn(compact && 'font-mono')}>
         {compact ? relatedIssueDisplayId : `${label} ${relatedIssueDisplayId}`}
       </span>
     </span>

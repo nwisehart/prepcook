@@ -5,7 +5,6 @@ import { cn } from '../lib/cn';
 import {
   DotsThreeIcon,
   SmileyIcon,
-  ArrowUpIcon,
   PencilSimpleIcon,
   TrashIcon,
   ArrowBendUpLeftIcon,
@@ -19,7 +18,8 @@ import {
 } from './RadixTooltip';
 import { ErrorAlert } from './ErrorAlert';
 import { UserAvatar, type UserAvatarUser } from './UserAvatar';
-import { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
+import { IssuePanelSection } from './IssuePanelSection';
+import { formatRelativeTime } from './KanbanRelativeTime';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -44,20 +44,6 @@ export interface ReactionGroup {
   hasReacted: boolean;
   reactionId: string | undefined;
   userNames: string[];
-}
-
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays > 0) return `${diffDays}d`;
-  if (diffHours > 0) return `${diffHours}h`;
-  if (diffMinutes > 0) return `${diffMinutes}m`;
-  return 'now';
 }
 
 interface DropzoneProps {
@@ -135,21 +121,22 @@ export function IssueCommentsSection({
   const { t } = useTranslation('common');
 
   return (
-    <CollapsibleSectionHeader
-      title={t('kanban.comments')}
+    <IssuePanelSection
+      label={t('kanban.panel.activity')}
       persistKey="kanban-issue-comments"
-      defaultExpanded={true}
-      actions={[]}
+      collapsible
     >
-      <div className="p-base flex flex-col gap-base border-t">
-        {/* Comments list */}
+      <div className="flex flex-col gap-1">
+        {/* Timeline */}
         {isLoading ? (
-          <div className="flex flex-col gap-double animate-pulse">
-            <div className="h-4 bg-secondary rounded w-3/4" />
-            <div className="h-4 bg-secondary rounded w-1/2" />
+          <div className="flex animate-pulse flex-col gap-2 py-1.5">
+            <div className="h-3.5 w-3/4 rounded bg-panel" />
+            <div className="h-3.5 w-1/2 rounded bg-panel" />
           </div>
         ) : comments.length === 0 ? (
-          <p className="text-low">{t('kanban.noCommentsYet')}</p>
+          <p className="m-0 py-1.5 text-[13px] text-low">
+            {t('kanban.noCommentsYet')}
+          </p>
         ) : (
           comments.map((comment) => (
             <CommentItem
@@ -170,17 +157,17 @@ export function IssueCommentsSection({
           ))
         )}
 
-        {/* Comment Input with WYSIWYG + dropzone */}
+        {/* Composer, with file drop */}
         <div
           {...dropzoneProps?.getRootProps()}
-          className="relative flex flex-col gap-double bg-secondary border border-border rounded-sm p-double"
+          className="relative mt-1 flex flex-col gap-2 rounded border border-border bg-surface-raised px-3 py-2 focus-within:border-brand"
         >
           <input {...dropzoneProps?.getInputProps()} />
           {renderEditor({
             value: commentInput,
             onChange: onCommentInputChange,
-            placeholder: t('kanban.enterCommentPlaceholder'),
-            className: 'min-h-[20px]',
+            placeholder: t('kanban.panel.commentPlaceholder'),
+            className: 'min-h-[20px] text-[13px]',
             localAttachments,
             onCmdEnter: onSubmitComment,
             onPasteFiles,
@@ -188,15 +175,13 @@ export function IssueCommentsSection({
             editorRef: commentEditorRef,
           })}
           {attachmentError && (
-            <div className="mb-half">
-              <ErrorAlert
-                message={attachmentError}
-                onDismiss={onDismissAttachmentError}
-                dismissLabel={t('buttons.close')}
-              />
-            </div>
+            <ErrorAlert
+              message={attachmentError}
+              onDismiss={onDismissAttachmentError}
+              dismissLabel={t('buttons.close')}
+            />
           )}
-          <div className="flex items-center justify-end gap-half">
+          <div className="flex items-center justify-end gap-1">
             {onBrowseAttachment && (
               <TooltipProvider>
                 <Tooltip>
@@ -204,15 +189,10 @@ export function IssueCommentsSection({
                     <button
                       type="button"
                       onClick={onBrowseAttachment}
-                      title={t('kanban.attachFile')}
-                      className={cn(
-                        'size-[22px] rounded-full bg-panel border border-border',
-                        'flex items-center justify-center',
-                        'text-low hover:text-normal transition-colors'
-                      )}
+                      className="flex size-7 items-center justify-center rounded-sm text-low transition-colors hover:bg-panel hover:text-high"
                       aria-label={t('kanban.attachFile')}
                     >
-                      <PaperclipIcon size={12} />
+                      <PaperclipIcon className="size-3.5" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>{t('kanban.attachFileHint')}</TooltipContent>
@@ -223,18 +203,13 @@ export function IssueCommentsSection({
               type="button"
               onClick={onSubmitComment}
               disabled={!commentInput.trim() || isUploading}
-              className={cn(
-                'size-[22px] rounded-full bg-panel border border-border',
-                'flex items-center justify-center',
-                'text-high hover:bg-secondary transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
-              )}
+              className="h-7 rounded-sm px-2 text-[13px] font-semibold text-brand-secondary transition-colors hover:bg-panel disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <ArrowUpIcon size={12} weight="bold" />
+              {t('kanban.panel.post')}
             </button>
           </div>
           {dropzoneProps?.isDragActive && (
-            <div className="absolute inset-0 z-50 bg-primary/80 backdrop-blur-sm border-2 border-dashed border-brand rounded flex items-center justify-center">
+            <div className="absolute inset-0 z-50 flex items-center justify-center rounded border-2 border-dashed border-brand bg-primary/80 backdrop-blur-sm">
               <p className="text-sm font-medium text-high">
                 {t('kanban.dropFilesHere')}
               </p>
@@ -242,7 +217,7 @@ export function IssueCommentsSection({
           )}
         </div>
       </div>
-    </CollapsibleSectionHeader>
+    </IssuePanelSection>
   );
 }
 
@@ -276,135 +251,146 @@ function CommentItem({
   renderEditor,
 }: CommentItemProps) {
   const { t } = useTranslation('common');
-  const timeAgo = formatRelativeTime(comment.createdAt);
+  const timeAgo = formatRelativeTime(t, comment.createdAt);
 
   return (
-    <div className="flex flex-col gap-base">
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-base">
-          {comment.author ? (
-            <UserAvatar user={comment.author} className="size-4" />
-          ) : (
-            <div className="size-4 rounded-full bg-secondary border border-border flex items-center justify-center text-[10px] text-low">
-              {comment.authorName.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <span className="font-medium text-low">{comment.authorName}</span>
-          <span className="font-medium text-low">·</span>
-          <span className="font-light text-low">{timeAgo}</span>
-        </div>
-        {/* Menu dropdown - only shown if user can modify */}
-        {comment.canModify && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="size-5 flex items-center justify-center text-low hover:text-normal">
-                <DotsThreeIcon size={16} weight="bold" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem icon={PencilSimpleIcon} onSelect={onStartEdit}>
-                {t('buttons.edit')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                icon={TrashIcon}
-                variant="destructive"
-                onSelect={onDelete}
-              >
-                {t('buttons.delete')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
-      {/* Message - editable or read-only */}
-      {isEditing ? (
-        <div className="flex flex-col gap-half bg-primary border border-border rounded-sm p-double">
-          {renderEditor({
-            value: editValue,
-            onChange: onEditValueChange,
-            autoFocus: true,
-            onCmdEnter: onSaveEdit,
-            className: 'min-h-[40px]',
-          })}
-          <div className="flex gap-half justify-end">
-            <button
-              type="button"
-              onClick={onCancelEdit}
-              className="px-base py-half text-low hover:text-normal"
-            >
-              {t('buttons.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={onSaveEdit}
-              disabled={!editValue.trim()}
-              className={cn(
-                'px-base py-half bg-brand text-on-brand rounded-sm',
-                'hover:bg-brand-hover disabled:opacity-50'
-              )}
-            >
-              {t('buttons.save')}
-            </button>
-          </div>
-        </div>
+    <div className="group/comment flex items-start gap-2.5 py-1.5 text-[13px]">
+      {comment.author ? (
+        <UserAvatar user={comment.author} className="mt-px size-5 text-[9px]" />
       ) : (
-        renderEditor({
-          value: comment.message,
-          disabled: true,
-          className: 'text-normal',
-        })
+        <span className="mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-panel text-[10px] font-bold text-low">
+          {comment.authorName.charAt(0).toUpperCase()}
+        </span>
       )}
-
-      {/* Reactions row */}
-      <div className="flex items-center gap-base flex-wrap">
-        {/* Existing reactions */}
-        <TooltipProvider>
-          {reactions.map((reaction) => (
-            <Tooltip key={reaction.emoji}>
-              <TooltipTrigger asChild>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {/* Who and when */}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-semibold text-high">
+            {comment.authorName}
+          </span>
+          <span className="shrink-0 text-low">
+            {t('kanban.panel.commented')}
+          </span>
+          <span className="ml-auto shrink-0 pl-2 text-xs text-low">
+            {timeAgo}
+          </span>
+          {comment.canModify && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  onClick={() => onToggleReaction(reaction.emoji)}
-                  className={cn(
-                    'flex items-center gap-half px-base py-half rounded-sm',
-                    'border transition-colors',
-                    reaction.hasReacted
-                      ? 'bg-brand/10 border-brand text-brand'
-                      : 'bg-secondary border-border text-low hover:text-normal'
-                  )}
+                  className="flex size-5 shrink-0 items-center justify-center rounded-sm text-low hover:bg-panel hover:text-high"
+                  aria-label={t('kanban.moreActions')}
                 >
-                  <span className="color-emoji">{reaction.emoji}</span>
-                  <span className="text-xs">{reaction.count}</span>
+                  <DotsThreeIcon className="size-3.5" weight="bold" />
                 </button>
-              </TooltipTrigger>
-              <TooltipContent className="bg-panel border border-border">
-                {reaction.userNames.join(', ')}
-              </TooltipContent>
-            </Tooltip>
-          ))}
-        </TooltipProvider>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  icon={PencilSimpleIcon}
+                  onSelect={onStartEdit}
+                >
+                  {t('buttons.edit')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  icon={TrashIcon}
+                  variant="destructive"
+                  onSelect={onDelete}
+                >
+                  {t('buttons.delete')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
 
-        {/* Add reaction button */}
-        <EmojiPicker onSelect={onToggleReaction}>
-          <button
-            type="button"
-            className="size-6 flex items-center justify-center text-low hover:text-normal rounded-sm hover:bg-secondary transition-colors"
+        {/* Message - editable or read-only */}
+        {isEditing ? (
+          <div className="flex flex-col gap-2 rounded border border-border bg-secondary px-3 py-2">
+            {renderEditor({
+              value: editValue,
+              onChange: onEditValueChange,
+              autoFocus: true,
+              onCmdEnter: onSaveEdit,
+              className: 'min-h-[40px] text-[13px]',
+            })}
+            <div className="flex justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={onCancelEdit}
+                className="h-7 rounded-sm px-2.5 text-[13px] font-semibold text-normal hover:bg-panel"
+              >
+                {t('buttons.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={onSaveEdit}
+                disabled={!editValue.trim()}
+                className="h-7 rounded-sm bg-brand px-2.5 text-[13px] font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-50"
+              >
+                {t('buttons.save')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          renderEditor({
+            value: comment.message,
+            disabled: true,
+            className: 'text-[13px] text-normal',
+          })
+        )}
+
+        {/* Reactions and reply */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <TooltipProvider>
+            {reactions.map((reaction) => (
+              <Tooltip key={reaction.emoji}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => onToggleReaction(reaction.emoji)}
+                    className={cn(
+                      'inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-xs transition-colors',
+                      reaction.hasReacted
+                        ? 'border-brand/40 bg-brand-soft text-brand-soft-foreground'
+                        : 'border-border bg-secondary text-low hover:text-high'
+                    )}
+                  >
+                    <span className="color-emoji">{reaction.emoji}</span>
+                    <span>{reaction.count}</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{reaction.userNames.join(', ')}</TooltipContent>
+              </Tooltip>
+            ))}
+          </TooltipProvider>
+
+          <span
+            className={cn(
+              'flex items-center gap-1 transition-opacity',
+              reactions.length === 0 &&
+                'opacity-0 focus-within:opacity-100 group-hover/comment:opacity-100'
+            )}
           >
-            <SmileyIcon size={16} />
-          </button>
-        </EmojiPicker>
-
-        {/* Reply button */}
-        <button
-          type="button"
-          onClick={onReply}
-          className="flex items-center gap-half text-low hover:text-normal transition-colors"
-        >
-          <ArrowBendUpLeftIcon size={16} />
-          <span className="font-light">{t('buttons.reply')}</span>
-        </button>
+            <EmojiPicker onSelect={onToggleReaction}>
+              <button
+                type="button"
+                className="flex size-6 items-center justify-center rounded-sm text-low transition-colors hover:bg-panel hover:text-high"
+                aria-label={t('kanban.panel.react')}
+              >
+                <SmileyIcon className="size-3.5" />
+              </button>
+            </EmojiPicker>
+            <button
+              type="button"
+              onClick={onReply}
+              className="flex h-6 items-center gap-1 rounded-sm px-1.5 text-xs text-low transition-colors hover:bg-panel hover:text-high"
+            >
+              <ArrowBendUpLeftIcon className="size-3.5" />
+              {t('buttons.reply')}
+            </button>
+          </span>
+        </div>
       </div>
     </div>
   );

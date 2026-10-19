@@ -6,6 +6,7 @@ import {
   SpinnerIcon,
 } from '@phosphor-icons/react';
 import type { Manifest, ReproductionTarget, RunStep, Step } from 'shared/types';
+import { Button } from '@prepcook/ui/components/Button';
 import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
 import { cn } from '@/shared/lib/utils';
 import { useRepoScripts } from '@/shared/hooks/useRepoScripts';
@@ -150,9 +151,9 @@ export function RepoScriptsCard({ repoId }: RepoScriptsCardProps) {
   const runStep = (step: RunStep) => scriptRun.start(step);
 
   const headerAction = (
-    <div className="flex items-center gap-half">
+    <div className="flex items-center gap-2">
       <PrimaryButton
-        variant="tertiary"
+        variant="secondary"
         value={t('settings.repos.scripts.reload')}
         actionIcon={scriptsQuery.isFetching ? 'spinner' : ArrowClockwiseIcon}
         onClick={() => void scriptsQuery.refetch()}
@@ -177,11 +178,8 @@ export function RepoScriptsCard({ repoId }: RepoScriptsCardProps) {
       headerAction={headerAction}
     >
       {scriptsQuery.isLoading ? (
-        <div className="flex items-center gap-half py-half">
-          <SpinnerIcon
-            className="size-icon-xs animate-spin text-low"
-            weight="bold"
-          />
+        <div className="flex items-center gap-2 py-1">
+          <SpinnerIcon className="size-3.5 animate-spin text-low" />
           <span className="text-sm text-low">
             {t('settings.repos.scripts.loading')}
           </span>
@@ -236,7 +234,7 @@ export function RepoScriptsCard({ repoId }: RepoScriptsCardProps) {
 
 function ErrorBox({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-error/10 border border-error/50 rounded-sm p-base text-sm text-error whitespace-pre-wrap break-words">
+    <div className="rounded-lg border border-error/30 bg-error-soft px-3 py-2 text-[12.5px] text-error whitespace-pre-wrap break-words">
       {children}
     </div>
   );
@@ -251,17 +249,19 @@ function ManifestProblem({
 }) {
   const { t } = useTranslation('settings');
   return (
-    <div className="space-y-base">
-      <div className="space-y-half">
-        <p className="text-sm font-medium text-normal">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <p className="text-sm font-semibold text-high">
           {missing
             ? t('settings.repos.scripts.missingTitle')
             : t('settings.repos.scripts.invalidTitle')}
         </p>
         {error && <ErrorBox>{error}</ErrorBox>}
       </div>
-      <p className="text-sm text-low">{t('settings.repos.scripts.hint')}</p>
-      <pre className="bg-secondary border border-border rounded-sm px-base py-half text-sm text-high font-ibm-plex-mono overflow-x-auto">
+      <p className="text-[12.5px] leading-[1.45] text-low">
+        {t('settings.repos.scripts.hint')}
+      </p>
+      <pre className="overflow-x-auto rounded border border-border bg-surface-raised px-3 py-2 font-mono text-[12.5px] text-high">
         {MINIMAL_MANIFEST_EXAMPLE}
       </pre>
     </div>
@@ -299,107 +299,126 @@ function ManifestView({
   const missing = new Set(missingSecrets);
 
   return (
-    <div className="space-y-double">
+    <div className="flex flex-col gap-5">
       {profile && (profile.name || profile.summary) && (
         <Subsection title={t('settings.repos.scripts.profile.title')}>
           {profile.name && (
-            <p className="text-sm font-medium text-high">{profile.name}</p>
+            <p className="text-sm font-semibold text-high">{profile.name}</p>
           )}
           {profile.summary && (
-            <p className="text-sm text-low">{profile.summary}</p>
+            <p className="text-[12.5px] leading-[1.45] text-low">
+              {profile.summary}
+            </p>
           )}
         </Subsection>
       )}
 
       <Subsection title={t('settings.repos.scripts.target.title')}>
-        <div className="flex items-center gap-half">
-          <span className="inline-flex items-center rounded-sm bg-secondary border border-border px-half py-0.5 text-sm text-normal">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-[22px] items-center rounded-full bg-panel px-2 text-xs font-medium text-normal">
             {targetName}
           </span>
-          <span className="text-sm font-ibm-plex-mono text-low">{target}</span>
+          <span className="font-mono text-xs text-low">{target}</span>
         </div>
-        {targetSummary && <p className="text-sm text-low">{targetSummary}</p>}
-        <p className="text-sm text-low">
+        {targetSummary && (
+          <p className="text-[12.5px] leading-[1.45] text-low">
+            {targetSummary}
+          </p>
+        )}
+        <p className="text-[12.5px] leading-[1.45] text-low">
           {t('settings.repos.scripts.target.hint')}
         </p>
         {targetProblem && <ErrorBox>{targetProblem}</ErrorBox>}
       </Subsection>
 
       <Subsection title={t('settings.repos.scripts.steps.title')}>
-        {steps.map((row) => (
-          <div
-            key={row.step}
-            className="flex items-start gap-base rounded-sm border border-border bg-secondary px-base py-half"
-          >
-            <div className="flex-1 min-w-0 space-y-0.5">
-              <div className="flex items-center gap-half">
-                <span className="text-sm font-medium text-normal font-ibm-plex-mono">
-                  {row.step}
-                </span>
-                {row.readyKind && (
-                  <span className="text-sm text-low">
-                    {row.readyKind === 'url'
-                      ? t('settings.repos.scripts.steps.readyUrl')
-                      : t('settings.repos.scripts.steps.readyCommand')}
-                  </span>
-                )}
-                <span className="text-sm text-low">
+        <div className="flex flex-col">
+          {steps.map((row, index) => (
+            <div
+              key={row.step}
+              className={cn(
+                'grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-3 py-2',
+                index > 0 && 'border-t border-divider'
+              )}
+            >
+              <span className="text-[13px] font-semibold text-high">
+                {row.step}
+              </span>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <code className="block whitespace-pre-wrap break-all font-mono text-[12.5px] text-high">
+                  {row.command}
+                </code>
+                <span className="text-xs text-low">
+                  {row.readyKind &&
+                    `${
+                      row.readyKind === 'url'
+                        ? t('settings.repos.scripts.steps.readyUrl')
+                        : t('settings.repos.scripts.steps.readyCommand')
+                    } · `}
                   {t('settings.repos.scripts.steps.timeout', {
                     seconds: row.timeoutSecs,
                   })}
                 </span>
               </div>
-              <code className="block text-sm text-high font-ibm-plex-mono whitespace-pre-wrap break-all">
-                {row.command}
-              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRunStep(row.step)}
+                disabled={runBusy}
+              >
+                {t('settings.repos.scripts.steps.testRun')}
+              </Button>
             </div>
-            <PrimaryButton
-              variant="tertiary"
-              value={t('settings.repos.scripts.steps.testRun')}
-              onClick={() => onRunStep(row.step)}
-              disabled={runBusy}
-              className="shrink-0"
-            />
-          </div>
-        ))}
+          ))}
+        </div>
       </Subsection>
 
       {hooks.length > 0 && (
         <Subsection title={t('settings.repos.scripts.workspace.title')}>
-          {hooks.map(({ hook, command }) => (
-            <div
-              key={hook}
-              className="rounded-sm border border-border bg-secondary px-base py-half space-y-0.5"
-            >
-              <span className="text-sm font-medium text-normal font-ibm-plex-mono">
-                {hook}
-              </span>
-              <code className="block text-sm text-high font-ibm-plex-mono whitespace-pre-wrap break-all">
-                {command}
-              </code>
-            </div>
-          ))}
+          <div className="flex flex-col">
+            {hooks.map(({ hook, command }, index) => (
+              <div
+                key={hook}
+                className={cn(
+                  'grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3 py-2',
+                  index > 0 && 'border-t border-divider'
+                )}
+              >
+                <span className="text-[13px] font-semibold text-high">
+                  {hook}
+                </span>
+                <code className="block whitespace-pre-wrap break-all font-mono text-[12.5px] text-high">
+                  {command}
+                </code>
+              </div>
+            ))}
+          </div>
         </Subsection>
       )}
 
       {required.length > 0 && (
         <Subsection title={t('settings.repos.scripts.secrets.title')}>
-          <div className="flex flex-wrap gap-half">
+          <div className="flex flex-wrap gap-2">
             {required.map((name) => {
               const isMissing = missing.has(name);
               return (
                 <span
                   key={name}
-                  className="inline-flex items-center gap-half rounded-sm bg-secondary border border-border px-half py-0.5 text-sm"
+                  className={cn(
+                    'inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-xs font-medium',
+                    isMissing
+                      ? 'bg-error-soft text-error'
+                      : 'bg-panel text-normal'
+                  )}
                 >
                   <span
                     className={cn(
-                      'size-dot rounded-full',
+                      'size-2 rounded-full',
                       isMissing ? 'bg-error' : 'bg-success'
                     )}
                   />
-                  <span className="font-ibm-plex-mono text-normal">{name}</span>
-                  <span className={isMissing ? 'text-error' : 'text-low'}>
+                  <span className="font-mono">{name}</span>
+                  <span className={isMissing ? undefined : 'text-low'}>
                     {isMissing
                       ? t('settings.repos.scripts.secrets.missing')
                       : t('settings.repos.scripts.secrets.set')}
@@ -409,7 +428,7 @@ function ManifestView({
             })}
           </div>
           {missing.size > 0 && (
-            <p className="text-sm text-low">
+            <p className="text-[12.5px] leading-[1.45] text-low">
               {t('settings.repos.scripts.secrets.missingHint')}
             </p>
           )}
@@ -427,8 +446,10 @@ function Subsection({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-half">
-      <p className="text-sm font-medium text-normal">{title}</p>
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-low">
+        {title}
+      </p>
       {children}
     </div>
   );

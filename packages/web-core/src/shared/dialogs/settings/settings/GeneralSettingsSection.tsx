@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep, isEqual, merge } from 'lodash';
-import {
-  FolderSimpleIcon,
-  SpeakerHighIcon,
-  SpinnerIcon,
-} from '@phosphor-icons/react';
+import { FolderSimpleIcon, SpeakerHighIcon } from '@phosphor-icons/react';
 import { FolderPickerDialog } from '@/shared/dialogs/shared/FolderPickerDialog';
 import {
   type BaseCodingAgent,
@@ -48,6 +44,7 @@ import {
   SettingsCheckbox,
   SettingsField,
   SettingsInput,
+  SettingsLoading,
   SettingsSaveBar,
   SettingsSelect,
   SettingsTextarea,
@@ -212,21 +209,13 @@ export function GeneralSettingsSection() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.general.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.general.loading')} />;
   }
 
   if (!config) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.general.loadError')}
         </div>
       </div>
@@ -252,13 +241,13 @@ export function GeneralSettingsSection() {
     <>
       {/* Status messages */}
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.general.save.success')}
         </div>
       )}
@@ -425,7 +414,7 @@ export function GeneralSettingsSection() {
                       ? toPrettyCase(draft.executor_profile.executor)
                       : t('settings.agents.selectAgent')
                   }
-                  className="w-full justify-between"
+                  className="h-9 w-full justify-between"
                   disabled={!profiles}
                 />
               </DropdownMenuTrigger>
@@ -467,7 +456,7 @@ export function GeneralSettingsSection() {
                         ? toPrettyCase(draft.executor_profile.variant)
                         : t('settings.general.taskExecution.defaultLabel')
                     }
-                    className="w-full justify-between"
+                    className="h-9 w-full justify-between"
                   />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
@@ -491,8 +480,8 @@ export function GeneralSettingsSection() {
               <button
                 disabled
                 className={cn(
-                  'flex items-center justify-between w-full px-base py-half rounded-sm border border-border bg-secondary',
-                  'text-base text-low opacity-50 cursor-not-allowed'
+                  'flex h-9 items-center justify-between w-full px-3 rounded border border-border bg-secondary',
+                  'text-sm text-low opacity-50 cursor-not-allowed'
                 )}
               >
                 <span className="truncate">
@@ -518,7 +507,7 @@ export function GeneralSettingsSection() {
               {draft?.git_branch_prefix ? (
                 <>
                   {t('settings.general.git.branchPrefix.preview')}{' '}
-                  <code className="text-xs bg-secondary px-1 py-0.5 rounded">
+                  <code className="font-mono text-xs bg-panel text-high px-1 py-0.5 rounded-sm">
                     {t('settings.general.git.branchPrefix.previewWithPrefix', {
                       prefix: draft.git_branch_prefix,
                     })}
@@ -527,7 +516,7 @@ export function GeneralSettingsSection() {
               ) : (
                 <>
                   {t('settings.general.git.branchPrefix.preview')}{' '}
-                  <code className="text-xs bg-secondary px-1 py-0.5 rounded">
+                  <code className="font-mono text-xs bg-panel text-high px-1 py-0.5 rounded-sm">
                     {t('settings.general.git.branchPrefix.previewNoPrefix')}
                   </code>
                 </>
@@ -544,6 +533,7 @@ export function GeneralSettingsSection() {
             }}
             placeholder={t('settings.general.git.branchPrefix.placeholder')}
             error={!!branchPrefixError}
+            monospace
           />
         </SettingsField>
 
@@ -559,13 +549,15 @@ export function GeneralSettingsSection() {
                   updateDraft({ workspace_dir: value || null })
                 }
                 placeholder={t('settings.general.git.workspaceDir.placeholder')}
+                monospace
               />
             </div>
             <PrimaryButton
-              variant="tertiary"
+              variant="secondary"
               onClick={handleBrowseWorkspaceDir}
+              className="h-9 gap-2"
             >
-              <FolderSimpleIcon className="size-icon-sm" weight="bold" />
+              <FolderSimpleIcon className="size-4" />
               {t('settings.general.git.workspaceDir.browse')}
             </PrimaryButton>
           </div>
@@ -692,8 +684,8 @@ export function GeneralSettingsSection() {
         />
 
         {draft?.notifications.sound_enabled && (
-          <div className="ml-7 space-y-2">
-            <label className="text-sm font-medium text-normal">
+          <div className="ml-[46px] flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-high">
               {t('settings.general.notifications.sound.fileLabel')}
             </label>
             <div className="flex gap-2">
@@ -715,13 +707,14 @@ export function GeneralSettingsSection() {
                 />
               </div>
               <IconButton
+                className="size-9 shrink-0 rounded border border-border bg-secondary hover:bg-panel"
                 icon={SpeakerHighIcon}
                 onClick={() => previewSound(draft.notifications.sound_file)}
                 aria-label="Preview sound"
                 title="Preview sound"
               />
             </div>
-            <p className="text-sm text-low">
+            <p className="text-[12.5px] leading-[1.45] text-low">
               {t('settings.general.notifications.sound.fileHelper')}
             </p>
           </div>
@@ -798,17 +791,17 @@ export function GeneralSettingsSection() {
         title={t('settings.general.safety.title')}
         description={t('settings.general.safety.description')}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-normal">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <p className="text-sm font-semibold text-high">
               {t('settings.general.safety.onboarding.title')}
             </p>
-            <p className="text-sm text-low">
+            <p className="text-[12.5px] leading-[1.45] text-low">
               {t('settings.general.safety.onboarding.description')}
             </p>
           </div>
           <PrimaryButton
-            variant="tertiary"
+            variant="secondary"
             value={t('settings.general.safety.onboarding.button')}
             onClick={resetOnboarding}
           />

@@ -1,37 +1,39 @@
-import { WarningCircleIcon } from '@phosphor-icons/react';
-import { cn } from '../lib/cn';
+import { useTranslation } from 'react-i18next';
+import { ChatStep } from './ChatStep';
 
 interface ChatErrorMessageProps {
   content: string;
+  time?: string;
   className?: string;
   expanded?: boolean;
   onToggle?: () => void;
 }
 
+/** An agent error as a failed step; expands to the full message. */
 export function ChatErrorMessage({
   content,
+  time,
   className,
   expanded,
   onToggle,
 }: ChatErrorMessageProps) {
+  const { t } = useTranslation('tasks');
+
   return (
-    <div
-      className={cn(
-        'flex items-start gap-base text-sm text-error cursor-pointer',
-        className
-      )}
-      onClick={onToggle}
-      role="button"
+    <ChatStep
+      state="error"
+      label={t('conversation.error')}
+      detail={expanded ? undefined : content}
+      time={time}
+      expanded={onToggle ? Boolean(expanded) : undefined}
+      onActivate={onToggle}
+      className={className}
     >
-      <WarningCircleIcon className="shrink-0 size-icon-base pt-0.5" />
-      <span
-        className={cn(
-          !expanded && 'truncate',
-          expanded && 'whitespace-pre-wrap break-all'
-        )}
-      >
-        {content}
-      </span>
-    </div>
+      {expanded && (
+        <div className="mt-1 max-w-[680px] whitespace-pre-wrap break-words rounded bg-error-soft px-3 py-2 text-[12.5px] text-error">
+          {content}
+        </div>
+      )}
+    </ChatStep>
   );
 }

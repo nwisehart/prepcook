@@ -1,12 +1,9 @@
-import type { KeyboardEvent } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  CaretDownIcon,
-  ArrowSquareUpRightIcon,
-  FileIcon as DefaultFileIcon,
-} from '@phosphor-icons/react';
+import { ArrowSquareUpRightIcon } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
-import { ToolStatusDot, type ToolStatusLike } from './ToolStatusDot';
+import { ChatStep, ChatStepDetail, chatStepStateFromStatus } from './ChatStep';
+import type { ToolStatusLike } from './ToolStatusDot';
 
 export type ChatFileEntryDiffInput =
   | {
@@ -23,10 +20,56 @@ export type ChatFileEntryDiffInput =
       hasLineNumbers?: boolean;
     };
 
+/** "+12 −3" in mono, additions green and deletions red. */
+export function ChatDiffCounts({
+  additions,
+  deletions,
+}: {
+  additions?: number;
+  deletions?: number;
+}) {
+  const hasAdditions = additions !== undefined && additions > 0;
+  const hasDeletions = deletions !== undefined && deletions > 0;
+  if (!hasAdditions && !hasDeletions) return null;
+  return (
+    <span className="font-mono">
+      {hasAdditions && <span className="text-success">+{additions}</span>}
+      {hasAdditions && hasDeletions && ' '}
+      {hasDeletions && <span className="text-error">−{deletions}</span>}
+    </span>
+  );
+}
+
+/** Small icon button that opens a file in the Review panel. */
+export function ChatOpenInReviewButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation('tasks');
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        'flex size-6 items-center justify-center rounded-sm text-low transition-colors hover:bg-panel hover:text-high',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
+      )}
+      title={t('conversation.viewInReview')}
+      aria-label={t('conversation.viewInReview')}
+    >
+      <ArrowSquareUpRightIcon className="size-3.5" />
+    </button>
+  );
+}
+
 interface ChatFileEntryProps {
+  /** Step label, e.g. "Edited quantity.ts" */
+  label: string;
+  /** Full path, shown in mono on the detail line */
   filename: string;
   additions?: number;
   deletions?: number;
+  time?: string;
   expanded?: boolean;
   onToggle?: () => void;
   className?: string;
@@ -35,178 +78,62 @@ interface ChatFileEntryProps {
   diffContent?: ChatFileEntryDiffInput;
   /** Optional callback to open file in the Review tab */
   onOpenInChanges?: () => void;
-  /** Optional file icon override from the app layer */
-  fileIcon?: React.ElementType;
   /** Optional diff renderer from the app layer */
-  renderDiffBody?: (diffContent: ChatFileEntryDiffInput) => React.ReactNode;
+  renderDiffBody?: (diffContent: ChatFileEntryDiffInput) => ReactNode;
 }
 
+/** A file edit as a transcript step; expands to show its diff. */
 export function ChatFileEntry({
+  label,
   filename,
   additions,
   deletions,
+  time,
   expanded = false,
   onToggle,
   className,
   status,
   diffContent,
   onOpenInChanges,
-  fileIcon,
   renderDiffBody,
 }: ChatFileEntryProps) {
-  const { t } = useTranslation('tasks');
-  const hasStats = additions !== undefined || deletions !== undefined;
-  const FileIcon = fileIcon ?? DefaultFileIcon;
-  const isDenied = status?.status === 'denied';
   const hasDiffContent = Boolean(diffContent && renderDiffBody);
 
-  const handleClick = () => {
-    onToggle?.();
-  };
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    handleClick();
-  };
-  const isInteractive = Boolean(onToggle);
-
-  // If we have diff content, wrap in a container with the diff body
-  if (hasDiffContent) {
-    return (
-      <div
-        className={cn(
-          'rounded-sm border overflow-hidden',
-          isDenied && 'border-error bg-error/10',
-          className
-        )}
-      >
-        {/* Header */}
-        <div
-          className={cn(
-            'flex items-center p-base w-full',
-            isDenied ? 'bg-error/20' : 'bg-panel',
-            isInteractive && 'cursor-pointer'
-          )}
-          onClick={handleClick}
-          onKeyDown={handleKeyDown}
-          role={isInteractive ? 'button' : undefined}
-          aria-expanded={onToggle ? expanded : undefined}
-          tabIndex={isInteractive ? 0 : undefined}
-          data-scroll-anchor-target={isInteractive ? '' : undefined}
-        >
-          <div className="flex-1 flex items-center gap-base min-w-0">
-            <span className="relative shrink-0">
-              <FileIcon className="size-icon-base" />
-              {status && (
-                <ToolStatusDot
-                  status={status}
-                  className="absolute -bottom-0.5 -right-0.5"
-                />
-              )}
-            </span>
-            <span className="text-sm text-normal truncate">{filename}</span>
-            {onOpenInChanges && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenInChanges();
-                }}
-                className="shrink-0 p-0.5 rounded hover:bg-muted text-low hover:text-normal transition-colors"
-                title={t('conversation.viewInReview')}
-              >
-                <ArrowSquareUpRightIcon className="size-icon-xs" />
-              </button>
-            )}
-            {hasStats && (
-              <span className="text-sm shrink-0">
-                {additions !== undefined && additions > 0 && (
-                  <span className="text-success">+{additions}</span>
-                )}
-                {additions !== undefined && deletions !== undefined && ' '}
-                {deletions !== undefined && deletions > 0 && (
-                  <span className="text-error">-{deletions}</span>
-                )}
-              </span>
-            )}
-          </div>
-          {onToggle && (
-            <CaretDownIcon
-              className={cn(
-                'size-icon-xs shrink-0 text-low transition-transform',
-                !expanded && '-rotate-90'
-              )}
-            />
-          )}
-        </div>
-
-        {/* Diff body - shown when expanded */}
-        {expanded && diffContent && renderDiffBody?.(diffContent)}
-      </div>
-    );
-  }
-
-  // Original header-only rendering (no diff content)
   return (
-    <div
-      className={cn(
-        'flex items-center border rounded-sm p-base w-full',
-        isDenied ? 'bg-error/20 border-error' : 'bg-panel',
-        isInteractive && 'cursor-pointer',
-        className
-      )}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      role={isInteractive ? 'button' : undefined}
-      aria-expanded={onToggle ? expanded : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
-      data-scroll-anchor-target={isInteractive ? '' : undefined}
-    >
-      <div className="flex-1 flex items-center gap-base min-w-0">
-        <span className="relative shrink-0">
-          <FileIcon className="size-icon-base" />
-          {status && (
-            <ToolStatusDot
-              status={status}
-              className="absolute -bottom-0.5 -right-0.5"
-            />
-          )}
-        </span>
-        <span className="text-sm text-normal truncate">{filename}</span>
-        {onOpenInChanges && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenInChanges();
-            }}
-            className="shrink-0 p-0.5 rounded hover:bg-muted text-low hover:text-normal transition-colors"
-            title={t('conversation.viewInReview')}
-          >
-            <ArrowSquareUpRightIcon className="size-icon-xs" />
-          </button>
-        )}
-        {hasStats && (
-          <span className="text-sm shrink-0">
-            {additions !== undefined && additions > 0 && (
-              <span className="text-success">+{additions}</span>
-            )}
-            {additions !== undefined && deletions !== undefined && ' '}
-            {deletions !== undefined && deletions > 0 && (
-              <span className="text-error">-{deletions}</span>
-            )}
-          </span>
-        )}
-      </div>
-      {onToggle && (
-        <CaretDownIcon
-          className={cn(
-            'size-icon-xs shrink-0 text-low transition-transform',
-            !expanded && '-rotate-90'
-          )}
+    <ChatStep
+      state={chatStepStateFromStatus(status)}
+      label={label}
+      detail={
+        <ChatStepDetail
+          parts={[
+            <span key="path" className="font-mono">
+              {filename}
+            </span>,
+            additions || deletions ? (
+              <ChatDiffCounts
+                key="counts"
+                additions={additions}
+                deletions={deletions}
+              />
+            ) : null,
+          ]}
         />
+      }
+      time={time}
+      expanded={hasDiffContent && onToggle ? expanded : undefined}
+      onActivate={hasDiffContent ? onToggle : undefined}
+      actions={
+        onOpenInChanges ? (
+          <ChatOpenInReviewButton onClick={onOpenInChanges} />
+        ) : undefined
+      }
+      className={className}
+    >
+      {expanded && diffContent && renderDiffBody && (
+        <div className="mt-1.5 overflow-hidden rounded border bg-secondary">
+          {renderDiffBody(diffContent)}
+        </div>
       )}
-    </div>
+    </ChatStep>
   );
 }

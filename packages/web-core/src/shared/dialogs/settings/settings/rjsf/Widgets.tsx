@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuTriggerButton,
 } from '@prepcook/ui/components/Dropdown';
+import { Switch } from '@prepcook/ui/components/Switch';
 
 // TextWidget - Text input matching settings dialog styling
 export const TextWidget = (props: WidgetProps) => {
@@ -52,8 +53,8 @@ export const TextWidget = (props: WidgetProps) => {
       onBlur={handleBlur}
       onFocus={handleFocus}
       className={cn(
-        'w-full bg-secondary border border-border rounded-sm px-base py-half text-base text-high',
-        'placeholder:text-low placeholder:opacity-80 focus:outline-none focus:ring-1 focus:ring-brand',
+        'h-9 w-full rounded border border-border bg-secondary px-3 text-sm text-high',
+        'placeholder:text-low focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
         (disabled || readonly) && 'opacity-50 cursor-not-allowed'
       )}
     />
@@ -105,7 +106,7 @@ export const SelectWidget = (props: WidgetProps) => {
         <DropdownMenuTriggerButton
           id={id}
           label={selectedOption?.label || placeholder || t('form.selectOption')}
-          className="w-full justify-between"
+          className="h-9 w-full justify-between"
           disabled={disabled || readonly}
         />
       </DropdownMenuTrigger>
@@ -123,7 +124,7 @@ export const SelectWidget = (props: WidgetProps) => {
   );
 };
 
-// CheckboxWidget - Checkbox matching settings dialog styling
+// CheckboxWidget - A switch, like every boolean in Settings
 // Note: Label is shown in the FieldTemplate's left column, not here
 export const CheckboxWidget = (props: WidgetProps) => {
   const { id, value, disabled, readonly, onChange } = props;
@@ -135,16 +136,11 @@ export const CheckboxWidget = (props: WidgetProps) => {
   const checked = Boolean(value);
 
   return (
-    <input
-      type="checkbox"
+    <Switch
       id={id}
       checked={checked}
-      onChange={(e) => handleChange(e.target.checked)}
+      onCheckedChange={handleChange}
       disabled={disabled || readonly}
-      className={cn(
-        'h-4 w-4 rounded border-border bg-secondary text-brand focus:ring-brand focus:ring-offset-0',
-        (disabled || readonly) && 'opacity-50 cursor-not-allowed'
-      )}
     />
   );
 };
@@ -191,8 +187,8 @@ export const TextareaWidget = (props: WidgetProps) => {
       onFocus={handleFocus}
       rows={4}
       className={cn(
-        'w-full bg-secondary border border-border rounded-sm px-base py-half text-base text-high',
-        'placeholder:text-low placeholder:opacity-80 focus:outline-none focus:ring-1 focus:ring-brand',
+        'w-full rounded border border-border bg-secondary px-3 py-2 text-sm text-high',
+        'placeholder:text-low focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
         'resize-y',
         (disabled || readonly) && 'opacity-50 cursor-not-allowed'
       )}

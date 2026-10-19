@@ -325,7 +325,7 @@ const PendingApprovalEntry = ({
             <div className="flex items-center justify-between gap-1.5 pl-4">
               <div className="flex items-center gap-1.5">
                 {!isEnteringReason && (
-                  <span className="text-muted-foreground">
+                  <span className="text-low">
                     Would you like to approve this?
                   </span>
                 )}
@@ -342,7 +342,7 @@ const PendingApprovalEntry = ({
 
             {error && (
               <div
-                className="mt-1 text-xs text-red-600"
+                className="mt-1 text-xs text-error"
                 role="alert"
                 aria-live="polite"
               >

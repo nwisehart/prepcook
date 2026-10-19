@@ -22,8 +22,8 @@ const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
         aria-checked={checked}
         ref={ref}
         className={cn(
-          'peer h-4 w-4 shrink-0 rounded-sm border border-primary-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-          checked && 'bg-primary text-primary-foreground',
+          'peer flex size-4 shrink-0 items-center justify-center rounded-[0.25rem] border border-border bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-50',
+          checked && 'border-brand bg-brand text-on-brand',
           className
         )}
         disabled={disabled}
@@ -32,7 +32,7 @@ const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
       >
         {checked && (
           <div className="flex items-center justify-center text-current">
-            <Check className="h-4 w-4" />
+            <Check className="size-3" strokeWidth={3} />
           </div>
         )}
       </button>

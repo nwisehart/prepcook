@@ -92,9 +92,9 @@ function EditDiffRenderer({
   }, [hunks, path]);
 
   const headerClass = cn(
-    'flex items-center gap-1.5 text-secondary-foreground',
-    statusAppearance === 'denied' && 'text-red-700 dark:text-red-300',
-    statusAppearance === 'timed_out' && 'text-amber-700 dark:text-amber-200'
+    'flex items-center gap-1.5 text-normal',
+    statusAppearance === 'denied' && 'text-error',
+    statusAppearance === 'timed_out' && 'text-attention-foreground'
   );
 
   return (

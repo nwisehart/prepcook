@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { cn } from '@/shared/lib/utils';
 import { cloneDeep, isEqual } from 'lodash';
-import { SpinnerIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import type {
   AppRunsConfig,
@@ -17,6 +17,7 @@ import { integrationsApi, remoteProjectsApi } from '@/shared/lib/api';
 import {
   SettingsCard,
   SettingsField,
+  SettingsLoading,
   SettingsSaveBar,
   SettingsSelect,
 } from './SettingsComponents';
@@ -187,21 +188,13 @@ export function ReproductionSettingsSection() {
   };
 
   if (loading || descriptors.isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.general.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.general.loading')} />;
   }
 
   if (!config || descriptors.isError) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.general.loadError')}
         </div>
       </div>
@@ -218,14 +211,14 @@ export function ReproductionSettingsSection() {
   const boardIds = Object.keys(draft.boards);
 
   return (
-    <div className="space-y-6">
+    <>
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.reproduction.save.success')}
         </div>
       )}
@@ -239,16 +232,18 @@ export function ReproductionSettingsSection() {
           return (
             <div
               key={descriptor.kind}
-              className="space-y-4 rounded-sm border border-border p-base"
+              className="flex flex-col gap-4 rounded-lg border border-border px-4 py-3"
             >
-              <div>
-                <div className="text-sm font-medium text-high">
-                  {descriptor.display_name}{' '}
-                  <span className="font-ibm-plex-mono text-low">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-sm font-semibold text-high">
+                  {descriptor.display_name}
+                  <span className="font-mono text-xs font-normal text-low">
                     {descriptor.kind}
                   </span>
                 </div>
-                <p className="text-sm text-low mt-1">{descriptor.summary}</p>
+                <p className="text-[12.5px] leading-[1.45] text-low">
+                  {descriptor.summary}
+                </p>
               </div>
               {descriptor.fields.map((field) => (
                 <FieldInput
@@ -266,9 +261,9 @@ export function ReproductionSettingsSection() {
                   }}
                 />
               ))}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 border-t border-divider pt-3">
                 <PrimaryButton
-                  variant="tertiary"
+                  variant="secondary"
                   value={
                     test === 'running'
                       ? t('settings.integrations.section.testing')
@@ -280,10 +275,17 @@ export function ReproductionSettingsSection() {
                 />
                 {test && test !== 'running' && (
                   <span
-                    className={
-                      test.ok ? 'text-sm text-success' : 'text-sm text-error'
-                    }
+                    className={cn(
+                      'inline-flex min-w-0 items-center gap-2 text-[12.5px] font-semibold',
+                      test.ok ? 'text-success' : 'text-error'
+                    )}
                   >
+                    <span
+                      className={cn(
+                        'size-2 shrink-0 rounded-full',
+                        test.ok ? 'bg-success' : 'bg-error'
+                      )}
+                    />
                     {test.message}
                   </span>
                 )}
@@ -299,6 +301,7 @@ export function ReproductionSettingsSection() {
             value={draft.appRuns.default_target}
             options={targetOptions}
             onChange={(target) => patchAppRuns({ default_target: target })}
+            className="max-w-[360px]"
           />
         </SettingsField>
       </SettingsCard>
@@ -342,6 +345,6 @@ export function ReproductionSettingsSection() {
           setTests({});
         }}
       />
-    </div>
+    </>
   );
 }

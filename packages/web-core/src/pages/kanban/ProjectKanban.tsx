@@ -108,9 +108,10 @@ function ProjectKanbanLayout({ projectName }: { projectName: string }) {
   const { getIssue } = useProjectContext();
   const issue = issueId ? getIssue(issueId) : undefined;
   usePageTitle(issue?.title, projectName);
+  // No stored size: the card panel opens at its 520px design width.
   const [kanbanLeftPanelSize, setKanbanLeftPanelSize] = usePaneSize(
     PERSIST_KEYS.kanbanLeftPanel,
-    75
+    'auto'
   );
 
   const isRightPanelOpen = isPanelOpen;
@@ -127,13 +128,13 @@ function ProjectKanbanLayout({ projectName }: { projectName: string }) {
     );
   }
 
-  const kanbanDefaultLayout: Layout =
+  const kanbanDefaultLayout: Layout | undefined =
     typeof kanbanLeftPanelSize === 'number'
       ? {
           'kanban-left': kanbanLeftPanelSize,
           'kanban-right': 100 - kanbanLeftPanelSize,
         }
-      : { 'kanban-left': 75, 'kanban-right': 25 };
+      : undefined;
 
   const onKanbanLayoutChange = (layout: Layout) => {
     if (isRightPanelOpen) {
@@ -159,16 +160,17 @@ function ProjectKanbanLayout({ projectName }: { projectName: string }) {
       {isRightPanelOpen && (
         <Separator
           id="kanban-separator"
-          className="w-1 bg-panel outline-none hover:bg-brand/50 transition-colors cursor-col-resize"
+          className="relative z-10 -mr-1 w-1 cursor-col-resize bg-transparent outline-none transition-colors hover:bg-brand/40"
         />
       )}
 
       {isRightPanelOpen && (
         <Panel
           id="kanban-right"
+          defaultSize="520px"
           minSize="400px"
           maxSize="800px"
-          className="min-w-0 h-full overflow-hidden bg-secondary"
+          className="min-w-0 h-full overflow-hidden border-l border-border bg-secondary shadow-panel"
         >
           <ProjectRightSidebarContainer />
         </Panel>

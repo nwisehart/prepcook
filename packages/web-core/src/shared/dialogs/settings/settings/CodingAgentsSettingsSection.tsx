@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { cn } from '@/shared/lib/utils';
 import { cloneDeep, isEqual } from 'lodash';
-import { SpinnerIcon } from '@phosphor-icons/react';
 import { useQueries } from '@tanstack/react-query';
 import type {
   AgentDescriptor,
@@ -16,6 +16,7 @@ import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
 import {
   SettingsCard,
   SettingsField,
+  SettingsLoading,
   SettingsSaveBar,
   SettingsSelect,
 } from './SettingsComponents';
@@ -142,21 +143,13 @@ export function CodingAgentsSettingsSection() {
   };
 
   if (loading || descriptorsQuery.isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.general.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.general.loading')} />;
   }
 
   if (!config || !draft || descriptorsQuery.isError) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {t('settings.general.loadError')}
         </div>
       </div>
@@ -177,14 +170,14 @@ export function CodingAgentsSettingsSection() {
   };
 
   return (
-    <div className="space-y-6">
+    <>
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.codingAgents.save.success')}
         </div>
       )}
@@ -233,30 +226,33 @@ export function CodingAgentsSettingsSection() {
           return (
             <div
               key={agent.executor}
-              className="space-y-3 rounded-sm border border-border p-base"
+              className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3"
             >
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-sm font-medium text-high">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="text-sm font-semibold text-high">
                     {agent.display_name}
                   </div>
-                  <p className="text-sm text-low mt-1">{agent.summary}</p>
+                  <p className="text-[12.5px] leading-[1.45] text-low">
+                    {agent.summary}
+                  </p>
                 </div>
                 <span
-                  className={
+                  className={cn(
+                    'inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2 text-xs font-medium',
                     info && info.type !== 'NOT_FOUND'
-                      ? 'text-sm text-success whitespace-nowrap'
-                      : 'text-sm text-low whitespace-nowrap'
-                  }
+                      ? 'bg-success-soft text-success'
+                      : 'bg-panel text-normal'
+                  )}
                 >
                   {availabilityLabel(info)}
                 </span>
               </div>
-              <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
+              <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-[13px]">
                 <dt className="text-low">
                   {t('settings.codingAgents.command')}
                 </dt>
-                <dd className="text-normal font-mono break-all">
+                <dd className="text-high font-mono text-[12.5px] break-all">
                   {agent.command || t('settings.codingAgents.builtIn')}
                 </dd>
                 <dt className="text-low">
@@ -284,9 +280,9 @@ export function CodingAgentsSettingsSection() {
                   </>
                 )}
               </dl>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 border-t border-divider pt-3">
                 <PrimaryButton
-                  variant="tertiary"
+                  variant="secondary"
                   value={
                     test === 'running'
                       ? t('settings.codingAgents.testing')
@@ -298,10 +294,17 @@ export function CodingAgentsSettingsSection() {
                 />
                 {test && test !== 'running' && (
                   <span
-                    className={
-                      test.ok ? 'text-sm text-success' : 'text-sm text-error'
-                    }
+                    className={cn(
+                      'inline-flex min-w-0 items-center gap-2 text-[12.5px] font-semibold',
+                      test.ok ? 'text-success' : 'text-error'
+                    )}
                   >
+                    <span
+                      className={cn(
+                        'size-2 shrink-0 rounded-full',
+                        test.ok ? 'bg-success' : 'bg-error'
+                      )}
+                    />
                     {test.message}
                   </span>
                 )}
@@ -309,7 +312,7 @@ export function CodingAgentsSettingsSection() {
                   href={agent.docs_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="ml-auto text-sm text-low hover:text-normal underline"
+                  className="ml-auto shrink-0 text-[13px] font-semibold text-brand-secondary hover:underline"
                 >
                   {t('settings.codingAgents.docs')}
                 </a>
@@ -328,6 +331,6 @@ export function CodingAgentsSettingsSection() {
           setDirty(false);
         }}
       />
-    </div>
+    </>
   );
 }

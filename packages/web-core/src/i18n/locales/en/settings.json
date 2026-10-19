@@ -1,8 +1,10 @@
 {
   "settings": {
     "common": {
-      "unsavedChanges": "• You have unsaved changes",
-      "discardChangesConfirm": "Discard unsaved changes?"
+      "discardChangesConfirm": "Discard unsaved changes?",
+      "unsavedLabel": "Unsaved changes",
+      "noUnsavedChanges": "No unsaved changes",
+      "resetToDefaults": "Reset to defaults"
     },
     "unsavedChanges": {
       "title": "Unsaved Changes",
@@ -13,8 +15,6 @@
     "layout": {
       "nav": {
         "title": "Settings",
-        "machineSettings": "Machine Settings",
-        "accountSettings": "Account Settings",
         "integrationsGroup": "Integrations",
         "pairOtherMachines": "Pair other machines",
         "selectHost": "Select host",
@@ -35,7 +35,6 @@
         "playbooks": "Playbooks",
         "playbooksDesc": "Stage prompt templates for bug and story work",
         "orchestrator": "Orchestrator",
-        "orchestratorDesc": "Automatic agent launches per kanban column",
         "integrations": "Reviewers",
         "integrationsDesc": "Merge request reviewer picks and the review comments agents ignore",
         "claude": "Claude",
@@ -61,7 +60,12 @@
         "evidence": "Evidence",
         "evidenceDesc": "Where failures leave traces: error trackers, log services, log files",
         "coding-agents": "Agents",
-        "coding-agentsDesc": "Which coding agent runs each stage, and whether each one is ready on this machine"
+        "coding-agentsDesc": "Which coding agent runs each stage, and whether each one is ready on this machine",
+        "thisMachine": "This machine",
+        "boardGroup": "Board"
+      },
+      "lead": {
+        "orchestrator": "How Prepcook moves cards and when it stops for a person. Global here; most of it can be overridden per board under Automated projects."
       }
     },
     "board": {
@@ -598,10 +602,6 @@
       }
     },
     "orchestrator": {
-      "general": {
-        "title": "Stage Orchestrator",
-        "description": "Background automation that watches the kanban board and acts on tickets assigned to you: launches planning/execution/review agents, creates MRs, and runs clean-up. Changes apply on the next poll — no restart needed."
-      },
       "mode": {
         "label": "Enable automatic agent launches",
         "helper": "When off, nothing runs automatically; stage playbooks can still be started manually from the issue panel."
@@ -611,22 +611,10 @@
         "helper": "How often the board is scanned for eligible tickets."
       },
       "deployedRetention": {
-        "label": "Auto clean-up after (days in Deployed)",
-        "helper": "Tickets sitting in Deployed longer than this move to Clean-up automatically (archiving workspaces and closing the Jira ticket). Leave empty to disable.",
         "placeholder": "Off"
       },
       "cleanupRetention": {
-        "label": "Delete after (days in Clean-up)",
-        "helper": "Tickets sitting in Clean-up longer than this are deleted from the board. The MR, the Jira ticket and any RCA in the knowledge base all survive; only the card and its comments go. Tickets with a pinned workspace or a human takeover are never deleted. Leave empty to keep cards forever.",
         "placeholder": "Keep forever"
-      },
-      "autonomy": {
-        "label": "Autonomy mode (drive tickets through the gates)",
-        "helper": "High-confidence plans self-approve and advance; finished implementations move to Review; reviewer verdicts are acted on (approve → Push MR, request-changes → fix loop). Low confidence escalates to Slack. MRs stay drafts — a human always merges. Meant for the always-on teammate runner."
-      },
-      "autonomyIterations": {
-        "label": "Review-fix rounds before escalating",
-        "helper": "How many request-changes → fix → re-review cycles autonomy runs before pinging Slack and leaving the ticket for a human."
       },
       "patternThreshold": {
         "label": "Pattern-review threshold (RCAs per pattern)",
@@ -641,8 +629,10 @@
       "approvals": {
         "title": "Plan approvals",
         "description": "How a planning agent puts its spec or RCA in front of a person. Whatever is chosen here, a decision can also be made from the card, the tracker ticket or the approvals API.",
-        "lavishLabel": "Approve in the document (Lavish)",
-        "lavishHelper": "The document carries Approve and Request changes buttons and opens in a Lavish review session. Off: the document has no buttons, and the agent waits for a decision from the card, the ticket or the API."
+        "options": {
+          "lavish": "In the plan's Lavish review, with Approve and Request changes buttons",
+          "none": "Without buttons: decided on the card, the tracker ticket or through the API"
+        }
       },
       "projects": {
         "title": "Automated projects",
@@ -701,8 +691,6 @@
         "deployWatchRefLabel": "Staging deploy branch",
         "deployWatchRefHelper": "The branch that job deploys from. Both fields are needed for the watch to run.",
         "autonomyHelper": "Run this board's stages unattended; Inherit follows the global setting.",
-        "retentionHelper": "Days in Deployed before the ticket moves to Clean-up.",
-        "cleanupRetentionHelper": "Days in Clean-up before the card is deleted (the MR, Jira ticket, and kb records survive).",
         "retentionDays": "After N days",
         "inherit": "Inherit",
         "on": "On",
@@ -711,12 +699,49 @@
         "playbooksHint": "Playbook text for this board is edited under Settings → Playbooks.",
         "agentDefaultLabel": "Default agent",
         "agentDefaultHelper": "This board's profile for every stage it does not set below.",
-        "agentInherit": "Inherit"
+        "agentInherit": "Inherit",
+        "closeRetentionHelper": "Days in Close before the card moves to Clean up.",
+        "deleteRetentionHelper": "Days in Clean up before the card is deleted (the pull request, the tracker ticket and Knowledge records survive)."
       },
       "workspaceRetention": {
         "label": "Workspace retention (days)",
         "helper": "Delete finished workspace records — and their sessions, logs and turns — this many days after their worktree was cleaned up. Pinned workspaces are never removed. Blank keeps everything for ever.",
         "placeholder": "30 (blank = keep for ever)"
+      },
+      "autonomyMode": {
+        "label": "Autonomy mode",
+        "helper": "The same stages run in both modes; the difference is who moves the cards."
+      },
+      "modes": {
+        "chef": {
+          "title": "Chef mode",
+          "default": "default",
+          "description": "Prepcook works your tickets and you move them. You approve each plan before Execute, and advance approved cards yourself."
+        },
+        "prep": {
+          "title": "Prep mode",
+          "description": "Prepcook drives tickets through every gate on its own and pings you when something needs a person: a low-confidence RCA, a stuck review loop, a launch that keeps failing."
+        }
+      },
+      "reviewLoopCap": {
+        "label": "Review loop cap",
+        "helper": "Request changes → fix → re-review rounds before Prepcook leaves the card for a person. Applies in both modes."
+      },
+      "launches": {
+        "title": "Automatic launches",
+        "description": "The orchestrator scans the boards and starts each stage's work on the cards assigned to you. Changes apply on the next poll; no restart needed."
+      },
+      "retention": {
+        "title": "Clean up",
+        "description": "How long finished cards, and the records of their sessions, are kept."
+      },
+      "closeRetention": {
+        "label": "Auto clean-up after (days in Close)",
+        "helper": "Cards that sit in Close longer than this move to Clean up, which runs the repository's clean-up scripts and archives the card's worktrees. Leave empty to turn it off."
+      },
+      "deleteRetention": {
+        "label": "Delete after (days in Clean up)",
+        "helper": "Cards that sit in Clean up longer than this are deleted from the board. The pull request, the tracker ticket and any RCA in Knowledge survive; only the card and its comments go. Cards with a pinned workspace or a person's takeover are never deleted. Leave empty to keep cards for ever."
       }
     },
     "claude": {

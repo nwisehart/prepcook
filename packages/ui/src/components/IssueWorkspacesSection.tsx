@@ -4,10 +4,8 @@ import {
   IssueWorkspaceCreateCard,
   type WorkspaceWithStats,
 } from './IssueWorkspaceCard';
-import {
-  CollapsibleSectionHeader,
-  type SectionAction,
-} from './CollapsibleSectionHeader';
+import type { SectionAction } from './CollapsibleSectionHeader';
+import { IssuePanelSection } from './IssuePanelSection';
 
 export interface IssueWorkspacesSectionProps {
   workspaces: WorkspaceWithStats[];
@@ -21,8 +19,8 @@ export interface IssueWorkspacesSectionProps {
 }
 
 /**
- * View component for the workspaces section in the issue panel.
- * Displays a collapsible list of workspace cards.
+ * "Sessions on this card" in the card panel: one row per session (a
+ * workspace in code), newest work first as the container orders them.
  */
 export function IssueWorkspacesSection({
   workspaces,
@@ -37,15 +35,15 @@ export function IssueWorkspacesSection({
   const { t } = useTranslation('common');
 
   return (
-    <CollapsibleSectionHeader
-      title={t('workspaces.title')}
+    <IssuePanelSection
+      label={t('kanban.sessions.title')}
       persistKey="kanban-issue-workspaces"
-      defaultExpanded={true}
+      collapsible
       actions={actions}
     >
-      <div className="px-base p-base flex flex-col gap-base border-t">
+      <div className="flex flex-col gap-2">
         {isLoading ? (
-          <p className="text-low py-half">{t('workspaces.loading')}</p>
+          <p className="m-0 text-[13px] text-low">{t('workspaces.loading')}</p>
         ) : workspaces.length === 0 ? (
           <IssueWorkspaceCreateCard
             onClick={onCreateWorkspace}
@@ -58,6 +56,7 @@ export function IssueWorkspacesSection({
               <IssueWorkspaceCard
                 key={workspace.id}
                 workspace={workspace}
+                showNoPrText={false}
                 onClick={
                   onWorkspaceClick &&
                   localWorkspaceId &&
@@ -82,6 +81,6 @@ export function IssueWorkspacesSection({
           })
         )}
       </div>
-    </CollapsibleSectionHeader>
+    </IssuePanelSection>
   );
 }

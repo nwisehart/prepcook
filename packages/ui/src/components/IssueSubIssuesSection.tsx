@@ -1,9 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Droppable } from '@hello-pangea/dnd';
-import {
-  CollapsibleSectionHeader,
-  type SectionAction,
-} from './CollapsibleSectionHeader';
+import type { SectionAction } from './CollapsibleSectionHeader';
+import { IssuePanelSection } from './IssuePanelSection';
 import { SubIssueRow } from './SubIssueRow';
 import type { PriorityLevel } from './PriorityIcon';
 import type { KanbanAssigneeUser } from './KanbanAssignee';
@@ -47,10 +45,10 @@ export function IssueSubIssuesSection({
   const { t } = useTranslation('common');
 
   return (
-    <CollapsibleSectionHeader
-      title={t('kanban.subIssues', 'Sub-issues')}
+    <IssuePanelSection
+      label={t('kanban.subIssues', 'Sub-issues')}
       persistKey="kanban-issue-sub-issues"
-      defaultExpanded={true}
+      collapsible
       actions={actions}
     >
       <Droppable droppableId={parentIssueId}>
@@ -58,19 +56,14 @@ export function IssueSubIssuesSection({
           <div
             ref={provided.innerRef}
             {...provided.droppableProps}
-            className="p-base flex flex-col relative border-t"
+            className="relative -mx-2 flex flex-col text-[13px]"
           >
-            {isReordering && (
-              <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
-                <p className="text-low">{t('common.loading', 'Loading...')}</p>
-              </div>
-            )}
             {isLoading ? (
-              <p className="text-low py-half">
-                {t('common.loading', 'Loading...')}
+              <p className="m-0 px-2 text-low">
+                {t('states.loading', 'Loading...')}
               </p>
             ) : subIssues.length === 0 ? (
-              <p className="text-low py-half">
+              <p className="m-0 px-2 text-low">
                 {t('kanban.noSubIssues', 'No sub-issues')}
               </p>
             ) : (
@@ -125,8 +118,8 @@ export function IssueSubIssuesSection({
 
             {/* Loading overlay - preserves height while showing loading state */}
             {isReordering && (
-              <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
-                <span className="text-low text-sm">
+              <div className="absolute inset-0 flex items-center justify-center rounded bg-secondary/80">
+                <span className="text-xs text-low">
                   {t('common.saving', 'Saving...')}
                 </span>
               </div>
@@ -134,6 +127,6 @@ export function IssueSubIssuesSection({
           </div>
         )}
       </Droppable>
-    </CollapsibleSectionHeader>
+    </IssuePanelSection>
   );
 }

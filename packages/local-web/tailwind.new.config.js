@@ -10,7 +10,6 @@ const sizes = {
 }
 
 const lineHeightMultiplier = 1.5;
-const radiusMultiplier = 0.25;
 const iconMultiplier = 1.25;
 const chatMaxWidth = '48rem';
 
@@ -87,11 +86,11 @@ module.exports = {
         DEFAULT: 'hsl(var(--brand))',
       },
       fontSize: {
-        xs: [getSize('xs'), { lineHeight: getSize('xs', lineHeightMultiplier) }],      // 8px
-        sm: [getSize('sm'), { lineHeight: getSize('sm', lineHeightMultiplier) }],   // 10px
-        base: [getSize('base'), { lineHeight: getSize('base', lineHeightMultiplier) }],  // 12px (base)
-        lg: [getSize('lg'), { lineHeight: getSize('lg', lineHeightMultiplier) }],    // 14px
-        xl: [getSize('xl'), { lineHeight: getSize('xl', lineHeightMultiplier) }],         // 16px
+        xs: [getSize('xs'), { lineHeight: getSize('xs', lineHeightMultiplier) }],      // 12px (meta, chips)
+        sm: [getSize('sm'), { lineHeight: getSize('sm', lineHeightMultiplier) }],   // 14px (body, card titles)
+        base: [getSize('base'), { lineHeight: getSize('base', lineHeightMultiplier) }],  // 16px
+        lg: [getSize('lg'), { lineHeight: getSize('lg', lineHeightMultiplier) }],    // 18px (panel titles)
+        xl: [getSize('xl'), { lineHeight: getSize('xl', lineHeightMultiplier) }],         // 20px
         cta: [getSize('base'), { lineHeight: getSize('base') }],         // 16px
       },
       spacing: {
@@ -109,15 +108,32 @@ module.exports = {
         primary: "hsl(var(--bg-primary))",
         secondary: "hsl(var(--bg-secondary))",
         panel: "hsl(var(--bg-panel))",
-        // Accent colors
+        // Surfaces: bg-surface-raised (archived/muted cards), border-divider
+        // (hairline inside a card)
+        'surface-raised': "hsl(var(--surface-raised))",
+        divider: "hsl(var(--divider))",
+        // Accent colors. The brand is blue #3F6AA6 in both modes;
+        // brand-secondary is brand-colored text (steps lighter in dark).
         brand: "hsl(var(--brand))",
         'brand-hover': "hsl(var(--brand-hover))",
         'brand-secondary': "hsl(var(--brand-secondary))",
+        'brand-soft': "hsl(var(--brand-soft))",
+        'brand-soft-foreground': "hsl(var(--brand-soft-foreground))",
         error: "hsl(var(--error))",
+        'error-soft': "hsl(var(--error-soft))",
         success: "hsl(var(--success))",
+        'success-soft': "hsl(var(--success-soft))",
         merged: "hsl(var(--merged))",
+        // "Needs you" amber: dot (attention), text (attention-foreground),
+        // surface (attention-soft), border (attention-border)
+        attention: "hsl(var(--attention))",
+        'attention-foreground': "hsl(var(--attention-foreground))",
+        'attention-soft': "hsl(var(--attention-soft))",
+        'attention-border': "hsl(var(--attention-border))",
         // Text on accent
         'on-brand': "hsl(var(--text-on-brand))",
+        // Dialog scrim, always used with an opacity: bg-scrim/45
+        scrim: "hsl(var(--scrim) / <alpha-value>)",
         // shadcn-style colors (used by @apply in CSS base layer)
         background: "hsl(var(--bg-primary))",
         foreground: "hsl(var(--text-normal))",
@@ -127,18 +143,29 @@ module.exports = {
         DEFAULT: "hsl(var(--border))",
         border: "hsl(var(--border))",
       },
+      // `rounded` follows --radius (0.5rem): buttons, inputs, menus.
+      // Cards use rounded-lg (10px), dialogs rounded-xl (12px), chips
+      // rounded-full.
       borderRadius: {
-        lg: getSize('lg', radiusMultiplier),
-        md: getSize('sm', radiusMultiplier),
-        sm: getSize('xs', radiusMultiplier),
+        DEFAULT: 'var(--radius)',
+        sm: '0.375rem',
+        md: '0.5rem',
+        lg: '0.625rem',
+        xl: '0.75rem',
+      },
+      boxShadow: {
+        // Menus, popovers, tooltips and dialogs. Cards carry no shadow.
+        overlay: '0 12px 32px -8px rgb(31 35 40 / 0.16), 0 2px 6px rgb(31 35 40 / 0.06)',
+        // A side panel floating over the board
+        panel: '-8px 0 24px rgb(31 35 40 / 0.05)',
       },
       borderWidth: {
         base: getSize('base'),
         half: getSize('base', 0.5),
       },
       fontFamily: {
-        'ibm-plex-sans': ['"IBM Plex Sans"', '"Noto Emoji"', 'sans-serif'],
-        'ibm-plex-mono': ['"IBM Plex Mono"', 'monospace'],
+        sans: ['Figtree', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       keyframes: {
         "accordion-down": {

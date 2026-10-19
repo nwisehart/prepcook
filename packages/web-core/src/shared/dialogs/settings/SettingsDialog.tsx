@@ -6,6 +6,7 @@ import { create, useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/shared/lib/modals';
 
 import { cn } from '@/shared/lib/utils';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { SettingsSection } from './settings/SettingsSection';
 import type {
   SettingsSectionType,
@@ -14,12 +15,18 @@ import type {
 import {
   SETTINGS_SECTION_DEFINITIONS,
   isHostSpecificSettingsSection,
+  type SettingsSectionGroup,
 } from './settings/settingsRegistry';
 import {
   SettingsDirtyProvider,
   useSettingsDirty,
 } from './settings/SettingsDirtyContext';
 import { SettingsMachineUserSystemProvider } from './settings/SettingsMachineUserSystemProvider';
+import { useIntegrationDescriptors } from './settings/IntegrationSection';
+import {
+  TICKETING_AREA,
+  hasProviderSettings,
+} from './settings/TicketingSettingsSection';
 import { ConfirmDialog } from '@prepcook/ui/components/ConfirmDialog';
 
 export interface SettingsDialogProps {
@@ -33,6 +40,32 @@ interface SettingsDialogContentProps {
   onClose: () => void;
 }
 
+const NAV_GROUPS: { group: SettingsSectionGroup; labelKey: string }[] = [
+  { group: 'host', labelKey: 'settings.layout.nav.thisMachine' },
+  { group: 'integrations', labelKey: 'settings.layout.nav.integrationsGroup' },
+  { group: 'universal', labelKey: 'settings.layout.nav.boardGroup' },
+];
+
+/**
+ * The connected tracker's name beside the Ticketing row, read from the saved
+ * config: shown once any field its provider reads is set.
+ */
+function TrackerNavChip() {
+  const { config } = useUserSystem();
+  const descriptors = useIntegrationDescriptors();
+  const ticketing = config?.ticketing;
+  const descriptor = descriptors.data?.[TICKETING_AREA]?.find(
+    (candidate) => candidate.kind === ticketing?.kind
+  );
+  if (!ticketing || !descriptor || !hasProviderSettings(ticketing, descriptor))
+    return null;
+  return (
+    <span className="ml-auto inline-flex h-[22px] shrink-0 items-center rounded-full bg-success-soft px-2 text-xs font-medium text-success">
+      {descriptor.display_name}
+    </span>
+  );
+}
+
 function SettingsDialogNavigation({
   activeSection,
   onSectionSelect,
@@ -41,76 +74,49 @@ function SettingsDialogNavigation({
   onSectionSelect: (sectionId: SettingsSectionType) => void;
 }) {
   const { t } = useTranslation('settings');
-  const hostSections = SETTINGS_SECTION_DEFINITIONS.filter(
-    (section) => section.group === 'host'
-  );
-  const integrationSections = SETTINGS_SECTION_DEFINITIONS.filter(
-    (section) => section.group === 'integrations'
-  );
-  const universalSections = SETTINGS_SECTION_DEFINITIONS.filter(
-    (section) => section.group === 'universal'
-  );
-  const renderSectionButton = (sectionId: SettingsSectionType) => {
-    const section = SETTINGS_SECTION_DEFINITIONS.find(
-      (item) => item.id === sectionId
-    );
-    if (!section) return null;
-    const Icon = section.icon;
-    const isActive = activeSection === section.id;
-    return (
-      <button
-        key={section.id}
-        type="button"
-        onClick={() => onSectionSelect(section.id)}
-        className={cn(
-          'flex items-center gap-3 text-left px-3 py-2 rounded-sm text-sm transition-colors',
-          isActive
-            ? 'bg-brand/10 text-brand font-medium'
-            : 'text-normal hover:bg-primary/10'
-        )}
-      >
-        <Icon className="size-icon-sm shrink-0" weight="bold" />
-        <span className="truncate">
-          {t(`settings.layout.nav.${section.id}`)}
-        </span>
-      </button>
-    );
-  };
 
   return (
-    <nav className="flex-1 p-2 flex flex-col gap-4 overflow-y-auto">
-      <div className="space-y-2">
-        <div className="px-3 pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
-            {t('settings.layout.nav.machineSettings')}
+    <nav
+      aria-label={t('settings.layout.nav.title')}
+      className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-6"
+    >
+      {NAV_GROUPS.map(({ group, labelKey }, groupIndex) => (
+        <div key={group} className="flex flex-col gap-0.5">
+          <div
+            className={cn(
+              'px-2.5 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-low',
+              groupIndex === 0 ? 'pt-1.5' : 'pt-3.5'
+            )}
+          >
+            {t(labelKey)}
           </div>
+          {SETTINGS_SECTION_DEFINITIONS.filter(
+            (section) => section.group === group
+          ).map((section) => {
+            const isActive = activeSection === section.id;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => onSectionSelect(section.id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-sm text-high transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
+                  isActive
+                    ? 'bg-panel font-semibold'
+                    : 'font-medium hover:bg-panel'
+                )}
+              >
+                <span className="truncate">
+                  {t(`settings.layout.nav.${section.id}`)}
+                </span>
+                {section.id === 'ticketing' && <TrackerNavChip />}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex flex-col gap-1">
-          {hostSections.map((section) => renderSectionButton(section.id))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="px-3 pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
-            {t('settings.layout.nav.integrationsGroup')}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          {integrationSections.map((section) =>
-            renderSectionButton(section.id)
-          )}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="px-3 pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
-            {t('settings.layout.nav.accountSettings')}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          {universalSections.map((section) => renderSectionButton(section.id))}
-        </div>
-      </div>
+      ))}
     </nav>
   );
 }
@@ -139,7 +145,7 @@ function SettingsDialogContent({
   const [activeSection, setActiveSection] = useState<SettingsSectionType>(
     resolvedInitialSection
   );
-  // On mobile, null means show the nav menu, a section means show that section
+  // On mobile, false shows the nav menu and true shows the active section
   const [mobileShowContent, setMobileShowContent] = useState<boolean>(
     initialSection === resolvedInitialSection
   );
@@ -194,53 +200,44 @@ function SettingsDialogContent({
       {/* Overlay */}
       <div
         data-tauri-drag-region
-        className="fixed inset-0 z-[9998] bg-black/50 animate-in fade-in-0 duration-200"
+        className="fixed inset-0 z-[9998] bg-scrim/45 animate-in fade-in-0 duration-200"
         onClick={handleCloseWithConfirmation}
       />
-      {/* Dialog wrapper - handles positioning */}
-      <div
-        className={cn(
-          'fixed z-[9999]',
-          // Mobile: full screen
-          'inset-0',
-          // Desktop: centered with fixed size
-          'md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2'
-        )}
-      >
-        {/* Dialog content - handles animation */}
+      {/* Positioning: full screen on mobile; full height and at most 1180px
+          wide on desktop. Clicks outside the dialog fall through to the
+          overlay. */}
+      <div className="pointer-events-none fixed inset-0 z-[9999] flex justify-center md:p-6">
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('settings.layout.nav.title')}
           className={cn(
-            'h-full w-full flex overflow-hidden',
-            'bg-panel/95 backdrop-blur-sm shadow-lg',
+            'pointer-events-auto flex h-full w-full overflow-hidden bg-secondary text-normal',
             'animate-in fade-in-0 slide-in-from-bottom-4 duration-200',
-            // Mobile: full screen, no rounded corners
-            'rounded-none border-0',
-            // Desktop: fixed size with rounded corners
-            'md:w-[900px] md:h-[700px] md:rounded-sm md:border md:border-border/50'
+            'md:max-w-[1180px] md:rounded-xl md:border md:border-border md:shadow-overlay'
           )}
         >
-          {/* Sidebar - hidden on mobile when showing content */}
+          {/* Section nav - hidden on mobile when showing content */}
           <div
             className={cn(
-              'bg-secondary/80 border-r border-border flex flex-col',
-              // Mobile: full width, hidden when showing content
-              'w-full',
-              mobileShowContent && 'hidden',
-              // Desktop: fixed width sidebar, always visible
-              'md:w-56 md:block'
+              'flex w-full flex-col bg-secondary md:w-[228px] md:shrink-0 md:border-r md:border-border',
+              mobileShowContent ? 'hidden md:flex' : 'flex'
             )}
           >
-            {/* Header */}
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-high">
+            <div className="flex items-center justify-between px-5 pb-2.5 pt-[22px]">
+              <h2 className="text-lg font-bold text-high">
                 {t('settings.layout.nav.title')}
               </h2>
               {/* Close button - mobile only */}
               <button
+                type="button"
                 onClick={handleCloseWithConfirmation}
-                className="p-1 rounded-sm hover:bg-secondary text-low hover:text-normal md:hidden"
+                className="rounded p-1 text-low hover:bg-panel hover:text-high md:hidden"
               >
-                <XIcon className="size-icon-sm" weight="bold" />
+                <XIcon className="size-4" />
+                <span className="sr-only">
+                  {t('buttons.close', { ns: 'common' })}
+                </span>
               </button>
             </div>
             <SettingsDialogNavigation
@@ -251,33 +248,35 @@ function SettingsDialogContent({
           {/* Content - hidden on mobile when showing nav */}
           <div
             className={cn(
-              'flex-1 flex flex-col relative overflow-hidden',
-              // Mobile: full width, hidden when showing nav
-              !mobileShowContent && 'hidden',
-              // Desktop: always visible
-              'md:flex'
+              'relative min-w-0 flex-1 flex-col overflow-hidden bg-primary',
+              mobileShowContent ? 'flex' : 'hidden md:flex'
             )}
           >
             {/* Mobile header with back button */}
-            <div className="flex items-center gap-2 p-3 border-b border-border md:hidden">
+            <div className="flex items-center gap-2 border-b border-border bg-secondary p-3 md:hidden">
               <button
+                type="button"
                 onClick={handleMobileBack}
-                className="p-1 rounded-sm hover:bg-secondary text-low hover:text-normal"
+                className="rounded p-1 text-low hover:bg-panel hover:text-high"
               >
-                <CaretLeftIcon className="size-icon-sm" weight="bold" />
+                <CaretLeftIcon className="size-4" />
               </button>
-              <span className="text-sm font-medium text-high">
+              <span className="text-sm font-semibold text-high">
                 {t(`settings.layout.nav.${activeSection}`)}
               </span>
               <button
+                type="button"
                 onClick={handleCloseWithConfirmation}
-                className="ml-auto p-1 rounded-sm hover:bg-secondary text-low hover:text-normal"
+                className="ml-auto rounded p-1 text-low hover:bg-panel hover:text-high"
               >
-                <XIcon className="size-icon-sm" weight="bold" />
+                <XIcon className="size-4" />
+                <span className="sr-only">
+                  {t('buttons.close', { ns: 'common' })}
+                </span>
               </button>
             </div>
-            {/* Section content */}
-            <div className="flex-1 overflow-y-auto">
+            {/* Section content; keyed so each section opens scrolled to the top */}
+            <div key={activeSection} className="flex-1 overflow-y-auto">
               {isHostSpecificSettingsSection(activeSection) ? (
                 <SettingsMachineUserSystemProvider>
                   <SettingsSection

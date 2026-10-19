@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { SpinnerIcon } from '@phosphor-icons/react';
 import { useUserOrganizations } from '@/shared/hooks/useUserOrganizations';
 import { useSelectedOrgId } from '@/shared/stores/useOrganizationStore';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { AgentUsersCard } from '@/shared/components/org/AgentUsersCard';
 import { MemberRole as MemberRoleEnum } from 'shared/types';
+import { SettingsCard, SettingsLoading } from './SettingsComponents';
 
 /**
  * The board has one organization and every signed-in user is an admin of
@@ -28,38 +28,24 @@ export function OrganizationsSettingsSection() {
   const isAdmin = selectedOrg?.user_role === MemberRoleEnum.ADMIN;
 
   if (!isLoaded || orgsLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">
-          {t('settings.loadingOrganizations')}
-        </span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.loadingOrganizations')} />;
   }
 
   if (!hasBoardAccess) {
     return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-high">
-            {t('boardRequired.title')}
-          </h3>
-          <p className="text-sm text-low mt-1">
-            {t('boardRequired.description')}
-          </p>
-        </div>
-      </div>
+      <SettingsCard
+        title={t('boardRequired.title')}
+        description={t('boardRequired.description')}
+      >
+        {null}
+      </SettingsCard>
     );
   }
 
   if (orgsError) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {orgsError instanceof Error
             ? orgsError.message
             : t('settings.loadError')}

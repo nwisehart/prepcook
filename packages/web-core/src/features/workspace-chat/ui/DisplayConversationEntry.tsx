@@ -1,6 +1,7 @@
-import { useMemo, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useMemo, useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ActionType,
   BaseAgentCapability,
@@ -17,23 +18,30 @@ import {
   type PersistKey,
 } from '@/shared/stores/useUiPreferencesStore';
 import { getActualTheme } from '@/shared/lib/theme';
-import { getFileIcon } from '@/shared/lib/fileTypeIcon';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { useLavishSession } from '@/shared/hooks/useLavishSession';
+import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import WYSIWYGEditor from '@/shared/components/WYSIWYGEditor';
 import { useMessageEditContext } from '../model/contexts/MessageEditContext';
+import { useApprovalFeedbackOptional } from '../model/contexts/ApprovalFeedbackContext';
+import { useApprovalMutation } from '../model/hooks/useApprovalMutation';
 import type { UseResetProcessResult } from '../model/hooks/useResetProcess';
 import { useChangesViewActions } from '@/shared/hooks/useChangesView';
 import { useLogsPanelActions } from '@/shared/hooks/useLogsPanel';
 import { cn } from '@/shared/lib/utils';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
+import { useSessionCards } from '@/features/workspace/model/hooks/useSessionCards';
 import { ChatToolSummary } from '@prepcook/ui/components/ChatToolSummary';
 import { ChatTodoList } from '@prepcook/ui/components/ChatTodoList';
 import {
   ChatFileEntry,
   type ChatFileEntryDiffInput,
 } from '@prepcook/ui/components/ChatFileEntry';
-import { ChatApprovalCard } from '@prepcook/ui/components/ChatApprovalCard';
+import {
+  ChatApprovalCard,
+  type ChatApprovalCardDecision,
+} from '@prepcook/ui/components/ChatApprovalCard';
 import { ChatUserMessage } from '@prepcook/ui/components/ChatUserMessage';
 import { ChatAssistantMessage } from '@prepcook/ui/components/ChatAssistantMessage';
 import { ChatSystemMessage } from '@prepcook/ui/components/ChatSystemMessage';
@@ -46,6 +54,11 @@ import { ChatAggregatedDiffEntries } from '@prepcook/ui/components/ChatAggregate
 import { ChatCollapsedThinking } from '@prepcook/ui/components/ChatCollapsedThinking';
 import { ChatMarkdown } from '@prepcook/ui/components/ChatMarkdown';
 import {
+  ChatPrefixedComment,
+  ChatStep,
+  ChatStepDetail,
+} from '@prepcook/ui/components/ChatStep';
+import {
   DiffViewBody,
   useDiffData,
 } from '@prepcook/ui/components/PierreConversationDiff';
@@ -54,14 +67,17 @@ import type {
   AggregatedPatchGroup,
   AggregatedDiffGroup,
   AggregatedThinkingGroup,
+  PatchTypeWithKey,
 } from '@/shared/hooks/useConversationHistory/types';
 import {
-  CaretDownIcon,
-  FileTextIcon,
-  ListMagnifyingGlassIcon,
-  GlobeIcon,
-  PencilSimpleIcon,
-} from '@phosphor-icons/react';
+  fileBaseName,
+  findPrefixedCommentInArgs,
+  formatStepTime,
+  humanizeToolName,
+  splitPrefixedComment,
+  summarizeList,
+  type PrefixedComment,
+} from './stepPresentation';
 
 type Props = {
   expansionKey: string;
@@ -76,39 +92,79 @@ type Props = {
 };
 
 type FileEditAction = Extract<ActionType, { action: 'file_edit' }>;
+type ToolUseEntryType = Extract<
+  NormalizedEntry['entry_type'],
+  { type: 'tool_use' }
+>;
 
-/**
- * Generate tool summary text from action type
- */
-function getToolSummary(
-  entryType: Extract<NormalizedEntry['entry_type'], { type: 'tool_use' }>,
+// Details longer than this fold behind a disclosure when there is no output
+// to open instead.
+const LONG_DETAIL_CHARS = 90;
+
+interface ToolDescription {
+  label: string;
+  detail?: string;
+  /** Whether the detail is code-like (path, query, command) */
+  mono: boolean;
+  comment?: PrefixedComment | null;
+}
+
+/** The step label and detail line for a tool call. */
+function describeTool(
+  entryType: ToolUseEntryType,
   t: TFunction<'common'>
-): string {
+): ToolDescription {
   const { action_type, tool_name } = entryType;
 
   switch (action_type.action) {
     case 'file_read':
-      return t('conversation.toolSummary.read', { path: action_type.path });
+      return {
+        label: t('conversation.steps.readFile'),
+        detail: action_type.path,
+        mono: true,
+      };
     case 'search':
-      return t('conversation.toolSummary.searched', {
-        query: action_type.query,
-      });
+      return {
+        label: t('conversation.steps.searched'),
+        detail: action_type.query,
+        mono: true,
+      };
     case 'web_fetch':
-      return t('conversation.toolSummary.fetched', { url: action_type.url });
+      return {
+        label: t('conversation.steps.fetched'),
+        detail: action_type.url,
+        mono: true,
+      };
     case 'command_run':
-      return action_type.command || t('conversation.toolSummary.ranCommand');
-    case 'task_create':
-      return t('conversation.toolSummary.createdTask', {
-        description: action_type.description,
-      });
-    case 'todo_management':
-      return t('conversation.toolSummary.todoOperation', {
-        operation: action_type.operation,
-      });
-    case 'tool':
-      return tool_name || t('conversation.tool');
+      return {
+        label: t('conversation.steps.ranCommand'),
+        detail: action_type.command || undefined,
+        mono: true,
+      };
+    case 'tool': {
+      const { label, server } = humanizeToolName(
+        action_type.tool_name || tool_name
+      );
+      const comment = findPrefixedCommentInArgs(action_type.arguments);
+      return {
+        label: comment ? t('conversation.steps.postedComment') : label,
+        detail: server ?? undefined,
+        mono: Boolean(server),
+        comment,
+      };
+    }
+    case 'ask_user_question':
+      return { label: t('askQuestion.title'), mono: false };
+    case 'other':
+      return {
+        label: action_type.description || tool_name || t('conversation.tool'),
+        mono: false,
+      };
     default:
-      return tool_name || t('conversation.tool');
+      return {
+        label: humanizeToolName(tool_name).label || t('conversation.tool'),
+        mono: false,
+      };
   }
 }
 
@@ -120,7 +176,7 @@ function getToolSummary(
  * - others: fall back to entry.content
  */
 function getToolOutput(
-  entryType: Extract<NormalizedEntry['entry_type'], { type: 'tool_use' }>,
+  entryType: ToolUseEntryType,
   entryContent: string
 ): string {
   const { action_type } = entryType;
@@ -143,9 +199,7 @@ function getToolOutput(
 /**
  * Extract the command from action_type for command_run actions
  */
-function getToolCommand(
-  entryType: Extract<NormalizedEntry['entry_type'], { type: 'tool_use' }>
-): string | undefined {
+function getToolCommand(entryType: ToolUseEntryType): string | undefined {
   const { action_type } = entryType;
 
   if (action_type.action === 'command_run') {
@@ -154,11 +208,40 @@ function getToolCommand(
   return undefined;
 }
 
+/** The step label for one file change, e.g. "Edited quantity.ts". */
+function fileChangeLabel(
+  action: FileEditAction['changes'][number]['action'],
+  path: string,
+  t: TFunction<'common'>
+): string {
+  const file = fileBaseName(path);
+  switch (action) {
+    case 'write':
+      return t('conversation.steps.createdFile', { file });
+    case 'delete':
+      return t('conversation.steps.deletedFile', { file });
+    case 'rename':
+      return t('conversation.steps.renamedFile', { file });
+    default:
+      return t('conversation.steps.editedFile', { file });
+  }
+}
+
+/** Timestamp of the first normalized entry in a group. */
+function firstEntryTime(entries: PatchTypeWithKey[]): string | undefined {
+  for (const entry of entries) {
+    if (entry.type === 'NORMALIZED_ENTRY') {
+      return formatStepTime(entry.content.timestamp);
+    }
+  }
+  return undefined;
+}
+
 /**
  * Render tool_use entry types with appropriate components
  */
 function renderToolUseEntry(
-  entryType: Extract<NormalizedEntry['entry_type'], { type: 'tool_use' }>,
+  entryType: ToolUseEntryType,
   entry: NormalizedEntry,
   props: Props,
   t: TFunction<'common'>
@@ -167,6 +250,7 @@ function renderToolUseEntry(
     props;
   const sessionId = workspaceWithSession?.session?.id;
   const { action_type, status } = entryType;
+  const time = formatStepTime(entry.timestamp);
 
   // File edit - use ChatFileEntry
   if (action_type.action === 'file_edit') {
@@ -180,6 +264,7 @@ function renderToolUseEntry(
             change={change}
             expansionKey={`edit:${expansionKey}:${idx}`}
             status={status}
+            time={time}
           />
         ))}
       </>
@@ -199,6 +284,7 @@ function renderToolUseEntry(
         expansionKey={expansionKey}
         workspaceId={workspaceWithSession?.id}
         sessionId={sessionId}
+        executionProcessId={executionProcessId}
         status={status}
       />
     );
@@ -210,6 +296,7 @@ function renderToolUseEntry(
       <TodoManagementEntry
         todos={action_type.todos}
         expansionKey={expansionKey}
+        time={time}
       />
     );
   }
@@ -225,6 +312,7 @@ function renderToolUseEntry(
         status={status}
         workspaceId={workspaceWithSession?.id}
         sessionId={sessionId}
+        time={time}
       />
     );
   }
@@ -254,11 +342,12 @@ function renderToolUseEntry(
         status={status}
         workspaceId={workspaceWithSession?.id}
         repos={repos}
+        time={time}
       />
     );
   }
 
-  // Generic tool pending approval - use plan-style card
+  // Generic tool pending approval - decision card
   if (status.status === 'pending_approval') {
     // Question approvals are rendered via askQuestionMode in SessionChatBoxContainer.
     // Avoid showing a duplicate inline approval card in the conversation timeline.
@@ -272,21 +361,22 @@ function renderToolUseEntry(
         expansionKey={expansionKey}
         workspaceId={workspaceWithSession?.id}
         sessionId={sessionId}
+        executionProcessId={executionProcessId}
         status={status}
       />
     );
   }
 
-  // Other tool uses - use ChatToolSummary
+  // Other tool uses - a quiet step
   return (
     <ToolSummaryEntry
-      summary={getToolSummary(entryType, t)}
+      description={describeTool(entryType, t)}
       expansionKey={expansionKey}
       status={status}
       content={getToolOutput(entryType, entry.content)}
       toolName={entryType.tool_name}
       command={getToolCommand(entryType)}
-      actionType={action_type.action}
+      time={time}
     />
   );
 }
@@ -339,6 +429,7 @@ function DisplayConversationEntry(props: Props) {
   }
 
   const entryType = entry.entry_type;
+  const time = formatStepTime(entry.timestamp);
 
   switch (entryType.type) {
     case 'tool_use':
@@ -354,6 +445,7 @@ function DisplayConversationEntry(props: Props) {
           executionProcessId={executionProcessId}
           executorCanFork={executorCanFork}
           resetAction={resetAction}
+          time={time}
         />
       );
 
@@ -363,6 +455,7 @@ function DisplayConversationEntry(props: Props) {
           content={entry.content}
           workspaceId={workspaceWithSession?.id}
           sessionId={sessionId}
+          time={time}
         />
       );
 
@@ -396,6 +489,7 @@ function DisplayConversationEntry(props: Props) {
         <ErrorMessageEntry
           content={entry.content}
           expansionKey={expansionKey}
+          time={time}
         />
       );
 
@@ -414,6 +508,7 @@ function DisplayConversationEntry(props: Props) {
           deniedTool={entryType.denied_tool}
           workspaceId={workspaceWithSession?.id}
           sessionId={sessionId}
+          time={time}
         />
       );
 
@@ -422,6 +517,7 @@ function DisplayConversationEntry(props: Props) {
         <UserAnsweredQuestionsEntry
           answers={entryType.answers}
           expansionKey={expansionKey}
+          time={time}
         />
       );
 
@@ -506,25 +602,22 @@ function FileEditEntry({
   change,
   expansionKey,
   status,
+  time,
 }: {
   path: string;
   change: FileEditAction['changes'][number];
   expansionKey: string;
   status: ToolStatus;
+  time: string | undefined;
 }) {
+  const { t } = useTranslation('common');
   // Auto-expand when pending approval
   const pendingApproval = status.status === 'pending_approval';
   const [expanded, toggle] = usePersistedExpanded(
     expansionKey as PersistKey,
     pendingApproval
   );
-  const { theme } = useTheme();
-  const actualTheme = getActualTheme(theme);
   const { viewFileInChanges, hasDiffPath } = useChangesViewActions();
-  const FileIcon = useMemo(
-    () => getFileIcon(path, actualTheme),
-    [path, actualTheme]
-  );
   // Calculate diff stats for edit changes
   const { additions, deletions } = useMemo(() => {
     if (change.action === 'edit' && change.unified_diff) {
@@ -571,13 +664,14 @@ function FileEditEntry({
 
   return (
     <ChatFileEntry
+      label={fileChangeLabel(change.action, path, t)}
       filename={path}
       additions={additions ?? writeAdditions}
       deletions={deletions}
+      time={time}
       expanded={expanded}
       onToggle={toggle}
       status={status}
-      fileIcon={FileIcon}
       diffContent={hasDiffContent ? diffContent : undefined}
       renderDiffBody={
         hasDiffContent
@@ -592,19 +686,147 @@ function FileEditEntry({
 }
 
 /**
- * Plan entry with expandable content
+ * Where the plan document can be opened from the decision card: the live
+ * review page when one is open, else the RCA/spec file in the Review panel
+ * when it is part of the diff.
+ */
+function usePlanDocumentLink(
+  workspaceId: string | undefined
+): ChatApprovalCardDecision['documentLink'] {
+  const { t } = useTranslation('common');
+  const { data: lavishSession } = useLavishSession(workspaceId);
+  const sessionCards = useSessionCards({ enabled: Boolean(workspaceId) });
+  const { viewFileInChanges, hasDiffPath } = useChangesViewActions();
+  const card = workspaceId ? sessionCards.get(workspaceId) : undefined;
+  const kind = card?.metadata?.planning?.kind;
+  const label =
+    kind === 'rca'
+      ? t('conversation.decision.openRca')
+      : kind === 'spec'
+        ? t('conversation.decision.openSpec')
+        : t('conversation.decision.openPlanDocument');
+
+  const reviewUrl = lavishSession?.url;
+  if (reviewUrl) {
+    return {
+      label,
+      onClick: () => window.open(reviewUrl, '_blank', 'noopener,noreferrer'),
+    };
+  }
+  const specPath = card?.metadata?.spec?.path ?? lavishSession?.file;
+  if (specPath && hasDiffPath(specPath)) {
+    return { label, onClick: () => viewFileInChanges(specPath) };
+  }
+  return null;
+}
+
+/**
+ * The approve / request-changes controls for a tool call waiting on a
+ * person. Returns null once the call is no longer pending.
+ */
+function useApprovalDecision({
+  status,
+  executionProcessId,
+  workspaceId,
+  helper,
+}: {
+  status: ToolStatus;
+  executionProcessId: string | undefined;
+  workspaceId: string | undefined;
+  helper: string;
+}): ChatApprovalCardDecision | null {
+  const { t } = useTranslation('common');
+  const queryClient = useQueryClient();
+  const feedbackContext = useApprovalFeedbackOptional();
+  const {
+    approveAsync,
+    denyAsync,
+    isApproving,
+    isDenying,
+    approveError,
+    denyError,
+  } = useApprovalMutation();
+  const [note, setNote] = useState('');
+  const isPending = status.status === 'pending_approval';
+  // Only a pending decision links the plan document, so resolved cards in
+  // the history do not poll for a review page.
+  const documentLink = usePlanDocumentLink(isPending ? workspaceId : undefined);
+
+  if (!isPending || !executionProcessId) {
+    return null;
+  }
+  const approvalId = status.approval_id;
+
+  const refreshSummaries = () =>
+    queryClient.invalidateQueries({ queryKey: workspaceSummaryKeys.all });
+
+  return {
+    helper,
+    note,
+    onNoteChange: setNote,
+    noteLabel: t('conversation.decision.noteLabel'),
+    notePlaceholder: t('conversation.decision.notePlaceholder'),
+    approveLabel: t('conversation.decision.approve'),
+    requestChangesLabel: t('conversation.decision.requestChanges'),
+    onApprove: async () => {
+      feedbackContext?.exitFeedbackMode();
+      try {
+        await approveAsync({ approvalId, executionProcessId });
+        void refreshSummaries();
+      } catch {
+        // The mutation's error is shown on the card
+      }
+    },
+    onRequestChanges: async () => {
+      const reason = note.trim();
+      if (!reason) return;
+      try {
+        await denyAsync({ approvalId, executionProcessId, reason });
+        setNote('');
+        void refreshSummaries();
+      } catch {
+        // The mutation's error is shown on the card
+      }
+    },
+    isSubmitting: isApproving || isDenying,
+    error: (approveError ?? denyError)?.message ?? null,
+    documentLink,
+  };
+}
+
+/** The chip naming a decided approval's outcome. */
+function approvalOutcomeLabel(
+  status: ToolStatus,
+  t: TFunction<'common'>
+): string | undefined {
+  switch (status.status) {
+    case 'success':
+      return t('conversation.decision.approved');
+    case 'denied':
+      return t('conversation.decision.changesRequested');
+    case 'timed_out':
+      return t('conversation.decision.timedOut');
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Plan entry: the decision card while pending, a folded card after
  */
 function PlanEntry({
   plan,
   expansionKey,
   workspaceId,
   sessionId,
+  executionProcessId,
   status,
 }: {
   plan: string;
   expansionKey: string;
   workspaceId: string | undefined;
   sessionId: string | undefined;
+  executionProcessId: string | undefined;
   status: ToolStatus;
 }) {
   const { t } = useTranslation('common');
@@ -614,9 +836,15 @@ function PlanEntry({
     `plan:${expansionKey}`,
     pendingApproval
   );
+  const decision = useApprovalDecision({
+    status,
+    executionProcessId,
+    workspaceId,
+    helper: t('conversation.decision.planHelper'),
+  });
 
   // Extract title from plan content (first line or default)
-  const title = useMemo(() => {
+  const planTitle = useMemo(() => {
     const firstLine = plan.split('\n')[0];
     // Remove markdown heading markers
     const cleanTitle = firstLine.replace(/^#+\s*/, '').trim();
@@ -625,12 +853,15 @@ function PlanEntry({
 
   return (
     <ChatApprovalCard
-      title={title}
+      title={t('conversation.decision.planTitle')}
+      contentTitle={planTitle}
       content={plan}
       expanded={expanded}
       onToggle={toggle}
       workspaceId={workspaceId}
       status={status}
+      outcomeLabel={approvalOutcomeLabel(status, t)}
+      decision={decision}
       renderMarkdown={({ content, workspaceId }) => (
         <AppChatMarkdown
           content={content}
@@ -645,7 +876,7 @@ function PlanEntry({
 }
 
 /**
- * Generic tool approval entry - renders with plan-style card when pending approval
+ * Generic tool approval entry - the decision card while pending
  */
 function GenericToolApprovalEntry({
   toolName,
@@ -653,6 +884,7 @@ function GenericToolApprovalEntry({
   expansionKey,
   workspaceId,
   sessionId,
+  executionProcessId,
   status,
 }: {
   toolName: string;
@@ -660,21 +892,33 @@ function GenericToolApprovalEntry({
   expansionKey: string;
   workspaceId: string | undefined;
   sessionId: string | undefined;
+  executionProcessId: string | undefined;
   status: ToolStatus;
 }) {
+  const { t } = useTranslation('common');
   const [expanded, toggle] = usePersistedExpanded(
     `tool:${expansionKey}`,
     true // auto-expand for pending approval
   );
+  const toolLabel = humanizeToolName(toolName).label;
+  const decision = useApprovalDecision({
+    status,
+    executionProcessId,
+    workspaceId,
+    helper: t('conversation.decision.toolHelper'),
+  });
 
   return (
     <ChatApprovalCard
-      title={toolName}
+      title={t('conversation.decision.toolTitle', { tool: toolLabel })}
+      contentTitle={toolLabel}
       content={content}
       expanded={expanded}
       onToggle={toggle}
       workspaceId={workspaceId}
       status={status}
+      outcomeLabel={approvalOutcomeLabel(status, t)}
+      decision={decision}
       renderMarkdown={({ content, workspaceId }) => (
         <AppChatMarkdown
           content={content}
@@ -699,6 +943,7 @@ function UserMessageEntry({
   executionProcessId,
   executorCanFork,
   resetAction,
+  time,
 }: {
   content: string;
   expansionKey: string;
@@ -707,6 +952,7 @@ function UserMessageEntry({
   executionProcessId: string | undefined;
   executorCanFork: boolean;
   resetAction: UseResetProcessResult;
+  time: string | undefined;
 }) {
   const [expanded, toggle] = usePersistedExpanded(`user:${expansionKey}`, true);
   const { startEdit, isEntryGreyed, isInEditMode } = useMessageEditContext();
@@ -739,6 +985,7 @@ function UserMessageEntry({
       content={content}
       expanded={expanded}
       onToggle={toggle}
+      time={time}
       workspaceId={workspaceId}
       onEdit={canEdit ? handleEdit : undefined}
       onReset={canReset ? handleReset : undefined}
@@ -764,32 +1011,34 @@ function UserFeedbackEntry({
   deniedTool,
   workspaceId,
   sessionId,
+  time,
 }: {
   content: string;
   deniedTool: string;
   workspaceId: string | undefined;
   sessionId: string | undefined;
+  time: string | undefined;
 }) {
   const { t } = useTranslation('common');
 
   return (
-    <div className="py-2">
-      <div className="bg-background px-4 py-2 text-sm border-y border-dashed">
-        <div
-          className="text-xs mb-1 opacity-70"
-          style={{ color: 'hsl(var(--destructive))' }}
-        >
-          {t('conversation.deniedByUser', { toolName: deniedTool })}
-        </div>
+    <ChatStep
+      state="denied"
+      label={t('conversation.deniedByUser', {
+        toolName: humanizeToolName(deniedTool).label,
+      })}
+      time={time}
+    >
+      <div className="mt-1 max-w-[680px] rounded border bg-secondary px-3 py-2 text-sm text-normal">
         <WYSIWYGEditor
           value={content}
           disabled
-          className="whitespace-pre-wrap break-words flex flex-col gap-1 font-light py-3"
+          className="whitespace-pre-wrap break-words"
           workspaceId={workspaceId}
           sessionId={sessionId}
         />
       </div>
-    </div>
+    </ChatStep>
   );
 }
 
@@ -799,12 +1048,14 @@ function UserFeedbackEntry({
 function UserAnsweredQuestionsEntry({
   answers,
   expansionKey,
+  time,
 }: {
   answers: Extract<
     NormalizedEntry['entry_type'],
     { type: 'user_answered_questions' }
   >['answers'];
   expansionKey: string;
+  time: string | undefined;
 }) {
   const { t } = useTranslation('common');
   const [expanded, toggle] = usePersistedExpanded(
@@ -813,31 +1064,28 @@ function UserAnsweredQuestionsEntry({
   );
 
   return (
-    <div className="py-2">
-      <div className="bg-background px-4 py-2 text-sm border-y border-dashed">
-        <button
-          onClick={() => toggle()}
-          className="flex items-center gap-1 text-xs opacity-70 w-full cursor-pointer"
-        >
-          <CaretDownIcon
-            className={cn(
-              'size-3 transition-transform',
-              !expanded && '-rotate-90'
-            )}
-          />
-          <span>
-            {t('askQuestion.answeredCount', { count: answers.length })}
-          </span>
-        </button>
-        {expanded &&
-          answers.map((qa, i) => (
-            <div key={i} className="mt-2">
-              <div className="font-semibold text-sm">{qa.question}</div>
-              <div className="text-sm font-light">{qa.answer.join(', ')}</div>
+    <ChatStep
+      state="done"
+      label={t('askQuestion.answeredCount', { count: answers.length })}
+      time={time}
+      expanded={expanded}
+      onActivate={() => toggle()}
+    >
+      {expanded && (
+        <div className="mt-1 flex max-w-[680px] flex-col gap-2 rounded border bg-secondary px-3 py-2.5">
+          {answers.map((qa, i) => (
+            <div key={i} className="flex flex-col gap-0.5">
+              <span className="text-sm font-semibold text-high">
+                {qa.question}
+              </span>
+              <span className="text-sm text-normal">
+                {qa.answer.join(', ')}
+              </span>
             </div>
           ))}
-      </div>
-    </div>
+        </div>
+      )}
+    </ChatStep>
   );
 }
 
@@ -846,33 +1094,41 @@ function UserAnsweredQuestionsEntry({
  */
 function LoadingEntry() {
   return (
-    <div className="px-4 py-2 text-sm">
-      <div className="flex animate-pulse space-x-2 items-center">
-        <div className="size-3 bg-foreground/10" />
-        <div className="flex-1 h-3 bg-foreground/10" />
-        <div className="flex-1 h-3" />
-        <div className="flex-1 h-3" />
+    <div className="flex items-center gap-3 py-1.5">
+      <div className="size-6 shrink-0 animate-pulse rounded-full bg-panel" />
+      <div className="flex flex-1 animate-pulse items-center gap-2">
+        <div className="h-3 w-1/3 rounded-full bg-panel" />
+        <div className="h-3 w-1/4 rounded-full bg-panel/70" />
       </div>
     </div>
   );
 }
 
 /**
- * Assistant message entry with expandable content
+ * Assistant message entry
  */
 function AssistantMessageEntry({
   content,
   workspaceId,
   sessionId,
+  time,
 }: {
   content: string;
   workspaceId: string | undefined;
   sessionId: string | undefined;
+  time: string | undefined;
 }) {
+  const prefixedComment = useMemo(
+    () => splitPrefixedComment(content),
+    [content]
+  );
+
   return (
     <ChatAssistantMessage
       content={content}
       workspaceId={workspaceId}
+      time={time}
+      prefixedComment={prefixedComment}
       renderMarkdown={({ content, workspaceId }) => (
         <AppChatMarkdown
           content={content}
@@ -886,40 +1142,36 @@ function AssistantMessageEntry({
   );
 }
 
+/** The detail line of a step, in mono when it names code. */
+function StepDetailText({ text, mono }: { text: string; mono: boolean }) {
+  return <span className={cn(mono && 'font-mono')}>{text}</span>;
+}
+
 /**
- * Tool summary entry with collapsible content for multi-line summaries
+ * A single tool call as a step; opens its output in the logs panel
  */
 function ToolSummaryEntry({
-  summary,
+  description,
   expansionKey,
   status,
   content,
   toolName,
   command,
-  actionType,
+  time,
 }: {
-  summary: string;
+  description: ToolDescription;
   expansionKey: string;
   status: ToolStatus;
   content: string;
   toolName: string;
   command: string | undefined;
-  actionType: string;
+  time: string | undefined;
 }) {
   const [expanded, toggle] = usePersistedExpanded(
     `tool:${expansionKey}`,
     false
   );
   const { viewToolContentInPanel } = useLogsPanelActions();
-  const textRef = useRef<HTMLSpanElement>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const el = textRef.current;
-    if (el && !expanded) {
-      setIsTruncated(el.scrollWidth > el.clientWidth);
-    }
-  }, [summary, expanded]);
 
   // Any tool with output can open the logs panel
   const hasOutput = content && content.trim().length > 0;
@@ -928,18 +1180,28 @@ function ToolSummaryEntry({
     viewToolContentInPanel(toolName, content, command);
   }, [viewToolContentInPanel, toolName, content, command]);
 
+  const { detail, mono, comment } = description;
+  const isLong = Boolean(detail && detail.length > LONG_DETAIL_CHARS);
+
   return (
     <ChatToolSummary
-      ref={textRef}
-      summary={summary}
+      label={description.label}
+      detail={detail ? <StepDetailText text={detail} mono={mono} /> : undefined}
+      fullDetail={isLong ? detail : undefined}
+      time={time}
       expanded={expanded}
       onToggle={toggle}
       status={status}
       onViewContent={hasOutput ? handleViewContent : undefined}
-      toolName={toolName}
-      isTruncated={isTruncated}
-      actionType={actionType}
-    />
+    >
+      {comment && (
+        <ChatPrefixedComment
+          prefix={comment.prefix}
+          body={comment.body}
+          className="mt-1.5"
+        />
+      )}
+    </ChatToolSummary>
   );
 }
 
@@ -949,16 +1211,25 @@ function ToolSummaryEntry({
 function TodoManagementEntry({
   todos,
   expansionKey,
+  time,
 }: {
   todos: TodoItem[];
   expansionKey: string;
+  time: string | undefined;
 }) {
   const [expanded, toggle] = usePersistedExpanded(
     `todo:${expansionKey}`,
     false
   );
 
-  return <ChatTodoList todos={todos} expanded={expanded} onToggle={toggle} />;
+  return (
+    <ChatTodoList
+      todos={todos}
+      expanded={expanded}
+      onToggle={toggle}
+      time={time}
+    />
+  );
 }
 
 /**
@@ -972,6 +1243,7 @@ function SubagentEntry({
   status,
   workspaceId,
   sessionId,
+  time,
 }: {
   description: string;
   subagentType: string | null | undefined;
@@ -980,8 +1252,9 @@ function SubagentEntry({
   status: ToolStatus;
   workspaceId: string | undefined;
   sessionId: string | undefined;
+  time: string | undefined;
 }) {
-  // Only auto-expand if there's a result to show
+  // Only expandable if there's a result to show
   const hasResult = Boolean(result?.value);
   const [expanded, toggle] = usePersistedExpanded(
     `subagent:${expansionKey}`,
@@ -997,6 +1270,7 @@ function SubagentEntry({
       onToggle={hasResult ? toggle : undefined}
       status={status}
       workspaceId={workspaceId}
+      time={time}
       renderMarkdown={({ content, workspaceId }) => (
         <AppChatMarkdown
           content={content}
@@ -1046,6 +1320,7 @@ function ScriptEntryWithFix({
   status,
   workspaceId,
   repos,
+  time,
 }: {
   title: string;
   command?: string;
@@ -1054,6 +1329,7 @@ function ScriptEntryWithFix({
   status: ToolStatus;
   workspaceId: string | undefined;
   repos: RepoWithTargetBranch[];
+  time: string | undefined;
 }) {
   const { viewProcessInPanel } = useLogsPanelActions();
 
@@ -1081,6 +1357,7 @@ function ScriptEntryWithFix({
       processId={processId}
       exitCode={exitCode}
       status={status}
+      time={time}
       onViewProcess={viewProcessInPanel}
       onFix={canFix ? handleFix : undefined}
     />
@@ -1093,9 +1370,11 @@ function ScriptEntryWithFix({
 function ErrorMessageEntry({
   content,
   expansionKey,
+  time,
 }: {
   content: string;
   expansionKey: string;
+  time: string | undefined;
 }) {
   const [expanded, toggle] = usePersistedExpanded(
     `error:${expansionKey}`,
@@ -1103,20 +1382,54 @@ function ErrorMessageEntry({
   );
 
   return (
-    <ChatErrorMessage content={content} expanded={expanded} onToggle={toggle} />
+    <ChatErrorMessage
+      content={content}
+      time={time}
+      expanded={expanded}
+      onToggle={toggle}
+    />
   );
+}
+
+/** Step label for a run of reads, searches, fetches or commands. */
+function aggregatedLabel(
+  group: AggregatedPatchGroup,
+  count: number,
+  t: TFunction<'common'>
+): string {
+  switch (group.aggregationType) {
+    case 'file_read':
+      return count === 1
+        ? t('conversation.steps.readFile')
+        : t('conversation.steps.readFiles', { count });
+    case 'search':
+      return count === 1
+        ? t('conversation.steps.searched')
+        : t('conversation.steps.searchedMany', { count });
+    case 'web_fetch':
+      return count === 1
+        ? t('conversation.steps.fetched')
+        : t('conversation.steps.fetchedMany', { count });
+    case 'command_run_read':
+    case 'command_run_search':
+    case 'command_run_edit':
+    case 'command_run_fetch':
+      return count === 1
+        ? t('conversation.steps.ranCommand')
+        : t('conversation.steps.ranCommands', { count });
+  }
 }
 
 /**
  * Aggregated group entry for consecutive file_read, search, or web_fetch entries
  */
 function AggregatedGroupEntry({ group }: { group: AggregatedPatchGroup }) {
+  const { t } = useTranslation('common');
   const { viewToolContentInPanel } = useLogsPanelActions();
   const [expanded, toggle] = usePersistedExpanded(
     `tool:${group.patchKey}`,
     false
   );
-  const [isHovered, setIsHovered] = useState(false);
 
   // Extract summary and status from each entry in the group
   const aggregatedEntries = useMemo(() => {
@@ -1183,46 +1496,36 @@ function AggregatedGroupEntry({ group }: { group: AggregatedPatchGroup }) {
     toggle();
   }, [toggle]);
 
-  const handleHoverChange = useCallback((hovered: boolean) => {
-    setIsHovered(hovered);
-  }, []);
-
-  // Get the label, icon, and unit based on aggregation type
-  const getDisplayProps = () => {
-    switch (group.aggregationType) {
-      case 'file_read':
-        return { label: 'Read', icon: FileTextIcon, unit: 'file' };
-      case 'search':
-        return { label: 'Search', icon: ListMagnifyingGlassIcon, unit: 'file' };
-      case 'web_fetch':
-        return { label: 'Fetched', icon: GlobeIcon, unit: 'URL' };
-      case 'command_run_read':
-        return { label: 'Read', icon: FileTextIcon, unit: 'command' };
-      case 'command_run_search':
-        return {
-          label: 'Search',
-          icon: ListMagnifyingGlassIcon,
-          unit: 'command',
-        };
-      case 'command_run_edit':
-        return { label: 'Edit', icon: PencilSimpleIcon, unit: 'command' };
-      case 'command_run_fetch':
-        return { label: 'Fetch', icon: GlobeIcon, unit: 'command' };
-    }
-  };
-  const { label, icon, unit } = getDisplayProps();
+  // Reads name the files; searches, fetches and commands quote themselves.
+  const { shown, hidden } = summarizeList(
+    aggregatedEntries.map((entry) =>
+      group.aggregationType === 'file_read'
+        ? fileBaseName(entry.summary)
+        : entry.summary
+    )
+  );
+  const detail = (
+    <ChatStepDetail
+      parts={[
+        ...shown.map((item, index) => (
+          <span key={index} className="font-mono">
+            {item}
+          </span>
+        )),
+        hidden > 0 ? t('conversation.steps.more', { count: hidden }) : null,
+      ]}
+    />
+  );
 
   return (
     <ChatAggregatedToolEntries
       entries={aggregatedEntries}
       expanded={expanded}
-      isHovered={isHovered}
       onToggle={handleToggle}
-      onHoverChange={handleHoverChange}
       onViewContent={handleViewContent}
-      label={label}
-      icon={icon}
-      unit={unit}
+      label={aggregatedLabel(group, aggregatedEntries.length, t)}
+      detail={detail}
+      time={firstEntryTime(group.entries)}
     />
   );
 }
@@ -1243,7 +1546,6 @@ function AggregatedThinkingGroupEntry({
     `entry:${group.patchKey}`,
     false
   );
-  const [isHovered, setIsHovered] = useState(false);
 
   // Extract thinking entries from the group
   const thinkingEntries = useMemo(() => {
@@ -1259,17 +1561,11 @@ function AggregatedThinkingGroupEntry({
     toggle();
   }, [toggle]);
 
-  const handleHoverChange = useCallback((hovered: boolean) => {
-    setIsHovered(hovered);
-  }, []);
-
   return (
     <ChatCollapsedThinking
       entries={thinkingEntries}
       expanded={expanded}
-      isHovered={isHovered}
       onToggle={handleToggle}
-      onHoverChange={handleHoverChange}
       workspaceId={workspaceId}
       renderMarkdown={({ content, workspaceId, className }) => (
         <AppChatMarkdown
@@ -1285,17 +1581,11 @@ function AggregatedThinkingGroupEntry({
 }
 
 function AggregatedDiffGroupEntry({ group }: { group: AggregatedDiffGroup }) {
-  const { theme } = useTheme();
-  const actualTheme = getActualTheme(theme);
+  const { t } = useTranslation('common');
   const { viewFileInChanges, hasDiffPath } = useChangesViewActions();
   const [expanded, toggle] = usePersistedExpanded(
     `diff:${group.patchKey}`,
     false
-  );
-  const [isHovered, setIsHovered] = useState(false);
-  const FileIcon = useMemo(
-    () => getFileIcon(group.filePath, actualTheme),
-    [group.filePath, actualTheme]
   );
   // Extract change data and status from each entry
   const aggregatedDiffEntries = useMemo(() => {
@@ -1327,10 +1617,6 @@ function AggregatedDiffGroupEntry({ group }: { group: AggregatedDiffGroup }) {
     toggle();
   }, [toggle]);
 
-  const handleHoverChange = useCallback((hovered: boolean) => {
-    setIsHovered(hovered);
-  }, []);
-
   const handleOpenInChanges = useCallback(() => {
     if (!hasDiffPath(group.filePath)) return;
     viewFileInChanges(group.filePath);
@@ -1338,14 +1624,15 @@ function AggregatedDiffGroupEntry({ group }: { group: AggregatedDiffGroup }) {
 
   return (
     <ChatAggregatedDiffEntries
+      label={t('conversation.steps.editedFile', {
+        file: fileBaseName(group.filePath),
+      })}
       filePath={group.filePath}
       entries={aggregatedDiffEntries}
       expanded={expanded}
-      isHovered={isHovered}
       onToggle={handleToggle}
-      onHoverChange={handleHoverChange}
       onOpenInChanges={handleOpenInChanges}
-      fileIcon={FileIcon}
+      time={firstEntryTime(group.entries)}
       renderDiffBody={({ diffContent }) =>
         diffContent ? <FileEntryDiffBody diffContent={diffContent} /> : null
       }
@@ -1358,12 +1645,7 @@ const DisplayConversationEntrySpaced = (props: Props) => {
   const isGreyed = isEntryGreyed(props.expansionKey);
 
   return (
-    <div
-      className={cn(
-        'py-base px-double',
-        isGreyed && 'opacity-50 pointer-events-none'
-      )}
-    >
+    <div className={cn('px-6', isGreyed && 'opacity-50 pointer-events-none')}>
       <DisplayConversationEntry {...props} />
     </div>
   );

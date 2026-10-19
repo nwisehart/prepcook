@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=IBM+Plex+Mono:ital,wght@0,100..700;1,100..700&family=Noto+Emoji:wght@300..700&family=Roboto:wght@500&display=swap');
+/* Figtree (UI) and JetBrains Mono (code, keys, paths). Roboto 500 is only for
+   the Google sign-in button, whose branding guidelines require it. */
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Roboto:wght@500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,43 +11,49 @@ html {
   overscroll-behavior: none;
 }
 
-/* 1) THEME TOKENS */
+/* 1) THEME TOKENS
+   "Clean station" palette. Every color is an `H S% L%` triplet consumed as
+   hsl(var(--x)); the hex it encodes is noted beside it. The brand is blue
+   #3F6AA6 in both modes: dark mode keeps the brand fill and steps
+   brand-colored text up to --brand-secondary for contrast. */
 @layer base {
   /* Light defaults */
   :root {
     color-scheme: light;
-    --_background: 0 0% 95%;
-    --_foreground: 0 0% 5%;
-    --_primary: 0 0% 5%;
+    --_background: 45 20% 96%; /* #F7F6F3 ground */
+    --_foreground: 213 13% 14%; /* #1F2328 ink */
+    --_primary: 213 13% 14%;
     --_primary-foreground: 0 0% 100%;
-    --_secondary: 0 0% 95%;
-    --_secondary-foreground: 0 0% 16%;
-    --_muted: 0 0% 89%;
-    --_muted-foreground: 0 0% 56%;
-    --_accent: 0 0% 92%;
-    --_accent-foreground: 0 0% 5%;
-    --_destructive: 0 59% 57%;
+    --_secondary: 43 18% 92%; /* #EFEDE8 hover */
+    --_secondary-foreground: 218 7% 32%;
+    --_muted: 43 18% 92%;
+    --_muted-foreground: 219 6% 44%;
+    --_accent: 43 18% 92%;
+    --_accent-foreground: 213 13% 14%;
+    --_destructive: 6.3 66.7% 36.5%; /* #9B2C1F */
     --_destructive-foreground: 0 0% 100%;
-    --_border: 0 0% 85%;
-    --_input: 0 0% 96%;
-    --_ring: 0 0% 5%;
-    --_radius: 0.125rem;
+    --_border: 42 16% 87%; /* #E4E1DA */
+    --_input: 42 16% 87%;
+    --_ring: 215 45% 45%;
+    --_radius: 0.5rem;
 
     /* Status (light) */
-    --_success: 117 38% 50%;
-    --_success-foreground: 117 38% 20%;
-    --_warning: 32 95% 44%;
-    --_warning-foreground: 32 95% 14%;
-    --_info: 217 91% 60%;
-    --_info-foreground: 0 0% 5%;
-    --_neutral: 0 0% 92%;
-    --_neutral-foreground: 0 0% 5%;
+    --_success: 150 61% 30%; /* #1E7B4C */
+    --_success-foreground: 150 61% 30%;
+    --_warning: 41.5 76.5% 46.7%; /* #D29A1C "Needs you" amber */
+    --_warning-foreground: 40 100% 30%; /* #9A6700 */
+    --_info: 215 45% 45%;
+    --_info-foreground: 216 48% 35%;
+    --_neutral: 43 18% 92%;
+    --_neutral-foreground: 213 13% 14%;
 
-    /* Console (light) */
-    --_console-background: 0 0% 100%;
-    --_console-foreground: 0 0% 5%;
-    --_console-success: 117 38% 50%;
-    --_console-error: 0 59% 57%;
+    /* Console (light). The terminal surface is dark in both modes; success
+       and error are tuned for light surfaces because diff counts and the
+       current xterm theme render them on --bg-secondary. */
+    --_console-background: 213 13% 14%; /* #1F2328 */
+    --_console-foreground: 45 17% 91%; /* #ECEAE4 */
+    --_console-success: 150 61% 30%;
+    --_console-error: 6.3 66.7% 36.5%;
 
     /* Syntax highlighting (light) */
     --_syntax-keyword: #d73a49;
@@ -59,89 +67,121 @@ html {
     --_syntax-deleted: #b31d28;
 
     /* Text (light) */
-    --text-high: 0 0% 5%;
-    --text-normal: 0 0% 20%;
-    --text-low: 0 0% 39%;
+    --text-high: 213 13% 14%; /* #1F2328 ink */
+    --text-normal: 218 7% 32%; /* #4B4F56 */
+    --text-low: 219 6% 44%; /* #6A6F78 muted */
 
     /* Background (light) */
-    --_bg-primary-default: 0 0% 100%;
-    --_bg-secondary-default: 0 0% 95%;
-    --_bg-panel-default: 0 0% 89%;
+    --_bg-primary-default: 45 20% 96%; /* #F7F6F3 ground */
+    --_bg-secondary-default: 0 0% 100%; /* #FFFFFF surface */
+    --_bg-panel-default: 43 18% 92%; /* #EFEDE8 hover / selected */
     --bg-primary: var(--_bg-primary-default);
     --bg-secondary: var(--_bg-secondary-default);
     --bg-panel: var(--_bg-panel-default);
+    --surface-raised: 40 27% 98%; /* #FBFAF8 archived / muted card */
+    --divider: 43 19% 93%; /* #F0EEE9 hairline inside a card */
 
-    /* Accent (light) */
-    --brand: 25 82% 54%;
-    --brand-hover: 25 75% 62%;
-    --brand-secondary: 25 82% 37%;
-    --error: 0 59% 57%;
-    --success: 117 38% 50%;
-    --merged: 271 81% 46%;
+    /* Accent (light). --success and --warning are published from
+       --_success / --_warning in section 2. */
+    --brand: 215 45% 45%; /* #3F6AA6 */
+    --brand-hover: 216 48% 35%; /* #2F5285 */
+    --brand-secondary: 216 48% 35%; /* #2F5285 brand-colored text */
+    --brand-soft: 215 55% 94%; /* #E7EEF8 */
+    --brand-soft-foreground: 216 48% 35%; /* #2F5285 */
+    --error: 6.3 66.7% 36.5%; /* #9B2C1F */
+    --error-soft: 8 74% 94%; /* #FBE7E4 */
+    --success-soft: 146 40% 92%; /* #E3F3EA */
+    --merged: 256 45% 45%; /* #5A3FA6 */
+
+    /* "Needs you" (light) */
+    --attention: 41.5 76.5% 46.7%; /* #D29A1C dot */
+    --attention-foreground: 40 100% 30%; /* #9A6700 text */
+    --attention-soft: 44 100% 92%; /* #FFF4D6 surface */
+    --attention-border: 44 63% 79%; /* #EBD9A8 */
 
     /* Text on accent */
     --text-on-brand: 0 0% 100%;
+
+    /* Dialog scrim (ink), used at partial opacity */
+    --scrim: 213 13% 14%;
   }
 
-  /* Dark mode */
+  /* Dark mode: a selected palette, not an inversion. Warm near-blacks, no
+     pure black. */
   .dark {
     color-scheme: dark;
 
     /* Internal variables (dark) - needed for public tokens */
-    --_background: 0 0% 13%;
-    --_foreground: 0 0% 96%;
-    --_primary: 240 4.8% 95.9%;
-    --_primary-foreground: 240 5.9% 10%;
-    --_secondary: 0 0% 12%;
-    --_secondary-foreground: 0 0% 77%;
-    --_muted: 0 0% 16%;
-    --_muted-foreground: 0 0% 64%;
-    --_accent: 0 0% 20%;
-    --_accent-foreground: 0 0% 96%;
-    --_destructive: 0 59% 57%;
-    --_destructive-foreground: 0 0% 96%;
-    --_border: 0 0% 20%;
-    --_input: 0 0% 20%;
-    --_ring: 0 0% 77%;
+    --_background: 240 5% 12%; /* #1E1E21 ground */
+    --_foreground: 45 17% 91%; /* #ECEAE4 ink */
+    --_primary: 45 17% 91%;
+    --_primary-foreground: 240 5% 12%;
+    --_secondary: 230 6% 19%; /* #2D2E33 hover */
+    --_secondary-foreground: 223 7% 80%;
+    --_muted: 230 6% 19%;
+    --_muted-foreground: 222 6% 65%;
+    --_accent: 230 6% 19%;
+    --_accent-foreground: 45 17% 91%;
+    --_destructive: 5.6 73.9% 77.5%; /* #F0A39B */
+    --_destructive-foreground: 240 5% 12%;
+    --_border: 231 6% 23%; /* #37383E */
+    --_input: 231 6% 23%;
+    --_ring: 215 45% 45%;
 
     /* Status (dark) */
-    --_success: 117 38% 50%;
-    --_success-foreground: 117 38% 90%;
-    --_warning: 32.2 95% 44.1%;
-    --_warning-foreground: 32.2 95% 90%;
-    --_info: 217.2 91.2% 59.8%;
-    --_info-foreground: 217.2 91.2% 90%;
-    --_neutral: 0 0% 20%;
-    --_neutral-foreground: 0 0% 90%;
+    --_success: 147 43% 56%; /* #5FC08A */
+    --_success-foreground: 147 43% 56%;
+    --_warning: 42 76% 60%; /* #E7B94C "Needs you" amber */
+    --_warning-foreground: 42 76% 60%;
+    --_info: 214.9 54.5% 71.6%;
+    --_info-foreground: 214.9 54.5% 71.6%;
+    --_neutral: 230 6% 19%;
+    --_neutral-foreground: 45 17% 91%;
 
     /* Text (dark) */
-    --text-high: 0 0% 96%;
-    --text-normal: 0 0% 77%;
-    --text-low: 0 0% 56%;
+    --text-high: 45 17% 91%; /* #ECEAE4 ink */
+    --text-normal: 223 7% 80%; /* #C9CBD0 */
+    --text-low: 222 6% 65%; /* #A0A3AA muted */
 
     /* Background (dark) */
-    --_bg-primary-default: 0 0% 13%;
-    --_bg-secondary-default: 0 0% 11%;
-    --_bg-panel-default: 0 0% 16%;
+    --_bg-primary-default: 240 5% 12%; /* #1E1E21 ground */
+    --_bg-secondary-default: 228 6% 16%; /* #27282C surface */
+    --_bg-panel-default: 230 6% 19%; /* #2D2E33 hover / raised */
     --bg-primary: var(--_bg-primary-default);
     --bg-secondary: var(--_bg-secondary-default);
     --bg-panel: var(--_bg-panel-default);
+    --surface-raised: 240 4% 14%; /* #222225 archived / muted card */
+    --divider: 231 6% 21%; /* #33343A hairline inside a card */
 
-    /* Accent (dark) */
-    --brand: 25 82% 54%;
-    --brand-hover: 25 75% 62%;
-    --brand-secondary: 25 82% 37%;
-    --error: 0 59% 57%;
-    --success: 117 38% 50%;
-    --merged: 271 81% 66%;
+    /* Accent (dark). Buttons keep the #3F6AA6 fill; brand-colored text uses
+       --brand-secondary. */
+    --brand: 215 45% 45%; /* #3F6AA6 */
+    --brand-hover: 213 48% 52%; /* #4A7FBF */
+    --brand-secondary: 214.9 54.5% 71.6%; /* #8FB0DE brand-colored text */
+    --brand-soft: 215 32% 21%; /* #243246 */
+    --brand-soft-foreground: 215 62% 76%; /* #9DBCE8 */
+    --error: 5.6 73.9% 77.5%; /* #F0A39B */
+    --error-soft: 4 25% 21%; /* #432A28 */
+    --success-soft: 148.9 30.3% 17.5%; /* #1F3A2C */
+    --merged: 256 71% 80%; /* #BBA7F0 */
+
+    /* "Needs you" (dark) */
+    --attention: 42 76% 60%; /* #E7B94C dot */
+    --attention-foreground: 42 76% 60%; /* #E7B94C text */
+    --attention-soft: 39 29% 18%; /* #3A3120 surface */
+    --attention-border: 44 49% 24%; /* #5A4A1F */
 
     /* Text on accent */
     --text-on-brand: 0 0% 100%;
+
+    /* Dialog scrim, used at partial opacity */
+    --scrim: 240 7% 6%;
+
     /* Console (dark) */
-    --_console-background: 0 0% 0%;
-    --_console-foreground: 210 40% 98%;
-    --_console-success: 138.5 76.5% 47.7%;
-    --_console-error: 0 84.2% 60.2%;
+    --_console-background: 240 5% 8%; /* #141416 */
+    --_console-foreground: 45 17% 91%; /* #ECEAE4 */
+    --_console-success: 147 43% 56%;
+    --_console-error: 5.6 73.9% 77.5%;
 
     /* Syntax highlighting (dark) */
     --_syntax-keyword: #ff7b72;
@@ -232,7 +272,7 @@ html {
   #root {
     @apply min-h-screen;
     @apply font-normal;
-    @apply bg-background text-foreground font-ibm-plex-sans;
+    @apply bg-background text-foreground font-sans;
   }
 
   *:focus {
@@ -355,7 +395,7 @@ html {
     background: linear-gradient(
       45deg,
       transparent,
-      hsl(var(--brand-secondary)),
+      hsl(var(--brand)),
       transparent
     );
     background-size: 200% 100%;
@@ -426,14 +466,14 @@ html {
     font-size: var(--mobile-font-scale, 100%);
   }
 
-  /* Background colors for PWA safe-area */
+  /* Background colors for PWA safe-area (the ground color of each mode) */
   html,
   body {
-    background-color: #f2f2f2;
+    background-color: #f7f6f3;
   }
 
   html.dark body,
   html.dark {
-    background-color: #212121;
+    background-color: #1e1e21;
   }
 }

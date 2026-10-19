@@ -10,13 +10,16 @@ import { useTranslation } from 'react-i18next';
 import type { LocalAttachmentMetadata } from './WorkspaceContext';
 import { cn } from '../lib/cn';
 import {
-  XIcon,
-  LinkIcon,
+  ArrowSquareOutIcon,
+  CaretDownIcon,
   DotsThreeIcon,
-  TrashIcon,
-  PaperclipIcon,
+  FileTextIcon,
   ImageIcon,
+  LinkIcon,
+  PaperclipIcon,
   StampIcon,
+  TrashIcon,
+  XIcon,
 } from '@phosphor-icons/react';
 import {
   IssueTagsRow,
@@ -24,10 +27,11 @@ import {
   type IssueTagsRowAddTagControlProps,
   type LinkedPullRequest as IssueTagsLinkedPullRequest,
 } from './IssueTagsRow';
-import { PrimaryButton } from './PrimaryButton';
+import { Button } from './Button';
 import { Toggle } from './Toggle';
 import {
   IssuePropertyRow,
+  type IssueExtraProperty,
   type IssuePropertyRowProps,
 } from './IssuePropertyRow';
 import { IconButton } from './IconButton';
@@ -39,6 +43,14 @@ import {
   TooltipTrigger,
 } from './RadixTooltip';
 import { ErrorAlert } from './ErrorAlert';
+import { IssuePanelSection } from './IssuePanelSection';
+import type { KanbanColumnDot } from './KanbanBoard';
+import {
+  KANBAN_CLASS_CHIP_STYLES,
+  KanbanCardStatus,
+  type KanbanCardStatusLine,
+  type KanbanClassTone,
+} from './KanbanCardContent';
 
 export type IssuePanelMode = 'create' | 'edit';
 type IssuePriority = IssuePropertyRowProps['priority'];
@@ -80,6 +92,35 @@ export interface KanbanIssueDescriptionEditorProps {
   hideActions?: boolean;
 }
 
+/**
+ * The amber decision block at the top of the panel when the card waits on
+ * a person: its plan is ready (Approve / Request changes / open it), or it
+ * is merged and waits to be closed.
+ */
+export type KanbanIssuePanelDecision =
+  | {
+      kind: 'plan';
+      /** "Needs you · the RCA is ready". */
+      label: string;
+      /** "Confidence high · no open questions". */
+      detail?: string | null;
+      onApprove: () => void;
+      /** Resolves true when the request went through. */
+      onRequestChanges: (reason: string) => Promise<boolean>;
+      onOpenPlan?: (() => void) | null;
+      /** "Open the RCA" / "Open the plan". */
+      openPlanLabel: string;
+      isSubmitting?: boolean;
+    }
+  | {
+      kind: 'close';
+      label: string;
+      statusLine?: KanbanCardStatusLine | null;
+      closeLabel: string;
+      onClose: () => void;
+      isSubmitting?: boolean;
+    };
+
 export interface KanbanIssuePanelProps {
   mode: IssuePanelMode;
   displayId: string;
@@ -110,6 +151,24 @@ export interface KanbanIssuePanelProps {
   onRemoveParentIssue?: () => void;
   linkedPrs?: LinkedPullRequest[];
   onLinkPr?: () => void;
+
+  // Header chips and facts
+  classChip?: { name: string; tone: KanbanClassTone } | null;
+  /** "P0"–"P3"; null shows a "Priority" chip to set one. */
+  priorityLabel?: string | null;
+  /** "Open in Jira" when the card has a tracker URL. */
+  trackerLink?: { label: string; url: string } | null;
+  /** The Stage pill's dot. */
+  statusDot?: KanbanColumnDot;
+  /** Playbook, Tracker, Branch: whatever the card has. */
+  extraProperties?: IssueExtraProperty[];
+  decision?: KanbanIssuePanelDecision | null;
+  /** Footer "Close card": moves the card on to its closing column. */
+  closeCardAction?: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+  } | null;
 
   // Actions
   onClose: () => void;
@@ -189,8 +248,7 @@ export interface KanbanIssuePanelProps {
   };
 
   // Live Lavish review-gate URL for the issue's implementation workspace
-  // (edit mode only): renders a prominent "Review plan" button while the
-  // gate is open.
+  // (edit mode only): renders a "Review plan" link while the gate is open.
   reviewUrl?: string | null;
 
   // Re-opens a dead review gate for the unapproved spec (edit mode only,
@@ -199,11 +257,156 @@ export interface KanbanIssuePanelProps {
   onReopenReview?: () => void;
   reopeningReview?: boolean;
 
+  // The approved plan's artifact (edit mode only), once the gate approved it.
+  approvedPlanUrl?: string | null;
+
   // Edit-mode section renderers
   renderWorkspacesSection?: (issueId: string) => ReactNode;
   renderRelationshipsSection?: (issueId: string) => ReactNode;
   renderSubIssuesSection?: (issueId: string) => ReactNode;
   renderCommentsSection?: (issueId: string) => ReactNode;
+}
+
+const CHIP =
+  'inline-flex h-[22px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-medium leading-none';
+
+function DecisionBlock({
+  decision,
+  issueId,
+}: {
+  decision: KanbanIssuePanelDecision;
+  issueId: string | null | undefined;
+}) {
+  const { t } = useTranslation('common');
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [reason, setReason] = useState('');
+  const [isSending, setIsSending] = useState(false);
+
+  // A half-written request belongs to the card it was written on.
+  useEffect(() => {
+    setIsRequesting(false);
+    setReason('');
+  }, [issueId]);
+
+  const sendRequest = async () => {
+    if (decision.kind !== 'plan' || !reason.trim() || isSending) return;
+    setIsSending(true);
+    try {
+      const sent = await decision.onRequestChanges(reason.trim());
+      if (sent) {
+        setIsRequesting(false);
+        setReason('');
+      }
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <section
+      aria-label={decision.label}
+      className="mt-3.5 overflow-hidden rounded-lg border border-attention-border"
+    >
+      <div className="flex items-center gap-2 bg-attention-soft px-3.5 py-2 text-xs font-bold text-attention-foreground">
+        <span
+          aria-hidden="true"
+          className="size-2 shrink-0 rounded-full bg-attention"
+        />
+        {decision.label}
+      </div>
+      <div className="flex flex-col gap-2.5 px-3.5 pb-3.5 pt-3">
+        {decision.kind === 'plan' ? (
+          <>
+            <span className="text-[13px] text-normal">
+              {decision.detail ? `${decision.detail}. ` : ''}
+              {t('kanban.needsYou.panelNote')}
+            </span>
+            {isRequesting ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                      e.preventDefault();
+                      void sendRequest();
+                    }
+                  }}
+                  placeholder={t('kanban.needsYou.requestChangesPlaceholder')}
+                  aria-label={t('kanban.needsYou.requestChanges')}
+                  autoFocus
+                  rows={3}
+                  className="w-full resize-y rounded border border-border bg-secondary px-3 py-2 text-[13px] text-high placeholder:text-low focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => void sendRequest()}
+                    disabled={!reason.trim() || isSending}
+                  >
+                    {t('kanban.needsYou.sendRequest')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsRequesting(false);
+                      setReason('');
+                    }}
+                  >
+                    {t('buttons.cancel')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={decision.onApprove}
+                  disabled={decision.isSubmitting}
+                >
+                  {t('kanban.needsYou.approve')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsRequesting(true)}
+                  disabled={decision.isSubmitting}
+                >
+                  {t('kanban.needsYou.requestChanges')}
+                </Button>
+                {decision.onOpenPlan && (
+                  <button
+                    type="button"
+                    onClick={decision.onOpenPlan}
+                    className="ml-auto text-[13px] font-semibold text-brand-secondary hover:underline"
+                  >
+                    {decision.openPlanLabel}
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {decision.statusLine && (
+              <KanbanCardStatus line={decision.statusLine} />
+            )}
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={decision.onClose}
+                disabled={decision.isSubmitting}
+              >
+                {decision.closeLabel}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export function KanbanIssuePanel({
@@ -222,6 +425,13 @@ export function KanbanIssuePanel({
   onRemoveParentIssue,
   linkedPrs = [],
   onLinkPr,
+  classChip,
+  priorityLabel,
+  trackerLink,
+  statusDot,
+  extraProperties,
+  decision,
+  closeCardAction,
   onClose,
   onSubmit,
   onCmdEnterSubmit,
@@ -248,6 +458,7 @@ export function KanbanIssuePanel({
   reviewUrl,
   onReopenReview,
   reopeningReview,
+  approvedPlanUrl,
   renderWorkspacesSection,
   renderRelationshipsSection,
   renderSubIssuesSection,
@@ -255,11 +466,10 @@ export function KanbanIssuePanel({
 }: KanbanIssuePanelProps) {
   const { t } = useTranslation('common');
   const isCreateMode = mode === 'create';
-  const breadcrumbTextClass =
-    'min-w-0 text-sm text-normal truncate rounded-sm px-1 py-0.5 hover:bg-panel hover:text-high transition-colors';
-  const creatorName =
-    creatorUser?.first_name?.trim() || creatorUser?.username?.trim() || null;
-  const showCreator = !isCreateMode && Boolean(creatorName);
+  const showCreator =
+    !isCreateMode &&
+    Boolean(creatorUser?.first_name?.trim() || creatorUser?.username?.trim());
+  const isEditing = !isCreateMode && !!issueId;
 
   // Description edit state: in edit mode, show preview by default; in create mode, always editable
   const [isDescriptionEditing, setIsDescriptionEditing] =
@@ -333,126 +543,177 @@ export function KanbanIssuePanel({
           count: planningVerdict.openQuestions ?? 0,
         });
   })();
+  const verdictPasses =
+    planningVerdict?.confidence === 'high' ||
+    planningVerdict?.openQuestions === 0;
+  const showPlanSection =
+    isEditing &&
+    (!!planningVerdict || !!specStatus || !!reviewUrl || !!approvedPlanUrl);
+
+  const iconButtonClass =
+    'flex size-8 shrink-0 items-center justify-center rounded text-low transition-colors hover:bg-panel hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand';
 
   return (
     <div
-      className="flex flex-col h-full overflow-hidden outline-none"
+      className="flex h-full flex-col overflow-hidden bg-secondary outline-none"
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-base py-half border-b shrink-0">
-        <div className="flex items-center gap-half min-w-0 font-ibm-plex-mono">
-          <span className={`${breadcrumbTextClass} shrink-0`}>{displayId}</span>
+      {/* Header: key and chips, title, property grid */}
+      <div className="flex shrink-0 flex-col gap-2.5 border-b border-divider px-[22px] pb-3.5 pt-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-mono text-[13px] font-medium text-normal">
+            {displayId}
+          </span>
+          {classChip && (
+            <span
+              className={cn(CHIP, KANBAN_CLASS_CHIP_STYLES[classChip.tone])}
+            >
+              {classChip.name}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => onFormChange('priority', formData.priority)}
+            disabled={isSubmitting}
+            className={cn(
+              CHIP,
+              'bg-panel transition-colors hover:text-high disabled:opacity-50',
+              priorityLabel ? 'text-normal' : 'text-low'
+            )}
+          >
+            {priorityLabel ?? t('kanban.priority')}
+          </button>
+          <span className="flex-1" />
+          {!isCreateMode && trackerLink && (
+            <a
+              href={trackerLink.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-brand-secondary hover:underline"
+            >
+              {trackerLink.label}
+              <ArrowSquareOutIcon className="size-3.5" aria-hidden="true" />
+            </a>
+          )}
           {!isCreateMode && onCopyLink && (
             <button
               type="button"
               onClick={onCopyLink}
-              className="p-half rounded-sm text-low hover:text-normal hover:bg-panel transition-colors"
+              className={iconButtonClass}
               aria-label={t('kanban.copyLink')}
+              title={t('kanban.copyLink')}
             >
-              <LinkIcon className="size-icon-sm" weight="bold" />
+              <LinkIcon className="size-4" />
             </button>
           )}
-        </div>
-        <div className="flex items-center gap-half">
           {!isCreateMode && onMoreActions && (
             <button
               type="button"
               onClick={onMoreActions}
-              className="p-half rounded-sm text-low hover:text-normal hover:bg-panel transition-colors"
+              className={iconButtonClass}
               aria-label={t('kanban.moreActions')}
+              title={t('kanban.moreActions')}
             >
-              <DotsThreeIcon className="size-icon-sm" weight="bold" />
+              <DotsThreeIcon className="size-4" weight="bold" />
             </button>
           )}
           <button
             type="button"
             onClick={onClose}
-            className="p-half rounded-sm text-low hover:text-normal hover:bg-panel transition-colors"
+            className={iconButtonClass}
             aria-label={t('kanban.closePanel')}
+            title={t('kanban.closePanel')}
           >
-            <XIcon className="size-icon-sm" weight="bold" />
+            <XIcon className="size-4" />
           </button>
         </div>
-      </div>
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Property Row */}
-        <div className="px-base py-base border-b">
-          <IssuePropertyRow
-            statusId={formData.statusId}
-            priority={formData.priority}
-            assigneeIds={formData.assigneeIds}
-            assigneeUsers={assigneeUsers}
-            statuses={statuses}
-            creatorUser={showCreator ? creatorUser : undefined}
-            parentIssue={parentIssue}
-            onParentIssueClick={onParentIssueClick}
-            onRemoveParentIssue={onRemoveParentIssue}
-            onStatusClick={() => onFormChange('statusId', formData.statusId)}
-            statusDisabled={statusLocked}
-            onPriorityClick={() => onFormChange('priority', formData.priority)}
-            onAssigneeClick={() =>
-              onFormChange('assigneeIds', formData.assigneeIds)
-            }
+        <div className="relative w-full">
+          <AutoResizeTextarea
+            ref={titleInputRef}
+            value={formData.title}
+            onChange={(value) => onFormChange('title', value)}
+            onKeyDown={handleTitleKeyDown}
+            placeholder={t('kanban.panel.titlePlaceholder')}
+            autoFocus={isCreateMode}
+            aria-label={t('kanban.panel.titlePlaceholder')}
             disabled={isSubmitting}
+            className={cn(
+              'text-lg font-bold leading-snug tracking-[-0.2px] text-high',
+              'placeholder:text-low',
+              isSubmitting && 'pointer-events-none opacity-50'
+            )}
           />
         </div>
 
-        {/* Tags Row */}
-        <div className="px-base py-base border-b">
-          <IssueTagsRow
-            selectedTagIds={formData.tagIds}
-            availableTags={tags}
-            linkedPrs={isCreateMode ? [] : linkedPrs}
-            onTagsChange={(tagIds) => onFormChange('tagIds', tagIds)}
-            onCreateTag={onCreateTag}
-            renderAddTagControl={renderAddTagControl}
-            onLinkPr={!isCreateMode ? onLinkPr : undefined}
-            disabled={isSubmitting}
-          />
-        </div>
+        <IssuePropertyRow
+          statusId={formData.statusId}
+          priority={formData.priority}
+          assigneeIds={formData.assigneeIds}
+          assigneeUsers={assigneeUsers}
+          statuses={statuses}
+          creatorUser={showCreator ? creatorUser : undefined}
+          parentIssue={parentIssue}
+          onParentIssueClick={onParentIssueClick}
+          onRemoveParentIssue={onRemoveParentIssue}
+          onStatusClick={() => onFormChange('statusId', formData.statusId)}
+          statusDisabled={statusLocked}
+          onPriorityClick={() => onFormChange('priority', formData.priority)}
+          onAssigneeClick={() =>
+            onFormChange('assigneeIds', formData.assigneeIds)
+          }
+          statusDot={statusDot}
+          extraProperties={isCreateMode ? [] : extraProperties}
+          disabled={isSubmitting}
+        />
 
-        {/* Title and Description */}
-        <div className="rounded-sm">
-          {/* Title Input */}
-          <div className="w-full mt-base">
-            <AutoResizeTextarea
-              ref={titleInputRef}
-              value={formData.title}
-              onChange={(value) => onFormChange('title', value)}
-              onKeyDown={handleTitleKeyDown}
-              placeholder="Issue Title..."
-              autoFocus={isCreateMode}
-              aria-label="Issue title"
-              disabled={isSubmitting}
-              className={cn(
-                'px-base text-lg font-medium text-high',
-                'placeholder:text-high/50',
-                isSubmitting && 'opacity-50 pointer-events-none'
-              )}
-            />
+        <IssueTagsRow
+          selectedTagIds={formData.tagIds}
+          availableTags={tags}
+          linkedPrs={isCreateMode ? [] : linkedPrs}
+          onTagsChange={(tagIds) => onFormChange('tagIds', tagIds)}
+          onCreateTag={onCreateTag}
+          renderAddTagControl={renderAddTagControl}
+          onLinkPr={!isCreateMode ? onLinkPr : undefined}
+          disabled={isSubmitting}
+        />
 
-            <div
+        {/* Human takeover: automation is paused on this card. */}
+        {isEditing && humanTakeover && (
+          <div className="flex min-w-0 items-center gap-2 text-xs">
+            <span
               className={cn(
-                'pointer-events-none absolute inset-0 px-base',
-                'text-high/50 font-medium text-lg',
-                'hidden',
-                "[[data-empty='true']_+_&]:block" // show placeholder when previous sibling data-empty=true
+                CHIP,
+                'bg-attention-soft text-attention-foreground'
               )}
             >
-              {t('kanban.issueTitlePlaceholder')}
-            </div>
+              {t('kanban.takeoverPaused')}
+            </span>
+            <span className="truncate text-low">
+              {humanTakeover.assignee
+                ? t('kanban.takeoverBy', { name: humanTakeover.assignee })
+                : t('kanban.takeoverByUnknown')}
+            </span>
           </div>
+        )}
+      </div>
 
-          {/* Description WYSIWYG Editor with image dropzone */}
+      {/* Scrollable content */}
+      <div className="flex flex-1 flex-col overflow-y-auto px-[22px]">
+        {isEditing && decision && (
+          <DecisionBlock decision={decision} issueId={issueId} />
+        )}
+
+        <IssuePanelSection
+          label={t('kanban.panel.description')}
+          divider={isEditing && !!decision}
+        >
           <div
             ref={descriptionContainerRef}
             {...(isDescriptionEditing ? dropzoneProps?.getRootProps() : {})}
             className={cn(
-              'relative mt-base',
+              'relative -mx-1',
               !isDescriptionEditing && !isCreateMode && 'cursor-text'
             )}
             onClick={() => {
@@ -494,7 +755,7 @@ export function KanbanIssuePanel({
               disabled: !isDescriptionEditing || isSubmitting,
               autoFocus: false,
               className: cn(
-                'px-base',
+                'px-1 text-[13.5px] text-high',
                 isDescriptionEditing ? 'min-h-[100px]' : 'min-h-[2rem]',
                 !isDescriptionEditing && !formData.description && 'text-low'
               ),
@@ -521,9 +782,9 @@ export function KanbanIssuePanel({
                             }}
                             disabled={isSubmitting || isUploading}
                             className={cn(
-                              'p-half rounded-sm transition-colors',
-                              'text-low hover:text-normal hover:bg-panel/50',
-                              'disabled:opacity-50 disabled:cursor-not-allowed'
+                              'rounded-sm p-half transition-colors',
+                              'text-low hover:bg-panel hover:text-high',
+                              'disabled:cursor-not-allowed disabled:opacity-50'
                             )}
                             title={t('kanban.attachFile')}
                             aria-label={t('kanban.attachFile')}
@@ -541,36 +802,36 @@ export function KanbanIssuePanel({
               ),
             })}
             {attachmentError && (
-              <div className="px-base">
+              <div className="px-1">
                 <ErrorAlert
                   message={attachmentError}
-                  className="mt-half mb-half"
+                  className="my-half"
                   onDismiss={onDismissAttachmentError}
                   dismissLabel={t('buttons.close')}
                 />
               </div>
             )}
             {dropzoneProps?.isDragActive && (
-              <div className="absolute inset-0 z-50 bg-primary/80 backdrop-blur-sm border-2 border-dashed border-brand rounded flex items-center justify-center pointer-events-none animate-in fade-in-0 duration-150">
+              <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded border-2 border-dashed border-brand bg-primary/80 backdrop-blur-sm animate-in fade-in-0 duration-150">
                 <div className="text-center">
-                  <div className="mx-auto mb-2 w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center">
-                    <ImageIcon className="h-5 w-5 text-brand" />
+                  <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-full bg-brand-soft">
+                    <ImageIcon className="size-5 text-brand" />
                   </div>
                   <p className="text-sm font-medium text-high">
                     {t('kanban.dropFilesHere')}
                   </p>
-                  <p className="text-xs text-low mt-0.5">
+                  <p className="mt-0.5 text-xs text-low">
                     {t('kanban.fileDropHint')}
                   </p>
                 </div>
               </div>
             )}
           </div>
-        </div>
+        </IssuePanelSection>
 
-        {/* Create Draft Workspace Toggle (Create mode only) */}
+        {/* Create mode: open a session draft right after creating */}
         {isCreateMode && (
-          <div className="p-base border-t">
+          <div className="border-t border-divider py-3.5">
             <Toggle
               checked={formData.createDraftWorkspace}
               onCheckedChange={(checked) =>
@@ -583,183 +844,197 @@ export function KanbanIssuePanel({
           </div>
         )}
 
-        {/* Create Issue Button (Create mode only) */}
-        {isCreateMode && (
-          <div className="px-base pb-base flex items-center gap-half">
-            <PrimaryButton
-              value={t('kanban.createIssue')}
-              onClick={onSubmit}
-              disabled={isSubmitting || isUploading || !formData.title.trim()}
-              actionIcon={isSubmitting ? 'spinner' : undefined}
-              variant="default"
-            />
-            {onDeleteDraft && (
-              <IconButton
-                icon={TrashIcon}
-                onClick={onDeleteDraft}
-                disabled={isSubmitting}
-                aria-label="Delete draft"
-                title="Delete draft"
-                className="hover:text-error hover:bg-error/10"
-              />
-            )}
-          </div>
-        )}
-
-        {/* Stage Playbook Action (Edit mode only) */}
-        {!isCreateMode && issueId && stageAction && (
-          <div className="px-base py-base border-t">
-            <PrimaryButton
-              value={stageAction.label}
-              onClick={stageAction.onRun}
-              disabled={stageAction.disabled}
-              actionIcon={stageAction.disabled ? 'spinner' : undefined}
-              variant="default"
-            />
-          </div>
-        )}
-
-        {/* Live Lavish review gate (Edit mode only): open the plan/RCA
-            review session in the browser */}
-        {!isCreateMode && issueId && reviewUrl && (
-          <div className="px-base py-base border-t">
-            <a
-              href={reviewUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-half w-full h-8 rounded-sm bg-brand/15 text-brand hover:bg-brand/25 transition-colors text-sm font-medium"
-            >
-              <StampIcon className="size-icon-xs" weight="bold" />
-              {t('kanban.reviewPlan')}
-            </a>
-          </div>
-        )}
-
-        {/* Human takeover (Edit mode only): automation is paused. */}
-        {!isCreateMode && issueId && humanTakeover && (
-          <div className="px-base py-base border-t flex items-center gap-2 text-sm">
-            <span className="inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs bg-warning/15 text-warning uppercase">
-              {t('kanban.takeoverPaused')}
-            </span>
-            <span className="text-low truncate">
-              {humanTakeover.assignee
-                ? t('kanban.takeoverBy', { name: humanTakeover.assignee })
-                : t('kanban.takeoverByUnknown')}
-            </span>
-          </div>
-        )}
-
-        {/* Planning verdict (Edit mode only): the gate state the agent
-            recorded — RCA confidence must be high / specs need 0 open
-            questions before the ticket can advance to Executing. */}
-        {!isCreateMode && issueId && planningVerdict && (
-          <div className="px-base py-base border-t text-sm space-y-1">
-            <div className="flex items-center gap-2">
-              <span
-                className={
-                  planningVerdict.confidence === 'high' ||
-                  planningVerdict.openQuestions === 0
-                    ? 'inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs bg-success/15 text-success uppercase'
-                    : 'inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs bg-warning/15 text-warning uppercase'
-                }
-              >
-                {planningVerdict.kind ?? 'plan'}
-                {planningVerdict.confidence
-                  ? ` · ${planningVerdict.confidence}`
-                  : ''}
-              </span>
-              {planningVerdict.openQuestions != null && (
-                <span className="text-low shrink-0">
-                  {t('kanban.verdictOpenQuestions', {
-                    count: planningVerdict.openQuestions,
-                  })}
-                </span>
-              )}
-              {planningVerdict.summary && (
-                <span
-                  className="text-low truncate"
-                  title={planningVerdict.summary}
-                >
-                  {planningVerdict.summary}
-                </span>
-              )}
-            </div>
-            {planningVerdict.confidenceReason && (
-              <div
-                className="text-xs text-warning"
-                title={planningVerdict.confidenceReason}
-              >
-                {t('kanban.verdictWhyNotHigher')}{' '}
-                {planningVerdict.confidenceReason}
+        {/* The plan the agent recorded and where its approval stands */}
+        {showPlanSection && (
+          <IssuePanelSection label={t('kanban.panel.plan')}>
+            {planningVerdict && (
+              <div className="flex flex-col gap-1.5 text-[13px]">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span
+                    className={cn(
+                      CHIP,
+                      verdictPasses
+                        ? 'bg-success-soft text-success'
+                        : 'bg-attention-soft text-attention-foreground'
+                    )}
+                  >
+                    {planningVerdict.kind ?? t('kanban.panel.planKindFallback')}
+                    {planningVerdict.confidence
+                      ? ` · ${planningVerdict.confidence}`
+                      : ''}
+                  </span>
+                  {planningVerdict.openQuestions != null && (
+                    <span className="shrink-0 text-low">
+                      {t('kanban.verdictOpenQuestions', {
+                        count: planningVerdict.openQuestions,
+                      })}
+                    </span>
+                  )}
+                </div>
+                {planningVerdict.summary && (
+                  <p className="m-0 line-clamp-3 text-normal">
+                    {planningVerdict.summary}
+                  </p>
+                )}
+                {planningVerdict.confidenceReason && (
+                  <p className="m-0 text-xs text-attention-foreground">
+                    {t('kanban.verdictWhyNotHigher')}{' '}
+                    {planningVerdict.confidenceReason}
+                  </p>
+                )}
               </div>
             )}
-          </div>
-        )}
-
-        {/* Spec/RCA artifact + Lavish approval state (Edit mode only) */}
-        {!isCreateMode && issueId && specStatus && (
-          <div className="px-base py-base border-t flex items-center gap-2 text-sm">
-            <span
-              className={
-                specStatus.approvedAt
-                  ? 'inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs bg-success/15 text-success'
-                  : 'inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs bg-warning/15 text-warning'
-              }
-            >
-              {specStatus.approvedAt
-                ? t('kanban.specApproved')
-                : t('kanban.specAwaitingApproval')}
-            </span>
-            {specStatus.path && (
-              <span className="text-low truncate" title={specStatus.path}>
-                {specStatus.path}
-              </span>
+            {specStatus && (
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+                <span
+                  className={cn(
+                    CHIP,
+                    specStatus.approvedAt
+                      ? 'bg-success-soft text-success'
+                      : 'bg-attention-soft text-attention-foreground'
+                  )}
+                >
+                  {specStatus.approvedAt
+                    ? t('kanban.specApproved')
+                    : t('kanban.specAwaitingApproval')}
+                </span>
+                {specStatus.path && (
+                  <span
+                    className="min-w-0 truncate font-mono text-xs text-low"
+                    title={specStatus.path}
+                  >
+                    {specStatus.path}
+                  </span>
+                )}
+              </div>
             )}
             {gateBlockedReason && (
-              <span
-                className="ml-auto shrink-0 text-xs text-warning"
-                title={gateBlockedReason}
-              >
+              <p className="m-0 text-xs text-attention-foreground">
                 {gateBlockedReason}
-              </span>
+              </p>
             )}
-            {!specStatus.approvedAt && onReopenReview && (
-              <button
-                type="button"
-                onClick={onReopenReview}
-                disabled={reopeningReview}
-                className="ml-auto shrink-0 flex items-center gap-half px-1.5 py-0.5 rounded text-xs font-medium bg-brand/15 text-brand hover:bg-brand/25 transition-colors disabled:opacity-50"
-                title={t('kanban.reopenReviewHint')}
-              >
-                <StampIcon className="size-icon-2xs" weight="bold" />
-                {reopeningReview
-                  ? t('kanban.reopeningReview')
-                  : t('kanban.reopenReview')}
-              </button>
+            {(reviewUrl ||
+              approvedPlanUrl ||
+              (!specStatus?.approvedAt && onReopenReview)) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {approvedPlanUrl && (
+                  <Button asChild variant="outline" size="sm">
+                    <a
+                      href={approvedPlanUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <FileTextIcon className="mr-1.5 size-3.5" />
+                      {t('kanban.openApprovedPlan')}
+                    </a>
+                  </Button>
+                )}
+                {reviewUrl && (
+                  <Button asChild variant="outline" size="sm">
+                    <a
+                      href={reviewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <StampIcon className="mr-1.5 size-3.5" weight="bold" />
+                      {t('kanban.reviewPlan')}
+                    </a>
+                  </Button>
+                )}
+                {!reviewUrl && !specStatus?.approvedAt && onReopenReview && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onReopenReview}
+                    disabled={reopeningReview}
+                    title={t('kanban.reopenReviewHint')}
+                  >
+                    <StampIcon className="mr-1.5 size-3.5" weight="bold" />
+                    {reopeningReview
+                      ? t('kanban.reopeningReview')
+                      : t('kanban.reopenReview')}
+                  </Button>
+                )}
+              </div>
             )}
-          </div>
+          </IssuePanelSection>
         )}
 
-        {/* Workspaces Section (Edit mode only) */}
-        {!isCreateMode && issueId && renderWorkspacesSection && (
-          <div className="border-t">{renderWorkspacesSection(issueId)}</div>
-        )}
+        {/* Sessions on this card */}
+        {isEditing &&
+          renderWorkspacesSection &&
+          renderWorkspacesSection(issueId)}
 
-        {/* Relationships Section (Edit mode only) */}
-        {!isCreateMode && issueId && renderRelationshipsSection && (
-          <div className="border-t">{renderRelationshipsSection(issueId)}</div>
-        )}
+        {/* Activity */}
+        {isEditing && renderCommentsSection && renderCommentsSection(issueId)}
 
-        {/* Sub-Issues Section (Edit mode only) */}
-        {!isCreateMode && issueId && renderSubIssuesSection && (
-          <div className="border-t">{renderSubIssuesSection(issueId)}</div>
-        )}
-
-        {/* Comments Section (Edit mode only) */}
-        {!isCreateMode && issueId && renderCommentsSection && (
-          <div className="border-t">{renderCommentsSection(issueId)}</div>
-        )}
+        {/* Related cards and sub-issues */}
+        {isEditing &&
+          renderRelationshipsSection &&
+          renderRelationshipsSection(issueId)}
+        {isEditing && renderSubIssuesSection && renderSubIssuesSection(issueId)}
       </div>
+
+      {/* Footer */}
+      {isCreateMode ? (
+        <footer className="flex shrink-0 items-center gap-2 border-t border-divider bg-secondary px-[22px] pb-4 pt-3">
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={isSubmitting || isUploading || !formData.title.trim()}
+          >
+            {t('kanban.createCard')}
+          </Button>
+          {onDeleteDraft && (
+            <IconButton
+              icon={TrashIcon}
+              onClick={onDeleteDraft}
+              disabled={isSubmitting}
+              aria-label={t('kanban.panel.deleteDraft')}
+              title={t('kanban.panel.deleteDraft')}
+              className="hover:bg-error-soft hover:text-error"
+            />
+          )}
+        </footer>
+      ) : (
+        isEditing && (
+          <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-divider bg-secondary px-[22px] pb-4 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onFormChange('statusId', formData.statusId)}
+              disabled={isSubmitting || statusLocked}
+              className="gap-1.5"
+            >
+              {t('kanban.panel.moveTo')}
+              <CaretDownIcon className="size-3 text-low" />
+            </Button>
+            {stageAction && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={stageAction.onRun}
+                disabled={stageAction.disabled}
+              >
+                {stageAction.label}
+              </Button>
+            )}
+            <span className="flex-1" />
+            {closeCardAction && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={closeCardAction.onClick}
+                disabled={closeCardAction.disabled}
+                className="text-low"
+              >
+                {closeCardAction.label}
+              </Button>
+            )}
+          </footer>
+        )
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ export function ErrorAlert({
     <div
       role="alert"
       className={cn(
-        'relative w-full rounded-sm border border-error bg-error/10 px-base py-half text-sm text-error',
+        'relative w-full rounded border border-error/30 bg-error-soft px-3 py-2 text-sm text-error',
         className
       )}
     >
@@ -37,9 +37,9 @@ export function ErrorAlert({
           type="button"
           onClick={onDismiss}
           aria-label={dismissLabel ?? 'Dismiss error'}
-          className="absolute right-half top-half rounded-sm p-[2px] text-error/90 hover:bg-error/15 hover:text-error transition-colors"
+          className="absolute right-half top-half rounded-sm p-[2px] text-error/90 hover:bg-error/10 hover:text-error transition-colors"
         >
-          <XIcon className="size-icon-xs" weight="bold" />
+          <XIcon className="size-icon-xs" />
         </button>
       )}
     </div>

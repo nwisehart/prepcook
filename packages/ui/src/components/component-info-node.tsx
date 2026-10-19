@@ -102,7 +102,7 @@ function ComponentInfoComponent({
       <Tooltip>
         <TooltipTrigger asChild>
           <span
-            className="inline-flex items-center gap-half px-half bg-muted rounded-sm border border-border text-xs font-ibm-plex-mono text-muted-foreground cursor-default select-none hover:border-muted-foreground transition-colors"
+            className="inline-flex items-center gap-half px-half bg-muted rounded-sm border border-border text-xs font-mono text-muted-foreground cursor-default select-none hover:border-muted-foreground transition-colors"
             onDoubleClick={onDoubleClickEdit}
           >
             {badgeLabel}
@@ -122,13 +122,13 @@ function ComponentInfoComponent({
             </div>
 
             {fileLine && (
-              <span className="text-xs font-ibm-plex-mono text-muted-foreground break-all leading-relaxed">
+              <span className="text-xs font-mono text-muted-foreground break-all leading-relaxed">
                 {fileLine}
               </span>
             )}
 
             {data.cssClass && (
-              <span className="text-xs font-ibm-plex-mono text-muted-foreground break-all">
+              <span className="text-xs font-mono text-muted-foreground break-all">
                 {data.cssClass}
               </span>
             )}
@@ -143,7 +143,7 @@ function ComponentInfoComponent({
 
             {data.htmlPreview && (
               <div className="border-t border-border pt-half">
-                <pre className="text-xs font-ibm-plex-mono text-muted-foreground whitespace-pre overflow-x-auto max-h-[120px] overflow-y-auto leading-relaxed">
+                <pre className="text-xs font-mono text-muted-foreground whitespace-pre overflow-x-auto max-h-[120px] overflow-y-auto leading-relaxed">
                   {data.htmlPreview}
                 </pre>
               </div>

@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import {
   BirdIcon,
   CheckIcon,
   CowIcon,
   DeviceMobileIcon,
-  GithubLogoIcon,
   MusicNoteIcon,
   MusicNotesIcon,
   SpeakerHighIcon,
@@ -18,18 +25,18 @@ import {
   BaseCodingAgent,
   EditorType,
   SoundFile,
-  ThemeMode,
+  type BoardStatus,
   type EditorConfig,
 } from 'shared/types';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
-import { useTheme } from '@/shared/hooks/useTheme';
 import { AgentIcon, getAgentName } from '@/shared/components/AgentIcon';
 import { IdeIcon } from '@/shared/components/IdeIcon';
 import { getIdeName } from '@/shared/lib/ideName';
 import { cn, playSound } from '@/shared/lib/utils';
 import { isTauriApp } from '@/shared/lib/platform';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
-import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
+import { Button } from '@prepcook/ui/components/Button';
+import { PrepCookMark } from '@prepcook/ui/components/PrepCookMark';
 
 type SoundOption = {
   value: SoundFile;
@@ -82,13 +89,8 @@ const AGENT_PRIORITY: BaseCodingAgent[] = [
   BaseCodingAgent.GEMINI,
 ];
 
-const SOCIAL_LINKS = [
-  {
-    label: 'GitHub',
-    href: 'https://github.com/nwisehart/prepcook',
-    icon: GithubLogoIcon,
-  },
-];
+const REPO_URL = 'https://github.com/nwisehart/prepcook';
+const DOCS_URL = `${REPO_URL}/tree/main/docs`;
 
 const REMOTE_ONBOARDING_EVENTS = {
   STAGE_VIEWED: 'remote_onboarding_ui_stage_viewed',
@@ -97,28 +99,42 @@ const REMOTE_ONBOARDING_EVENTS = {
   STAGE_FAILED: 'remote_onboarding_ui_stage_failed',
 } as const;
 
+/** The first-run steps, in order: each one is one of the saved choices. */
+const STEPS = ['agent', 'editor', 'sound'] as const;
+type Step = (typeof STEPS)[number];
+
+/** The board's columns, left to right, with the dot each column shows. */
+const STAGES: { id: string; dot: string }[] = [
+  { id: 'todo', dot: 'border-2 border-low/60' },
+  { id: 'plan', dot: 'bg-brand' },
+  { id: 'execute', dot: 'bg-brand' },
+  { id: 'review', dot: 'bg-brand' },
+  { id: 'pushMr', dot: 'bg-brand' },
+  { id: 'close', dot: 'bg-success' },
+  { id: 'cleanUp', dot: 'bg-low/50' },
+];
+
 function randomDefaultSoundFile(): SoundFile {
   const randomIndex = Math.floor(Math.random() * SOUND_OPTIONS.length);
   return SOUND_OPTIONS[randomIndex]?.value ?? SoundFile.COW_MOOING;
 }
 
-function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
-  if (theme === ThemeMode.SYSTEM) {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
-  }
-  return theme === ThemeMode.DARK ? 'dark' : 'light';
-}
-
 export function LandingPage() {
+  const { t } = useTranslation('common');
   const appNavigation = useAppNavigation();
-  const { theme } = useTheme();
-  const { config, profiles, updateAndSaveConfig, loading } = useUserSystem();
+  const {
+    config,
+    profiles,
+    updateAndSaveConfig,
+    loading,
+    appVersion,
+    boardStatus,
+  } = useUserSystem();
   const posthog = usePostHog();
 
   const [initialized, setInitialized] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState<Step>('agent');
   const [selectedAgent, setSelectedAgent] = useState<BaseCodingAgent>(
     BaseCodingAgent.CLAUDE_CODE
   );
@@ -139,11 +155,6 @@ export function LandingPage() {
     },
     [posthog]
   );
-
-  const logoSrc =
-    resolveTheme(theme) === 'dark'
-      ? '/prepcook-logo-dark.svg'
-      : '/prepcook-logo.svg';
 
   useEffect(() => {
     if (!config || initialized) return;
@@ -207,10 +218,6 @@ export function LandingPage() {
     }
   };
 
-  const openExternalLink = (url: string) => {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
   const handleSoundSelect = (value: SoundFile) => {
     setSoundEnabled(true);
     setSoundFile(value);
@@ -220,6 +227,13 @@ export function LandingPage() {
   const isCustomEditorValid =
     editorType !== EditorType.CUSTOM || customCommand.trim() !== '';
   const canContinue = !saving && isCustomEditorValid;
+
+  const stepIndex = STEPS.indexOf(step);
+  const isLastStep = stepIndex === STEPS.length - 1;
+  // The editor step needs its custom command before moving on; the last
+  // step saves every choice at once.
+  const canAdvance =
+    step === 'editor' ? isCustomEditorValid : isLastStep ? canContinue : true;
 
   const handleContinue = async () => {
     if (!config || !canContinue) return;
@@ -279,10 +293,19 @@ export function LandingPage() {
     });
   };
 
+  const handleNext = () => {
+    if (!canAdvance) return;
+    if (isLastStep) {
+      void handleContinue();
+      return;
+    }
+    setStep(STEPS[stepIndex + 1]);
+  };
+
   if (loading || !config || !initialized) {
     return (
       <div className="h-screen bg-primary flex items-center justify-center">
-        <p className="text-low">Loading...</p>
+        <p className="text-sm text-low">{t('states.loading')}</p>
       </div>
     );
   }
@@ -292,227 +315,410 @@ export function LandingPage() {
   }
 
   return (
-    <div className="h-screen bg-primary flex items-center justify-center p-double">
+    <div className="flex h-screen flex-col overflow-y-auto bg-primary text-sm text-normal">
       {isTauriApp() && (
         <div
           data-tauri-drag-region
           className="fixed inset-x-0 top-0 h-10 z-10"
         />
       )}
-      <div className="flex max-h-full w-full max-w-5xl flex-col rounded-sm border border-border bg-secondary">
-        {/* Header */}
-        <header className="shrink-0 space-y-base p-double pb-base">
-          <div className="flex items-center justify-between">
-            <img src={logoSrc} alt="Prepcook" className="h-8 w-auto logo" />
-            <div className="flex flex-wrap items-center gap-2">
-              {SOCIAL_LINKS.map((link) => (
-                <PrimaryButton
-                  key={link.label}
-                  value={link.label}
-                  variant="tertiary"
-                  actionIcon={link.icon}
-                  onClick={() => openExternalLink(link.href)}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="rounded-sm border border-brand bg-brand/20 p-base">
-            <div className="flex items-start gap-base">
-              <WarningIcon
-                className="size-icon-sm text-brand shrink-0 mt-[2px]"
-                weight="fill"
-              />
-              <p className="text-sm text-normal">
-                Prepcook runs AI coding agents with{' '}
-                <code>--dangerously-skip-permissions</code> /{' '}
-                <code>--yolo</code> by default. Always review what agents are
-                doing.
+
+      <header className="flex flex-wrap items-center gap-2.5 border-b border-border px-7 py-[18px]">
+        <PrepCookMark className="!size-[26px] text-brand" />
+        <span className="text-[17px] font-bold tracking-[-0.2px] text-high">
+          {t('onboarding.productName')}
+        </span>
+        <span className="flex-1" />
+        <RuntimeStatus appVersion={appVersion} boardStatus={boardStatus} />
+        <a
+          href={DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[13px] font-semibold text-brand-secondary hover:underline"
+        >
+          {t('onboarding.docs')}
+        </a>
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[13px] font-semibold text-brand-secondary hover:underline"
+        >
+          {t('onboarding.github')}
+        </a>
+      </header>
+
+      <main className="flex flex-1 justify-center px-7 pb-12 pt-10">
+        <div className="flex w-full max-w-[1180px] flex-wrap items-start gap-10">
+          <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-[22px]">
+            <div className="flex flex-col gap-2">
+              <h1 className="text-[30px] font-bold leading-tight tracking-[-0.5px] text-high">
+                {t('onboarding.title')}
+              </h1>
+              <p className="max-w-[620px] text-[15px] leading-[1.45] text-normal">
+                {t('onboarding.lead')}
               </p>
             </div>
-          </div>
-        </header>
 
-        {/* 3-column grid */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-double pb-double">
-          <div className="grid grid-cols-3 gap-double">
-            {/* Column 1: Coding Agent */}
-            <section className="space-y-half">
-              <h2 className="text-sm font-medium text-high">Coding Agent</h2>
-              <div className="grid gap-1.5">
-                {executorOptions.map((agent) => {
-                  const selected = selectedAgent === agent;
+            <StepIndicator
+              current={step}
+              onSelect={(next) => {
+                // Steps after the editor need a valid editor choice first.
+                if (
+                  STEPS.indexOf(next) > STEPS.indexOf('editor') &&
+                  !isCustomEditorValid
+                ) {
+                  return;
+                }
+                setStep(next);
+              }}
+            />
 
-                  return (
-                    <button
+            <section className="flex flex-col gap-[18px] rounded-lg border border-border bg-secondary px-[22px] py-5">
+              <div className="flex flex-col gap-1.5">
+                <span id={`onboarding-${step}`} className="font-bold text-high">
+                  {t(`onboarding.steps.${step}.question`)}
+                </span>
+                <span className="text-[12.5px] leading-[1.45] text-low">
+                  {t(`onboarding.steps.${step}.helper`)}
+                </span>
+              </div>
+
+              {step === 'agent' && (
+                <ChoiceGrid labelledBy="onboarding-agent">
+                  {executorOptions.map((agent) => (
+                    <ChoiceRow
                       key={agent}
-                      type="button"
-                      onClick={() => setSelectedAgent(agent)}
-                      className={cn(
-                        'flex items-center gap-base rounded-sm border px-base py-half text-left',
-                        selected
-                          ? 'border-brand bg-brand/10'
-                          : 'border-border bg-panel hover:bg-primary'
-                      )}
-                    >
-                      <AgentIcon
-                        agent={agent}
-                        className="size-icon-xl shrink-0"
-                      />
-                      <span className="text-sm text-normal flex-1 truncate">
-                        {getAgentName(agent)}
-                      </span>
-                      {selected && (
-                        <CheckIcon
-                          className="size-icon-xs text-brand shrink-0"
-                          weight="bold"
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Column 2: Code Editor */}
-            <section className="space-y-half">
-              <h2 className="text-sm font-medium text-high">Code Editor</h2>
-              <div className="grid gap-1.5">
-                {editorOptions.map((editor) => {
-                  const selected = editorType === editor;
-
-                  return (
-                    <button
-                      key={editor}
-                      type="button"
-                      onClick={() => setEditorType(editor)}
-                      className={cn(
-                        'flex items-center gap-base rounded-sm border px-base py-half text-left',
-                        selected
-                          ? 'border-brand bg-brand/10'
-                          : 'border-border bg-panel hover:bg-primary'
-                      )}
-                    >
-                      <IdeIcon
-                        editorType={editor}
-                        className="size-icon-sm shrink-0"
-                      />
-                      <span className="text-sm text-normal flex-1 truncate">
-                        {getIdeName(editor)}
-                      </span>
-                      {selected && (
-                        <CheckIcon
-                          className="size-icon-xs text-brand shrink-0"
-                          weight="bold"
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {editorType === EditorType.CUSTOM && (
-                <div className="space-y-half">
-                  <label className="text-sm font-medium text-normal">
-                    Custom Command
-                  </label>
-                  <input
-                    type="text"
-                    value={customCommand}
-                    onChange={(e) => setCustomCommand(e.target.value)}
-                    placeholder="e.g. code --wait"
-                    className={cn(
-                      'w-full bg-panel border rounded-sm px-base py-half text-sm text-high',
-                      'placeholder:text-low placeholder:opacity-80 focus:outline-none',
-                      'focus:ring-1 focus:ring-brand',
-                      customCommand.trim() === ''
-                        ? 'border-warning/60'
-                        : 'border-border'
-                    )}
-                  />
-                </div>
-              )}
-            </section>
-
-            {/* Column 3: Notification Sound */}
-            <section className="space-y-half">
-              <h2 className="text-sm font-medium text-high">
-                Notification Sound
-              </h2>
-              <div className="grid gap-1.5">
-                {SOUND_OPTIONS.map((option) => {
-                  const Icon = option.icon;
-                  const selected = soundEnabled && soundFile === option.value;
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => handleSoundSelect(option.value)}
-                      className={cn(
-                        'flex items-center gap-base rounded-sm border px-base py-half text-left',
-                        selected
-                          ? 'border-brand bg-brand/10'
-                          : 'border-border bg-panel hover:bg-primary'
-                      )}
-                    >
-                      <Icon
-                        className={cn(
-                          'size-icon-sm shrink-0',
-                          selected ? 'text-brand' : 'text-normal'
-                        )}
-                        weight={selected ? 'fill' : 'bold'}
-                      />
-                      <span className="text-sm text-normal flex-1 truncate">
-                        {option.label}
-                      </span>
-                      {selected && (
-                        <CheckIcon
-                          className="size-icon-xs text-brand shrink-0"
-                          weight="bold"
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => setSoundEnabled(false)}
-                  className={cn(
-                    'flex items-center gap-base rounded-sm border px-base py-half text-left',
-                    !soundEnabled
-                      ? 'border-brand bg-brand/10'
-                      : 'border-border bg-panel hover:bg-primary'
-                  )}
-                >
-                  <SpeakerXIcon
-                    className={cn(
-                      'size-icon-sm shrink-0',
-                      !soundEnabled ? 'text-brand' : 'text-normal'
-                    )}
-                    weight={!soundEnabled ? 'fill' : 'bold'}
-                  />
-                  <span className="text-sm text-normal flex-1">No sound</span>
-                  {!soundEnabled && (
-                    <CheckIcon
-                      className="size-icon-xs text-brand shrink-0"
-                      weight="bold"
+                      selected={selectedAgent === agent}
+                      onSelect={() => setSelectedAgent(agent)}
+                      icon={
+                        <AgentIcon agent={agent} className="size-5 shrink-0" />
+                      }
+                      label={getAgentName(agent)}
                     />
+                  ))}
+                </ChoiceGrid>
+              )}
+
+              {step === 'editor' && (
+                <>
+                  <ChoiceGrid labelledBy="onboarding-editor">
+                    {editorOptions.map((editor) => (
+                      <ChoiceRow
+                        key={editor}
+                        selected={editorType === editor}
+                        onSelect={() => setEditorType(editor)}
+                        icon={
+                          <IdeIcon
+                            editorType={editor}
+                            className="size-4 shrink-0"
+                          />
+                        }
+                        label={getIdeName(editor)}
+                      />
+                    ))}
+                  </ChoiceGrid>
+
+                  {editorType === EditorType.CUSTOM && (
+                    <div className="flex flex-col gap-1.5">
+                      <label
+                        htmlFor="onboarding-custom-command"
+                        className="font-semibold text-high"
+                      >
+                        {t('onboarding.steps.editor.customCommand')}
+                      </label>
+                      <input
+                        id="onboarding-custom-command"
+                        type="text"
+                        value={customCommand}
+                        onChange={(e) => setCustomCommand(e.target.value)}
+                        placeholder="code --wait"
+                        className={cn(
+                          'h-9 w-full rounded border bg-secondary px-3 font-mono text-[13px] text-high',
+                          'placeholder:text-low focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
+                          customCommand.trim() === ''
+                            ? 'border-error'
+                            : 'border-border'
+                        )}
+                      />
+                    </div>
                   )}
-                </button>
+                </>
+              )}
+
+              {step === 'sound' && (
+                <ChoiceGrid labelledBy="onboarding-sound">
+                  {SOUND_OPTIONS.map((option) => {
+                    const OptionIcon = option.icon;
+                    const selected = soundEnabled && soundFile === option.value;
+                    return (
+                      <ChoiceRow
+                        key={option.value}
+                        selected={selected}
+                        onSelect={() => handleSoundSelect(option.value)}
+                        icon={
+                          <OptionIcon
+                            className={cn(
+                              'size-4 shrink-0',
+                              selected ? 'text-brand' : 'text-low'
+                            )}
+                          />
+                        }
+                        label={option.label}
+                      />
+                    );
+                  })}
+                  <ChoiceRow
+                    selected={!soundEnabled}
+                    onSelect={() => setSoundEnabled(false)}
+                    icon={
+                      <SpeakerXIcon
+                        className={cn(
+                          'size-4 shrink-0',
+                          !soundEnabled ? 'text-brand' : 'text-low'
+                        )}
+                      />
+                    }
+                    label={t('onboarding.steps.sound.none')}
+                  />
+                </ChoiceGrid>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2.5 border-t border-divider pt-4">
+                {stepIndex > 0 && (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setStep(STEPS[stepIndex - 1])}
+                    disabled={saving}
+                  >
+                    {t('onboarding.back')}
+                  </Button>
+                )}
+                <span className="text-[12.5px] text-low">
+                  {t('onboarding.stepCount', {
+                    current: stepIndex + 1,
+                    total: STEPS.length,
+                  })}
+                </span>
+                <span className="flex-1" />
+                <Button size="lg" onClick={handleNext} disabled={!canAdvance}>
+                  {saving ? t('onboarding.saving') : t('buttons.continue')}
+                </Button>
               </div>
             </section>
-          </div>
-        </div>
 
-        {/* Footer */}
-        <div className="shrink-0 border-t border-border p-double pt-base flex items-center justify-end gap-base">
-          <PrimaryButton
-            value={saving ? 'Saving...' : 'Continue'}
-            onClick={handleContinue}
-            disabled={!canContinue}
-          />
+            <p className="flex items-start gap-2 rounded-lg border border-border bg-surface-raised px-3.5 py-2.5 text-[12.5px] leading-[1.45] text-normal">
+              <WarningIcon
+                className="mt-0.5 size-3.5 shrink-0 text-attention-foreground"
+                weight="fill"
+              />
+              <span>
+                <Trans
+                  t={t}
+                  i18nKey="onboarding.permissionsNote"
+                  components={{
+                    code: <code className="font-mono text-xs text-high" />,
+                  }}
+                />
+              </span>
+            </p>
+          </section>
+
+          <BugJourney />
         </div>
-      </div>
+      </main>
     </div>
+  );
+}
+
+/** Version, where the server runs, and whether the board answers. */
+function RuntimeStatus({
+  appVersion,
+  boardStatus,
+}: {
+  appVersion: string | null;
+  boardStatus: BoardStatus | null;
+}) {
+  const { t } = useTranslation('common');
+  const board =
+    boardStatus?.status === 'connected'
+      ? { dot: 'bg-success', label: t('onboarding.status.boardUp') }
+      : boardStatus?.status === 'not_answering'
+        ? { dot: 'bg-attention', label: t('onboarding.status.boardDown') }
+        : boardStatus
+          ? { dot: 'bg-low/50', label: t('onboarding.status.noBoard') }
+          : null;
+  return (
+    <span className="mr-2 hidden items-center gap-1.5 text-[12.5px] text-low sm:inline-flex">
+      {appVersion && (
+        <>
+          <span className="font-mono">v{appVersion}</span>
+          <span aria-hidden="true">·</span>
+        </>
+      )}
+      {t('onboarding.status.local')}
+      {board && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className={cn('size-2 rounded-full', board.dot)} />
+            {board.label}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+function StepIndicator({
+  current,
+  onSelect,
+}: {
+  current: Step;
+  onSelect: (step: Step) => void;
+}) {
+  const { t } = useTranslation('common');
+  const currentIndex = STEPS.indexOf(current);
+  return (
+    <ol className="m-0 flex list-none flex-wrap items-center gap-2.5 p-0">
+      {STEPS.map((step, index) => {
+        const isCurrent = index === currentIndex;
+        const isDone = index < currentIndex;
+        return (
+          <li key={step} className="flex items-center gap-2.5">
+            {index > 0 && (
+              <span aria-hidden="true" className="h-px w-7 bg-border" />
+            )}
+            <button
+              type="button"
+              onClick={() => onSelect(step)}
+              aria-current={isCurrent ? 'step' : undefined}
+              className={cn(
+                'flex items-center gap-2 rounded text-sm transition-colors',
+                'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
+                isCurrent
+                  ? 'font-semibold text-high'
+                  : 'font-medium text-low hover:text-high'
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-[12.5px] font-bold',
+                  isCurrent
+                    ? 'bg-brand text-on-brand'
+                    : isDone
+                      ? 'bg-brand-soft text-brand-soft-foreground'
+                      : 'bg-panel text-low'
+                )}
+              >
+                {isDone ? <CheckIcon className="size-3.5" /> : index + 1}
+              </span>
+              {t(`onboarding.steps.${step}.name`)}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function ChoiceGrid({
+  labelledBy,
+  children,
+}: {
+  labelledBy: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-labelledby={labelledBy}
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+    >
+      {children}
+    </div>
+  );
+}
+
+/** One selectable option: icon, name and a radio dot. */
+function ChoiceRow({
+  selected,
+  onSelect,
+  icon,
+  label,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        'flex h-11 items-center gap-3 rounded-lg border bg-secondary px-3 text-left transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
+        selected
+          ? 'border-brand ring-1 ring-brand'
+          : 'border-border hover:bg-panel'
+      )}
+    >
+      {icon}
+      <span className="flex-1 truncate text-sm font-medium text-high">
+        {label}
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'size-4 shrink-0 rounded-full bg-secondary',
+          selected ? 'border-[5px] border-brand' : 'border-2 border-low/50'
+        )}
+      />
+    </button>
+  );
+}
+
+/** The board's stages, so a first-time user knows what the cards will do. */
+function BugJourney() {
+  const { t } = useTranslation('common');
+  return (
+    <aside className="flex max-w-[420px] flex-[1_1_360px] flex-col gap-4 rounded-lg border border-border bg-secondary px-6 py-[22px]">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-[15px] font-bold text-high">
+          {t('onboarding.journey.title')}
+        </h2>
+        <p className="text-[12.5px] leading-[1.45] text-low">
+          {t('onboarding.journey.helper')}
+        </p>
+      </div>
+      <ol className="m-0 flex list-none flex-col gap-3 p-0">
+        {STAGES.map((stage) => (
+          <li key={stage.id} className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className={cn('mt-1.5 size-2.5 shrink-0 rounded-full', stage.dot)}
+            />
+            <span className="min-w-[70px] font-bold text-high">
+              {t(`onboarding.stages.${stage.id}.name`)}
+            </span>
+            <span className="text-[12.5px] leading-[1.45] text-low">
+              {t(`onboarding.stages.${stage.id}.description`)}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-col gap-1 border-t border-divider pt-3">
+        <span className="font-semibold text-high">
+          {t('onboarding.noTracker.title')}
+        </span>
+        <span className="text-[12.5px] leading-[1.45] text-low">
+          {t('onboarding.noTracker.description')}
+        </span>
+      </div>
+    </aside>
   );
 }

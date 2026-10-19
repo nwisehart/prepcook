@@ -57,11 +57,12 @@ import {
   SettingsCard,
   SettingsField,
   SettingsInput,
+  SettingsLoading,
   SettingsSaveBar,
   TwoColumnPicker,
   TwoColumnPickerColumn,
-  TwoColumnPickerItem,
   TwoColumnPickerEmpty,
+  TwoColumnPickerItem,
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import type { DraftWorkspaceRepo, GitBranch, Repo } from 'shared/types';
@@ -110,7 +111,7 @@ function StatusRowClone({ status, provided }: StatusRowCloneProps) {
       {...provided.draggableProps}
       {...provided.dragHandleProps}
       className={cn(
-        'flex items-center gap-base px-base py-half rounded-sm shadow-lg',
+        'flex items-center gap-2.5 rounded border border-border px-2.5 py-1.5 shadow-overlay',
         status.isNew ? 'bg-panel' : 'bg-secondary',
         status.hidden && 'opacity-50'
       )}
@@ -123,7 +124,7 @@ function StatusRowClone({ status, provided }: StatusRowCloneProps) {
         <DotsSixVerticalIcon className="size-icon-xs text-low" weight="bold" />
       </div>
       <div
-        className="size-dot rounded-full shrink-0"
+        className="size-2 rounded-full shrink-0"
         style={{ backgroundColor: `hsl(${status.color})` }}
       />
       <span className="text-sm text-high">{status.name}</span>
@@ -205,10 +206,10 @@ function StatusRow({
           ref={provided.innerRef}
           {...provided.draggableProps}
           className={cn(
-            'flex items-center justify-between px-base py-half rounded-sm',
-            status.isNew ? 'bg-panel' : 'bg-secondary',
+            'flex items-center justify-between rounded px-2.5 py-1.5',
+            status.isNew ? 'bg-panel' : 'bg-secondary hover:bg-panel',
             status.hidden && 'opacity-50',
-            snapshot.isDragging && 'shadow-lg opacity-80'
+            snapshot.isDragging && 'shadow-overlay opacity-80'
           )}
           style={{
             ...provided.draggableProps.style,
@@ -239,7 +240,7 @@ function StatusRow({
                   title={t('kanban.changeColor', 'Change color')}
                 >
                   <div
-                    className="size-dot rounded-full shrink-0"
+                    className="size-2 rounded-full shrink-0"
                     style={{ backgroundColor: `hsl(${status.color})` }}
                   />
                 </button>
@@ -284,7 +285,7 @@ function StatusRow({
             <button
               type="button"
               onClick={() => onStartEditing(status.id)}
-              className="flex items-center justify-center size-icon-sm text-low hover:text-normal"
+              className="flex items-center justify-center size-icon-sm text-low hover:text-high"
               title={t('kanban.editName', 'Edit name')}
             >
               <PencilSimpleLineIcon className="size-icon-xs" weight="bold" />
@@ -295,7 +296,7 @@ function StatusRow({
               className={cn(
                 'flex items-center justify-center size-icon-sm',
                 canDelete
-                  ? 'text-low hover:text-normal'
+                  ? 'text-low hover:text-error'
                   : 'text-low opacity-50 cursor-not-allowed'
               )}
               title={
@@ -952,34 +953,27 @@ export function RemoteProjectsSettingsSection({
   // Loading state
   if (!isLoaded || orgsLoading) {
     return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">
-          {t('settings.remoteProjects.loading', 'Loading remote projects...')}
-        </span>
-      </div>
+      <SettingsLoading
+        label={t(
+          'settings.remoteProjects.loading',
+          'Loading remote projects...'
+        )}
+      />
     );
   }
 
   // Without a board there are no projects to manage
   if (!hasBoardAccess) {
     return (
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-base font-medium text-high">
-            {t('settings.remoteProjects.boardRequired.title', 'No board')}
-          </h3>
-          <p className="text-sm text-low mt-1">
-            {t(
-              'settings.remoteProjects.boardRequired.description',
-              'Projects live on the board, and this server cannot reach one. See Board.'
-            )}
-          </p>
-        </div>
-      </div>
+      <SettingsCard
+        title={t('settings.remoteProjects.boardRequired.title', 'No board')}
+        description={t(
+          'settings.remoteProjects.boardRequired.description',
+          'Projects live on the board, and this server cannot reach one. See Board.'
+        )}
+      >
+        {null}
+      </SettingsCard>
     );
   }
 
@@ -987,7 +981,7 @@ export function RemoteProjectsSettingsSection({
   if (orgsError) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {orgsError instanceof Error
             ? orgsError.message
             : t('settings.remoteProjects.loadError', 'Failed to load projects')}
@@ -1000,13 +994,13 @@ export function RemoteProjectsSettingsSection({
     <>
       {/* Status messages */}
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error mb-4">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium mb-4">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {success}
         </div>
       )}
@@ -1025,7 +1019,7 @@ export function RemoteProjectsSettingsSection({
             headerAction={
               selectedOrgId && (
                 <button
-                  className="p-half rounded-sm hover:bg-secondary text-low hover:text-normal"
+                  className="rounded p-1 text-low hover:bg-panel hover:text-high focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand"
                   onClick={handleCreateProject}
                   disabled={isSaving}
                   title={t(
@@ -1033,14 +1027,14 @@ export function RemoteProjectsSettingsSection({
                     'Add Project'
                   )}
                 >
-                  <PlusIcon className="size-icon-2xs" weight="bold" />
+                  <PlusIcon className="size-3.5" />
                 </button>
               )
             }
           >
             {projectsLoading ? (
               <div className="flex items-center justify-center py-double gap-base">
-                <SpinnerIcon className="size-icon-sm animate-spin" />
+                <SpinnerIcon className="size-4 animate-spin text-low" />
               </div>
             ) : selectedOrgId && projects.length > 0 ? (
               projects.map((project) => (
@@ -1050,7 +1044,7 @@ export function RemoteProjectsSettingsSection({
                   onClick={() => handleProjectSelect(project.id)}
                   leading={
                     <span
-                      className="w-3 h-3 rounded-full shrink-0"
+                      className="size-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: `hsl(${project.color})` }}
                     />
                   }
@@ -1077,7 +1071,7 @@ export function RemoteProjectsSettingsSection({
 
         {/* Edit form (when project selected) */}
         {selectedProjectId && formState && (
-          <div className="bg-secondary/50 border border-border rounded-sm p-4 space-y-4">
+          <div className="flex flex-col gap-4 rounded-lg border border-border px-4 py-3">
             <SettingsField
               label={t(
                 'settings.remoteProjects.form.name.label',
@@ -1118,15 +1112,15 @@ export function RemoteProjectsSettingsSection({
         {selectedProjectId && (
           <div
             className={cn(
-              'bg-secondary/50 border border-border rounded-sm p-4 space-y-base',
+              'flex flex-col gap-3 rounded-lg border border-border px-4 py-3',
               isSaving && 'opacity-60 pointer-events-none'
             )}
           >
-            <div>
-              <p className="text-sm font-medium text-normal">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-semibold text-high">
                 {t('settings:settings.remoteProjects.form.defaultRepos.label')}
               </p>
-              <p className="text-sm text-low mt-1">
+              <p className="text-[12.5px] leading-[1.45] text-low">
                 {t(
                   'settings:settings.remoteProjects.form.defaultRepos.description'
                 )}
@@ -1134,27 +1128,27 @@ export function RemoteProjectsSettingsSection({
             </div>
 
             {defaultReposError && (
-              <p className="text-sm text-red-500">{defaultReposError}</p>
+              <p className="text-[12.5px] text-error">{defaultReposError}</p>
             )}
 
             {isLoadingDefaults ? (
               <div className="flex items-center gap-half py-half">
-                <SpinnerIcon className="size-icon-xs animate-spin" />
+                <SpinnerIcon className="size-3.5 animate-spin text-low" />
               </div>
             ) : defaultRepos.length === 0 ? (
               <p className="text-sm text-low">
                 {t('settings:settings.remoteProjects.form.defaultRepos.empty')}
               </p>
             ) : (
-              <div className="space-y-half">
+              <div className="flex flex-col divide-y divide-divider rounded-lg border border-border">
                 {defaultRepos.map((dr) => {
                   const repo = allRepos.find((r) => r.id === dr.repo_id);
                   return (
                     <div
                       key={dr.repo_id}
-                      className="flex items-center gap-base px-base py-half rounded-sm bg-secondary"
+                      className="flex items-center gap-2.5 px-3 py-2"
                     >
-                      <span className="text-sm text-high flex-1 truncate">
+                      <span className="text-sm font-medium text-high flex-1 truncate">
                         {repo?.display_name || repo?.name || dr.repo_id}
                       </span>
                       <DropdownMenu
@@ -1165,7 +1159,7 @@ export function RemoteProjectsSettingsSection({
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
-                            className="flex items-center gap-1 text-xs text-low bg-panel border border-border rounded-sm px-1.5 py-0.5 hover:bg-secondary cursor-pointer transition-colors"
+                            className="flex h-[22px] items-center gap-1 rounded-full bg-panel px-2 font-mono text-xs text-normal hover:bg-border cursor-pointer transition-colors"
                           >
                             {loadingBranches.has(dr.repo_id) ? (
                               <SpinnerIcon className="size-icon-2xs animate-spin" />
@@ -1216,7 +1210,7 @@ export function RemoteProjectsSettingsSection({
                                     </span>
                                     <div className="flex items-center gap-1 shrink-0">
                                       {branch.is_current && (
-                                        <span className="text-[10px] text-low bg-secondary border border-border rounded-sm px-1">
+                                        <span className="inline-flex h-[18px] items-center rounded-full bg-panel px-1.5 text-[10px] font-medium text-normal">
                                           current
                                         </span>
                                       )}
@@ -1237,7 +1231,7 @@ export function RemoteProjectsSettingsSection({
                       <button
                         type="button"
                         onClick={() => handleRemoveDefaultRepo(dr.repo_id)}
-                        className="flex items-center justify-center size-icon-sm text-low hover:text-normal"
+                        className="flex items-center justify-center size-icon-sm text-low hover:text-error"
                       >
                         <XIcon className="size-icon-xs" weight="bold" />
                       </button>
@@ -1251,12 +1245,12 @@ export function RemoteProjectsSettingsSection({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-half px-base py-half text-high hover:bg-secondary rounded-sm transition-colors"
+                  className="flex h-8 items-center gap-1.5 self-start rounded px-2 text-sm font-semibold text-brand-secondary hover:bg-panel transition-colors"
                 >
                   <div className="flex items-center justify-center size-icon-sm">
-                    <PlusIcon className="size-icon-xs" weight="bold" />
+                    <PlusIcon className="size-3.5" />
                   </div>
-                  <span className="text-xs font-light">
+                  <span>
                     {t(
                       'settings:settings.remoteProjects.form.defaultRepos.addButton'
                     )}
@@ -1287,19 +1281,19 @@ export function RemoteProjectsSettingsSection({
         {selectedProjectId && (
           <div
             className={cn(
-              'bg-secondary/50 border border-border rounded-sm p-4 space-y-base',
+              'flex flex-col gap-3 rounded-lg border border-border px-4 py-3',
               isSaving && 'opacity-60 pointer-events-none'
             )}
           >
             <div>
-              <div>
-                <p className="text-sm font-medium text-normal">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-semibold text-high">
                   {t(
                     'settings.remoteProjects.form.statuses.label',
                     'Project Statuses'
                   )}
                 </p>
-                <p className="text-sm text-low mt-1">
+                <p className="text-[12.5px] leading-[1.45] text-low">
                   {t(
                     'settings.remoteProjects.form.statuses.description',
                     'Manage kanban columns for this project.'
@@ -1308,8 +1302,8 @@ export function RemoteProjectsSettingsSection({
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-normal">
-              <span className="text-sm font-semibold">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-low">
                 {t('kanban.visibleColumns', 'Visible Columns')}
               </span>
               <span className="text-xs text-low">
@@ -1360,14 +1354,12 @@ export function RemoteProjectsSettingsSection({
                     <button
                       type="button"
                       onClick={handleStatusAdd}
-                      className="flex items-center gap-half px-base py-half text-high hover:bg-secondary rounded-sm transition-colors"
+                      className="mt-1 flex h-8 items-center gap-1.5 self-start rounded px-2 text-sm font-semibold text-brand-secondary hover:bg-panel transition-colors"
                     >
                       <div className="flex items-center justify-center size-icon-sm">
-                        <PlusIcon className="size-icon-xs" weight="bold" />
+                        <PlusIcon className="size-3.5" />
                       </div>
-                      <span className="text-xs font-light">
-                        {t('kanban.addColumn', 'Add column')}
-                      </span>
+                      <span>{t('kanban.addColumn', 'Add column')}</span>
                     </button>
                   </div>
                 )}
@@ -1402,8 +1394,8 @@ function ProjectActionsDropdown({
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            'p-half rounded-sm hover:bg-panel text-low hover:text-normal',
-            'opacity-0 group-hover:opacity-100 transition-opacity'
+            'rounded p-1 text-low hover:bg-border hover:text-high',
+            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity'
           )}
           onClick={(e) => e.stopPropagation()}
         >

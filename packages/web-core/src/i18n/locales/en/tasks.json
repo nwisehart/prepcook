@@ -142,7 +142,10 @@
       "edit": "Edit message",
       "scrollToPreviousMessage": "Go to previous message",
       "reset": "Reset",
-      "resetTooltip": "Reset to this point"
+      "resetTooltip": "Reset to this point",
+      "openSession": "Open session",
+      "openDiff": "Open the diff",
+      "insertPrComments": "Insert pull request comments into the message"
     },
     "approval": {
       "conflictWarning": "Conflicted files need manual resolution",
@@ -189,9 +192,16 @@
       "cleanupDescription": "No cleanup script configured. Cleanup scripts run after the coding agent finishes.",
       "configure": "Configure"
     },
-    "updatedTodos": "Updated Todos",
     "viewInReview": "View in Review",
-    "unableToRenderDiff": "Unable to render diff."
+    "unableToRenderDiff": "Unable to render diff.",
+    "placeholders": {
+      "reply": "Reply to the agent…",
+      "newSession": "Start a new conversation…",
+      "feedback": "Feedback on the plan…",
+      "edit": "Edit your message…",
+      "requestChanges": "Describe the changes you want…",
+      "otherAnswer": "Type a different answer…"
+    }
   },
   "attempt": {
     "actions": {

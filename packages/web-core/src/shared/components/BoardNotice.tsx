@@ -7,7 +7,7 @@ interface BoardNoticeProps {
 }
 
 /**
- * Strip above the board/projects area while the server cannot authenticate
+ * Notice above the board/projects area while the server cannot authenticate
  * to a board. Nothing else waits on it; the fix is outside the app.
  */
 export function BoardNotice({ reason }: BoardNoticeProps) {
@@ -18,12 +18,15 @@ export function BoardNotice({ reason }: BoardNoticeProps) {
   ).split('`');
 
   return (
-    <div className="flex items-center gap-2 border-b border-border bg-secondary px-base py-half text-sm text-normal">
-      <WarningCircleIcon className="size-icon-xs shrink-0 text-warning" />
+    <div
+      role="status"
+      className="flex items-center gap-2 rounded border border-attention-border bg-attention-soft px-3 py-2 text-sm text-high"
+    >
+      <WarningCircleIcon className="size-4 shrink-0 text-attention-foreground" />
       <span>
         {segments.map((segment, index) =>
           index % 2 === 1 ? (
-            <code key={index} className="font-ibm-plex-mono text-high">
+            <code key={index} className="font-mono text-xs font-medium">
               {segment}
             </code>
           ) : (

@@ -32,14 +32,17 @@ interface DropdownMenuTriggerButtonProps
   size?: 'default' | 'sm';
 }
 
+// Bordered surface trigger (the secondary button shape). Height comes from
+// sizeClasses so callers reusing this class keep control of their height.
 export const dropdownMenuTriggerButtonClassName =
-  'flex items-center gap-half bg-secondary border border-border rounded-sm px-base py-half ' +
-  'focus:outline-none focus-visible:ring-1 focus-visible:ring-brand ' +
+  'flex items-center gap-half bg-secondary border border-border rounded px-3 ' +
+  'hover:bg-panel transition-colors ' +
+  'focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand ' +
   'disabled:opacity-50 disabled:cursor-not-allowed min-w-0';
 
 const sizeClasses = {
-  default: '',
-  sm: 'text-sm h-cta',
+  default: 'min-h-8',
+  sm: 'text-sm h-7',
 } as const;
 
 const DropdownMenuTriggerButton = React.forwardRef<
@@ -67,13 +70,11 @@ const DropdownMenuTriggerButton = React.forwardRef<
       )}
       {...props}
     >
-      {IconComponent && (
-        <IconComponent className="size-icon-xs text-normal" weight="bold" />
-      )}
+      {IconComponent && <IconComponent className="size-icon-xs text-low" />}
       {label && (
         <span
           className={cn(
-            'text-normal truncate flex-1 text-left',
+            'text-high truncate flex-1 text-left',
             size === 'default' && 'text-sm'
           )}
         >
@@ -82,10 +83,7 @@ const DropdownMenuTriggerButton = React.forwardRef<
       )}
       {children}
       {showCaret && (
-        <CaretDownIcon
-          className="size-icon-2xs text-normal flex-shrink-0"
-          weight="bold"
-        />
+        <CaretDownIcon className="size-icon-xs text-low flex-shrink-0" />
       )}
     </DropdownMenuPrimitive.Trigger>
   )
@@ -99,16 +97,16 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-pointer select-none items-center gap-base px-base py-half mx-half rounded-sm',
+      'flex cursor-pointer select-none items-center gap-base px-base py-1.5 mx-half rounded-sm',
       'text-sm text-high outline-none',
-      'focus:bg-secondary data-[state=open]:bg-secondary',
+      'focus:bg-panel data-[state=open]:bg-panel',
       '[&_svg]:pointer-events-none [&_svg]:size-icon-xs [&_svg]:shrink-0',
       className
     )}
     {...props}
   >
     {children}
-    <CaretRightIcon className="ml-auto" weight="bold" />
+    <CaretRightIcon className="ml-auto text-low" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName =
@@ -124,7 +122,7 @@ const DropdownMenuSubContent = React.forwardRef<
         ref={ref}
         className={cn(
           'z-[10000] min-w-[8rem] overflow-hidden',
-          'bg-panel border border-border rounded-sm py-half shadow-md',
+          'bg-secondary border border-border rounded py-half shadow-overlay',
           'data-[state=open]:animate-in',
           'data-[state=open]:fade-in-0',
           'data-[state=open]:zoom-in-95',
@@ -153,7 +151,7 @@ const DropdownMenuContent = React.forwardRef<
         className={cn(
           'z-[10000] min-w-[8rem] overflow-y-auto overflow-x-hidden',
           'max-h-[var(--radix-dropdown-menu-content-available-height)]',
-          'bg-panel border border-border rounded-sm py-half shadow-md',
+          'bg-secondary border border-border rounded py-half shadow-overlay',
           'data-[state=open]:animate-in',
           'data-[state=open]:fade-in-0',
           'data-[state=open]:zoom-in-95',
@@ -200,8 +198,8 @@ const DropdownMenuItem = React.forwardRef<
       ref={ref}
       className={cn(
         'relative flex cursor-pointer select-none items-center gap-base',
-        'px-base py-half mx-half rounded-sm outline-none transition-colors',
-        'focus:bg-secondary',
+        'px-base py-1.5 mx-half rounded-sm outline-none transition-colors',
+        'focus:bg-panel',
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         '[&_svg]:pointer-events-none [&_svg]:size-icon-xs [&_svg]:shrink-0',
         variant === 'default' && 'text-high',
@@ -226,9 +224,9 @@ const DropdownMenuItem = React.forwardRef<
       }
       {...props}
     >
-      {IconComponent && <IconComponent weight="bold" />}
+      {IconComponent && <IconComponent />}
       <span className="flex-1 text-sm truncate">{children}</span>
-      {badge && <span className="text-sm text-high text-right">{badge}</span>}
+      {badge && <span className="text-sm text-low text-right">{badge}</span>}
     </DropdownMenuPrimitive.Item>
   )
 );
@@ -242,8 +240,8 @@ const DropdownMenuCheckboxItem = React.forwardRef<
     ref={ref}
     className={cn(
       'relative flex cursor-pointer select-none items-center gap-base',
-      'py-half px-base mx-half rounded-sm text-sm text-high',
-      'outline-none transition-colors focus:bg-secondary',
+      'py-1.5 px-base mx-half rounded-sm text-sm text-high',
+      'outline-none transition-colors focus:bg-panel',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
@@ -252,7 +250,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   >
     <span className="flex-1">{children}</span>
     <DropdownMenuPrimitive.ItemIndicator>
-      <CheckIcon className="size-icon-xs text-brand shrink-0" weight="bold" />
+      <CheckIcon className="size-icon-xs text-brand shrink-0" />
     </DropdownMenuPrimitive.ItemIndicator>
   </DropdownMenuPrimitive.CheckboxItem>
 ));
@@ -267,8 +265,8 @@ const DropdownMenuRadioItem = React.forwardRef<
     ref={ref}
     className={cn(
       'relative flex cursor-pointer select-none items-center',
-      'py-half pl-double pr-base mx-half rounded-sm text-sm text-high',
-      'outline-none transition-colors focus:bg-secondary',
+      'py-1.5 pl-double pr-base mx-half rounded-sm text-sm text-high',
+      'outline-none transition-colors focus:bg-panel',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
@@ -276,7 +274,10 @@ const DropdownMenuRadioItem = React.forwardRef<
   >
     <span className="absolute left-base flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <svg className="size-icon-xs fill-current" viewBox="0 0 24 24">
+        <svg
+          className="size-icon-xs fill-current text-brand"
+          viewBox="0 0 24 24"
+        >
           <circle cx="12" cy="12" r="6" />
         </svg>
       </DropdownMenuPrimitive.ItemIndicator>
@@ -292,7 +293,7 @@ const DropdownMenuLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={cn('px-base py-half text-sm font-semibold text-low', className)}
+    className={cn('px-base py-half text-xs font-semibold text-low', className)}
     {...props}
   />
 ));
@@ -316,7 +317,7 @@ const DropdownMenuShortcut = ({
 }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
     <span
-      className={cn('ml-auto text-xs tracking-widest text-low', className)}
+      className={cn('ml-auto font-mono text-xs text-low', className)}
       {...props}
     />
   );
@@ -339,12 +340,12 @@ const DropdownMenuSearchInput = React.forwardRef<
 
   return (
     <div className="flex items-center gap-base px-plusfifty py-base">
-      <MagnifyingGlassIcon className="size-icon-xs text-low" weight="bold" />
+      <MagnifyingGlassIcon className="size-icon-xs text-low" />
       <input
         ref={ref}
         type="text"
         className={cn(
-          'flex-1 bg-transparent text-sm text-low placeholder:text-low',
+          'flex-1 bg-transparent text-sm text-high placeholder:text-low',
           'outline-none border-none',
           className
         )}

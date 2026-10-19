@@ -1,259 +1,171 @@
-import { useMemo, useCallback, type RefObject } from 'react';
-import { CopyIcon } from '@phosphor-icons/react';
+import { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { CopyIcon, DotsThreeIcon } from '@phosphor-icons/react';
+import { Button } from '@prepcook/ui/components/Button';
 import {
-  ContextBar,
-  type ContextBarRenderItem,
-} from '@prepcook/ui/components/ContextBar';
-import { Tooltip } from '@prepcook/ui/components/Tooltip';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@prepcook/ui/components/Dropdown';
 import { useActions } from '@/shared/hooks/useActions';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { IdeIcon } from '@/shared/components/IdeIcon';
-import { useContextBarPosition } from '@/shared/hooks/useContextBarPosition';
-import { ContextBarActionGroups } from '@/shared/actions';
+import { Actions, ContextBarActionGroups } from '@/shared/actions';
 import {
   type ActionDefinition,
   type ActionVisibilityContext,
-  type ContextBarItem,
-  type SpecialIconType,
   ActionTargetType,
-  isSpecialIcon,
-  isActionVisible,
-  isActionEnabled,
   getActionIcon,
+  getActionLabel,
   getActionTooltip,
+  isActionEnabled,
+  isActionVisible,
+  isSpecialIcon,
 } from '@/shared/types/actions';
 import type { EditorType } from 'shared/types';
 import { useActionVisibilityContext } from '@/shared/hooks/useActionVisibilityContext';
-import { CopyButton } from '@/shared/components/CopyButton';
 import { isRealMobileDevice } from '@/shared/hooks/useIsMobile';
+import { cn } from '@/shared/lib/utils';
 
-/**
- * Check if a ContextBarItem is a divider
- */
-function isDivider(item: ContextBarItem): item is { readonly type: 'divider' } {
-  return 'type' in item && item.type === 'divider';
-}
+/** Actions surfaced as their own header button rather than in the menu. */
+const HEADER_BUTTON_ACTIONS = new Set<string>([Actions.OpenSpecReview.id]);
 
-/**
- * Filter context bar items by visibility, keeping dividers but removing them
- * if they would appear at the start, end, or consecutively.
- */
-function filterContextBarItems(
-  items: readonly ContextBarItem[],
+function visibleMenuActions(
+  actions: readonly ActionDefinition[],
   ctx: ActionVisibilityContext
-): ContextBarItem[] {
-  // Filter actions by visibility, keep dividers
-  const filtered = items.filter((item) => {
-    if (isDivider(item)) return true;
-    return isActionVisible(item, ctx);
-  });
+): ActionDefinition[] {
+  return actions.filter(
+    (action) =>
+      !HEADER_BUTTON_ACTIONS.has(action.id) &&
+      isActionVisible(action, ctx) &&
+      // Opening a desktop IDE means nothing on a phone or tablet.
+      !(action.icon === 'ide-icon' && isRealMobileDevice())
+  );
+}
 
-  // Remove leading/trailing dividers and consecutive dividers
-  const result: ContextBarItem[] = [];
-  for (const item of filtered) {
-    if (isDivider(item)) {
-      // Only add divider if we have items before it and last item wasn't a divider
-      if (result.length > 0 && !isDivider(result[result.length - 1])) {
-        result.push(item);
-      }
-    } else {
-      result.push(item);
-    }
+/** The menu wording: the tooltip where it names the target, else the label. */
+function menuLabel(
+  action: ActionDefinition,
+  ctx: ActionVisibilityContext
+): string {
+  return action.getTooltip
+    ? getActionTooltip(action, ctx)
+    : getActionLabel(action, ctx);
+}
+
+function MenuActionIcon({
+  action,
+  ctx,
+  editorType,
+}: {
+  action: ActionDefinition;
+  ctx: ActionVisibilityContext;
+  editorType: EditorType | null;
+}) {
+  const icon = getActionIcon(action, ctx);
+  if (icon === 'ide-icon') {
+    return <IdeIcon editorType={editorType} className="size-icon-xs" />;
   }
-
-  // Remove trailing divider
-  if (result.length > 0 && isDivider(result[result.length - 1])) {
-    result.pop();
+  if (isSpecialIcon(icon)) {
+    return <CopyIcon className="size-icon-xs" />;
   }
-
-  return result;
+  const Icon = icon;
+  const isDevServerBusy =
+    action.id === Actions.ToggleDevServer.id &&
+    (ctx.devServerState === 'starting' || ctx.devServerState === 'stopping');
+  return (
+    <Icon className={cn('size-icon-xs', isDevServerBusy && 'animate-spin')} />
+  );
 }
 
 /**
- * Get the icon class name based on action state and type.
+ * The session header's buttons: "Review plan" while a plan review session is
+ * open for this workspace, and a "More" menu holding the workspace actions
+ * (open in IDE, copy path, dev server, preview and review panels).
  */
-function getIconClassName(
-  action: ActionDefinition,
-  actionContext: ActionVisibilityContext,
-  isDisabled: boolean
-): string | undefined {
-  // Handle dev server running state (for ToggleDevServer action)
-  if (action.id === 'toggle-dev-server') {
-    const { devServerState } = actionContext;
-    if (devServerState === 'starting' || devServerState === 'stopping') {
-      return 'animate-spin';
-    }
-    if (devServerState === 'running') {
-      return 'text-error hover:text-error group-hover:text-error';
-    }
-  }
-
-  if (isDisabled) {
-    return 'opacity-40';
-  }
-
-  return undefined;
-}
-
-function buildSpecialItem(
-  iconType: SpecialIconType,
-  key: string,
-  tooltip: string,
-  shortcut: string | undefined,
-  enabled: boolean,
-  editorType: EditorType | null,
-  onExecuteAction: () => void
-): ContextBarRenderItem {
-  if (iconType === 'ide-icon') {
-    if (isRealMobileDevice()) {
-      return { type: 'action', key, label: tooltip, customContent: null };
-    }
-    return {
-      type: 'action',
-      key,
-      label: tooltip,
-      customContent: (
-        <Tooltip content={tooltip} shortcut={shortcut} side="left">
-          <button
-            type="button"
-            className="flex items-center justify-center transition-colors drop-shadow-[2px_2px_4px_rgba(121,121,121,0.25)]"
-            aria-label={tooltip}
-            onClick={onExecuteAction}
-            disabled={!enabled}
-          >
-            <IdeIcon
-              editorType={editorType}
-              className="size-icon-xs opacity-50 group-hover:opacity-80 transition-opacity"
-            />
-          </button>
-        </Tooltip>
-      ),
-    };
-  }
-
-  return {
-    type: 'action',
-    key,
-    label: tooltip,
-    customContent: (
-      <CopyButton
-        onCopy={onExecuteAction}
-        disabled={!enabled}
-        iconSize="size-icon-base"
-        icon={CopyIcon}
-      />
-    ),
-  };
-}
-
-export interface ContextBarContainerProps {
-  containerRef: RefObject<HTMLElement | null>;
-}
-
-export function ContextBarContainer({
-  containerRef,
-}: ContextBarContainerProps) {
+export function SessionHeaderActionsContainer() {
+  const { t } = useTranslation('common');
   const { executeAction } = useActions();
   const { config } = useUserSystem();
   const editorType =
     (config?.editor?.editor_type as EditorType | undefined) ?? null;
-
-  // Get visibility context (now includes dev server state)
   const actionCtx = useActionVisibilityContext();
 
   const handleExecuteAction = useCallback(
-    async (action: ActionDefinition) => {
+    (action: ActionDefinition) => {
       if (action.requiresTarget === ActionTargetType.NONE) {
-        await executeAction(action);
+        void executeAction(action);
       }
     },
     [executeAction]
   );
 
-  const { style, isDragging, dragHandlers } =
-    useContextBarPosition(containerRef);
-
-  const toRenderItems = useCallback(
-    (items: ContextBarItem[], prefix: string): ContextBarRenderItem[] => {
-      return items.flatMap((item, index) => {
-        if (isDivider(item)) {
-          return [{ type: 'divider', key: `${prefix}-divider-${index}` }];
-        }
-
-        const action = item;
-        const enabled = isActionEnabled(action, actionCtx);
-        const tooltip = getActionTooltip(action, actionCtx);
-        const shortcut = action.shortcut;
-        const iconClassName = getIconClassName(action, actionCtx, !enabled);
-        const key = `${prefix}-${action.id}-${index}`;
-        const execute = () => {
-          void handleExecuteAction(action);
-        };
-
-        const iconType = action.icon;
-        if (isSpecialIcon(iconType)) {
-          return [
-            buildSpecialItem(
-              iconType,
-              key,
-              tooltip,
-              shortcut,
-              enabled,
-              editorType,
-              execute
-            ),
-          ];
-        }
-
-        const icon = getActionIcon(action, actionCtx);
-        if (isSpecialIcon(icon)) {
-          return [];
-        }
-
-        return [
-          {
-            type: 'action',
-            key,
-            label: tooltip,
-            tooltip,
-            shortcut,
-            icon,
-            iconClassName,
-            disabled: !enabled,
-            onClick: execute,
-          },
-        ];
-      });
-    },
-    [actionCtx, editorType, handleExecuteAction]
+  const menuGroups = useMemo(
+    () =>
+      [
+        visibleMenuActions(ContextBarActionGroups.primary, actionCtx),
+        visibleMenuActions(ContextBarActionGroups.secondary, actionCtx),
+      ].filter((group) => group.length > 0),
+    [actionCtx]
   );
 
-  // Filter visible actions and map to render items
-  const primaryItems = useMemo(() => {
-    const filtered = filterContextBarItems(
-      ContextBarActionGroups.primary,
-      actionCtx
-    );
-    return toRenderItems(filtered, 'primary');
-  }, [actionCtx, toRenderItems]);
+  const showReviewPlan = isActionVisible(Actions.OpenSpecReview, actionCtx);
 
-  const secondaryItems = useMemo(() => {
-    const filtered = filterContextBarItems(
-      ContextBarActionGroups.secondary,
-      actionCtx
-    );
-    return toRenderItems(filtered, 'secondary');
-  }, [actionCtx, toRenderItems]);
-
-  if (isRealMobileDevice()) return null;
+  if (isRealMobileDevice() && !showReviewPlan) return null;
 
   return (
-    <ContextBar
-      style={style}
-      isDragging={isDragging}
-      onDragHandleMouseDown={dragHandlers.onMouseDown}
-      primaryItems={primaryItems}
-      secondaryItems={secondaryItems}
-    />
+    <>
+      {showReviewPlan && (
+        <Button
+          variant="secondary"
+          onClick={() => handleExecuteAction(Actions.OpenSpecReview)}
+          title={getActionTooltip(Actions.OpenSpecReview, actionCtx)}
+        >
+          {t('workspaces.header.reviewPlan')}
+        </Button>
+      )}
+      {!isRealMobileDevice() && menuGroups.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="secondary"
+              size="icon"
+              aria-label={t('workspaces.more')}
+              title={t('workspaces.more')}
+            >
+              <DotsThreeIcon className="size-4" weight="bold" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {menuGroups.map((group, groupIndex) => (
+              <div key={groupIndex}>
+                {groupIndex > 0 && <DropdownMenuSeparator />}
+                {group.map((action) => (
+                  <DropdownMenuItem
+                    key={action.id}
+                    disabled={!isActionEnabled(action, actionCtx)}
+                    onSelect={() => handleExecuteAction(action)}
+                  >
+                    <MenuActionIcon
+                      action={action}
+                      ctx={actionCtx}
+                      editorType={editorType}
+                    />
+                    <span>{menuLabel(action, actionCtx)}</span>
+                    {action.shortcut && (
+                      <span className="ml-auto pl-4 font-mono text-xs text-low">
+                        {action.shortcut}
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
   );
 }

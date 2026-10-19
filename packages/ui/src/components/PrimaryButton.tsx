@@ -20,18 +20,21 @@ export function PrimaryButton({
   children,
   className,
 }: PrimaryButtonProps) {
+  // default = primary (brand fill), secondary = bordered surface,
+  // tertiary = quiet filled button for inline property controls.
   const variantStyles = disabled
-    ? 'cursor-not-allowed bg-panel'
+    ? 'cursor-not-allowed bg-panel text-low'
     : variant === 'default'
       ? 'bg-brand hover:bg-brand-hover text-on-brand'
       : variant === 'secondary'
-        ? 'bg-brand-secondary hover:bg-brand-hover text-on-brand'
-        : 'bg-panel hover:bg-secondary text-normal';
+        ? 'bg-secondary border border-border hover:bg-panel text-high'
+        : 'bg-panel hover:bg-border text-normal hover:text-high';
 
   return (
     <button
       className={cn(
-        'rounded-sm px-base py-half text-cta min-h-cta flex gap-half items-center',
+        'flex min-h-8 items-center gap-half rounded px-3 text-sm font-semibold transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
         variantStyles,
         className
       )}
@@ -42,9 +45,9 @@ export function PrimaryButton({
       {children}
       {ActionIcon ? (
         ActionIcon === 'spinner' ? (
-          <SpinnerIcon className={'size-icon-sm animate-spin'} weight="bold" />
+          <SpinnerIcon className={'size-icon-sm animate-spin'} />
         ) : (
-          <ActionIcon className={'size-icon-xs'} weight="bold" />
+          <ActionIcon className={'size-icon-xs'} />
         )
       ) : null}
     </button>

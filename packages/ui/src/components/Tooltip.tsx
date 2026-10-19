@@ -29,7 +29,7 @@ export function Tooltip({
             side={side}
             sideOffset={4}
             className={cn(
-              'z-[10000] flex items-center rounded-sm bg-panel px-base py-half text-xs text-normal shadow-md',
+              'z-[10000] flex items-center rounded border border-border bg-secondary px-2 py-1 text-xs font-medium text-high shadow-overlay',
               'animate-in fade-in-0 zoom-in-95',
               className
             )}
@@ -38,9 +38,9 @@ export function Tooltip({
             {formattedShortcut && (
               <kbd
                 className={cn(
-                  'ml-2 inline-flex items-center gap-0.5 px-2 py-0.5',
-                  'rounded-sm border border-border bg-secondary',
-                  'font-ibm-plex-mono text-xs text-high'
+                  'ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5',
+                  'rounded-sm border border-border bg-panel',
+                  'font-mono text-xs text-normal'
                 )}
               >
                 {formattedShortcut}

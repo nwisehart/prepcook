@@ -84,16 +84,16 @@ export function IssueTagsRow<TTag extends IssueTagBase>({
   const addTagTrigger = (
     <button
       type="button"
-      className="flex items-center justify-center h-5 w-5 rounded-sm text-low hover:text-normal hover:bg-panel transition-colors disabled:opacity-50"
+      className="flex size-[22px] items-center justify-center rounded-full border border-dashed border-border text-low transition-colors hover:border-low/60 hover:text-high disabled:opacity-50"
       disabled={disabled}
       aria-label="Add tag"
     >
-      <PlusIcon className="size-icon-xs" weight="bold" />
+      <PlusIcon className="size-3" weight="bold" />
     </button>
   );
 
   return (
-    <div className={cn('flex items-center gap-half flex-wrap', className)}>
+    <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
       {/* Selected Tags - clickable to remove on hover */}
       {selectedTags.map((tag) => (
         <button
@@ -103,13 +103,13 @@ export function IssueTagsRow<TTag extends IssueTagBase>({
           disabled={disabled}
           className={cn(
             'inline-flex items-center justify-center',
-            'h-5 px-base gap-half',
-            'bg-panel rounded-sm',
-            'text-sm text-low font-medium',
+            'h-[22px] gap-1.5 px-2',
+            'rounded-full bg-panel',
+            'text-xs font-medium leading-none text-normal',
             'whitespace-nowrap',
             'transition-colors',
             !disabled &&
-              'hover:bg-error/20 hover:text-error hover:line-through cursor-pointer',
+              'cursor-pointer hover:bg-error-soft hover:text-error hover:line-through',
             disabled && 'cursor-default'
           )}
         >
@@ -137,10 +137,10 @@ export function IssueTagsRow<TTag extends IssueTagBase>({
           type="button"
           onClick={onLinkPr}
           disabled={disabled}
-          className="flex items-center justify-center h-5 w-5 rounded-sm text-low hover:text-normal hover:bg-panel transition-colors disabled:opacity-50"
+          className="flex size-[22px] items-center justify-center rounded-full border border-dashed border-border text-low transition-colors hover:border-low/60 hover:text-high disabled:opacity-50"
           aria-label="Link pull request"
         >
-          <GitPullRequest className="size-icon-xs" weight="bold" />
+          <GitPullRequest className="size-3" weight="bold" />
         </button>
       )}
 
@@ -149,10 +149,10 @@ export function IssueTagsRow<TTag extends IssueTagBase>({
         <button
           key={issue.id}
           type="button"
-          className="inline-flex items-center gap-half h-5 px-base bg-panel rounded-sm text-sm text-low hover:text-normal transition-colors"
+          className="inline-flex h-[22px] items-center gap-1 rounded-full bg-panel px-2 text-xs font-medium text-normal transition-colors hover:text-high"
           title={issue.title}
         >
-          <HashIcon className="size-icon-xs" weight="bold" />
+          <HashIcon className="size-3" weight="bold" />
           <span>{issue.displayId}</span>
         </button>
       ))}

@@ -9,7 +9,8 @@ import { cn } from '@/shared/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { toPrettyCase } from '@/shared/lib/string';
 
-// FieldTemplate - Two-column layout matching settings dialog styling
+// FieldTemplate - Two-column row: label and helper on the left, control on
+// the right, matching the settings field type scale
 export const FieldTemplate = (props: FieldTemplateProps) => {
   const {
     children,
@@ -26,33 +27,35 @@ export const FieldTemplate = (props: FieldTemplateProps) => {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 py-4">
+    <div className="grid grid-cols-1 gap-x-6 gap-y-2 py-3 sm:grid-cols-2">
       {/* Left column: Label and description */}
-      <div className="space-y-1">
+      <div className="flex min-w-0 flex-col gap-1">
         {label && (
-          <div className="text-sm font-medium text-normal">
+          <div className="text-sm font-semibold text-high">
             {toPrettyCase(label)}
             {required && <span className="text-error ml-1">*</span>}
           </div>
         )}
 
         {rawDescription && (
-          <p className="text-sm text-low leading-relaxed">{rawDescription}</p>
+          <p className="text-[12.5px] leading-[1.45] text-low">
+            {rawDescription}
+          </p>
         )}
 
         {rawHelp && (
-          <p className="text-sm text-low leading-relaxed">{rawHelp}</p>
+          <p className="text-[12.5px] leading-[1.45] text-low">{rawHelp}</p>
         )}
       </div>
 
       {/* Right column: Field content */}
-      <div className="space-y-2">
+      <div className="flex min-w-0 flex-col gap-1.5">
         {children}
 
         {rawErrors.length > 0 && (
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             {rawErrors.map((error, index) => (
-              <p key={index} className="text-sm text-error">
+              <p key={index} className="text-[12.5px] text-error">
                 {error}
               </p>
             ))}
@@ -68,7 +71,7 @@ export const ObjectFieldTemplate = (props: ObjectFieldTemplateProps) => {
   const { properties } = props;
 
   return (
-    <div className="divide-y divide-border">
+    <div className="divide-y divide-divider">
       {properties.map((element) => (
         <div key={element.name}>{element.content}</div>
       ))}
@@ -86,8 +89,8 @@ export const ArrayFieldTemplate = (props: ArrayFieldTemplateProps) => {
   }
 
   return (
-    <div className="space-y-4">
-      <div>{items}</div>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">{items}</div>
 
       {canAdd && (
         <button
@@ -95,13 +98,13 @@ export const ArrayFieldTemplate = (props: ArrayFieldTemplateProps) => {
           onClick={onAddClick}
           disabled={disabled || readonly}
           className={cn(
-            'w-full flex items-center justify-center gap-2 px-base py-half rounded-sm text-sm font-medium',
-            'bg-secondary border border-border text-normal hover:bg-secondary/80',
-            'focus:outline-none focus:ring-1 focus:ring-brand',
+            'flex h-8 w-full items-center justify-center gap-2 rounded px-3 text-sm font-semibold',
+            'border border-border bg-secondary text-high hover:bg-panel',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
             'disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
           )}
         >
-          <PlusIcon className="size-icon-xs" weight="bold" />
+          <PlusIcon className="size-4" />
           {t('buttons.addItem')}
         </button>
       )}
@@ -123,14 +126,14 @@ export const ArrayFieldItemTemplate = (props: ArrayFieldItemTemplateProps) => {
           onClick={buttonsProps.onRemoveItem}
           disabled={disabled || readonly || buttonsProps.disabled}
           className={cn(
-            'h-8 w-8 p-0 flex items-center justify-center shrink-0 rounded-sm',
-            'text-low hover:text-error hover:bg-error/10',
-            'focus:outline-none focus:ring-1 focus:ring-brand',
+            'size-9 p-0 flex items-center justify-center shrink-0 rounded',
+            'text-low hover:text-error hover:bg-error-soft',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
             'disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
           )}
           title="Remove item"
         >
-          <XIcon className="size-icon-xs" weight="bold" />
+          <XIcon className="size-4" />
         </button>
       )}
     </div>

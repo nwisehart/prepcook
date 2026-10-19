@@ -266,6 +266,9 @@ export const PERSIST_KEYS = {
   kanbanIssueSubIssues: 'kanban-issue-sub-issues',
   kanbanIssueRelationships: 'kanban-issue-relationships',
   kanbanIssueAttachments: 'kanban-issue-attachments',
+  // Board: whether the Clean up column is unfolded (folded to a rail when
+  // false, the default)
+  kanbanCleanUpExpanded: 'kanban-clean-up-expanded',
   // Dynamic keys (use helper functions)
   repoCard: (repoId: string) => `repo-card-${repoId}` as const,
 } as const;
@@ -295,6 +298,7 @@ export type PersistKey =
   | typeof PERSIST_KEYS.kanbanIssueSubIssues
   | typeof PERSIST_KEYS.kanbanIssueRelationships
   | typeof PERSIST_KEYS.kanbanIssueAttachments
+  | typeof PERSIST_KEYS.kanbanCleanUpExpanded
   | `repo-card-${string}`
   | `diff:${string}`
   | `edit:${string}`

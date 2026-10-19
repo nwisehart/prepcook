@@ -21,7 +21,7 @@ export function CrashScreen({
   const hasDetails = !!(errorMessage || componentStack);
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-primary p-double font-ibm-plex-sans">
+    <div className="flex h-screen w-screen items-center justify-center bg-primary p-double font-sans">
       <div className="flex max-w-md flex-col items-center gap-double text-center">
         <WarningIcon className="size-12 text-error" weight="fill" />
 

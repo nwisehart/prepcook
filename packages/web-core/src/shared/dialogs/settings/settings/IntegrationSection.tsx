@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { PlusIcon, TrashIcon } from '@phosphor-icons/react';
 import type { Descriptor, Field, TestOutcome } from 'shared/types';
 import { integrationsApi } from '@/shared/lib/api';
+import { cn } from '@/shared/lib/utils';
 import { IconButton } from '@prepcook/ui/components/IconButton';
 import { PrimaryButton } from '@prepcook/ui/components/PrimaryButton';
 import {
@@ -115,6 +116,7 @@ export function FieldInput({
           <SettingsInput
             value={fieldText(value)}
             type={field.kind.type === 'secret' ? 'password' : 'text'}
+            monospace={field.kind.type === 'secret'}
             autoComplete="off"
             onChange={(next) => onChange(next.trim() === '' ? null : next)}
           />
@@ -192,7 +194,7 @@ export function IntegrationSection<E extends IntegrationEntry>({
   const canAdd = multiple || entries.length === 0;
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {entries.length === 0 && (
         <p className="text-sm text-low">
           {t('settings.integrations.section.empty')}
@@ -204,15 +206,17 @@ export function IntegrationSection<E extends IntegrationEntry>({
         return (
           <div
             key={index}
-            className="space-y-4 rounded-sm border border-border p-base"
+            className="flex flex-col gap-4 rounded-lg border border-border px-4 py-3"
           >
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-medium text-high">
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="text-sm font-semibold text-high">
                   {descriptor?.display_name ?? entry.kind}
                 </div>
                 {descriptor && (
-                  <p className="text-sm text-low mt-1">{descriptor.summary}</p>
+                  <p className="text-[12.5px] leading-[1.45] text-low">
+                    {descriptor.summary}
+                  </p>
                 )}
               </div>
               <IconButton
@@ -220,7 +224,7 @@ export function IntegrationSection<E extends IntegrationEntry>({
                 onClick={() => remove(index)}
                 aria-label={t('settings.integrations.section.remove')}
                 title={t('settings.integrations.section.remove')}
-                className="hover:text-error hover:bg-error/10"
+                className="hover:bg-error-soft hover:text-error"
               />
             </div>
             {descriptor ? (
@@ -236,7 +240,7 @@ export function IntegrationSection<E extends IntegrationEntry>({
                 />
               ))
             ) : (
-              <p className="text-sm text-error">
+              <p className="text-[12.5px] text-error">
                 {t('settings.integrations.section.unknownKind', {
                   kind: entry.kind,
                 })}
@@ -244,9 +248,9 @@ export function IntegrationSection<E extends IntegrationEntry>({
             )}
             {renderExtra?.(entry, (next) => update(index, next))}
             {descriptor && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 border-t border-divider pt-3">
                 <PrimaryButton
-                  variant="tertiary"
+                  variant="secondary"
                   value={
                     test === 'running'
                       ? t('settings.integrations.section.testing')
@@ -258,10 +262,17 @@ export function IntegrationSection<E extends IntegrationEntry>({
                 />
                 {test && test !== 'running' && (
                   <span
-                    className={
-                      test.ok ? 'text-sm text-success' : 'text-sm text-error'
-                    }
+                    className={cn(
+                      'inline-flex items-center gap-2 text-[12.5px] font-semibold',
+                      test.ok ? 'text-success' : 'text-error'
+                    )}
                   >
+                    <span
+                      className={cn(
+                        'size-2 shrink-0 rounded-full',
+                        test.ok ? 'bg-success' : 'bg-error'
+                      )}
+                    />
                     {test.message}
                   </span>
                 )}
@@ -272,7 +283,7 @@ export function IntegrationSection<E extends IntegrationEntry>({
       })}
       {canAdd && descriptors.length > 0 && (
         <div className="flex items-end gap-2">
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <SettingsField label={t('settings.integrations.section.addLabel')}>
               <SettingsSelect<string>
                 value={newKind}
@@ -295,6 +306,7 @@ export function IntegrationSection<E extends IntegrationEntry>({
             actionIcon={PlusIcon}
             disabled={!newDescriptor?.available}
             onClick={add}
+            className="h-9"
           />
         </div>
       )}

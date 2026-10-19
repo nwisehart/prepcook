@@ -34,8 +34,9 @@ import {
   SettingsCard,
   SettingsField,
   SettingsInput,
-  SettingsTextarea,
+  SettingsLoading,
   SettingsSaveBar,
+  SettingsTextarea,
 } from './SettingsComponents';
 import { useSettingsMachineClient } from './SettingsHostContext';
 import { RepoScriptsCard } from './RepoScriptsCard';
@@ -371,21 +372,13 @@ export function ReposSettingsSection({
   };
 
   if (reposLoading) {
-    return (
-      <div className="flex items-center justify-center py-8 gap-2">
-        <SpinnerIcon
-          className="size-icon-lg animate-spin text-brand"
-          weight="bold"
-        />
-        <span className="text-normal">{t('settings.repos.loading')}</span>
-      </div>
-    );
+    return <SettingsLoading label={t('settings.repos.loading')} />;
   }
 
   if (reposError) {
     return (
       <div className="py-8">
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {reposError instanceof Error
             ? reposError.message
             : t('settings.repos.loadError')}
@@ -401,13 +394,13 @@ export function ReposSettingsSection({
     <>
       {/* Status messages */}
       {error && (
-        <div className="bg-error/10 border border-error/50 rounded-sm p-4 text-error">
+        <div className="rounded-lg border border-error/30 bg-error-soft px-4 py-3 text-sm text-error">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="bg-success/10 border border-success/50 rounded-sm p-4 text-success font-medium">
+        <div className="rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-success">
           {t('settings.repos.save.success')}
         </div>
       )}
@@ -429,7 +422,7 @@ export function ReposSettingsSection({
                     repoOptions.find((r) => r.value === selectedRepoId)
                       ?.label || t('settings.repos.selector.placeholder')
                   }
-                  className="w-full justify-between"
+                  className="h-9 w-full justify-between"
                 />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
@@ -449,8 +442,12 @@ export function ReposSettingsSection({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-            <PrimaryButton variant="default" onClick={handleAddRepo}>
-              <PlusIcon className="size-icon-sm" weight="bold" />
+            <PrimaryButton
+              variant="default"
+              onClick={handleAddRepo}
+              className="h-9 shrink-0 gap-2"
+            >
+              <PlusIcon className="size-4" />
               {t('common:buttons.add')}
             </PrimaryButton>
           </div>
@@ -481,7 +478,7 @@ export function ReposSettingsSection({
               label={t('settings.repos.general.path.label')}
               description=""
             >
-              <div className="text-sm text-low font-mono bg-secondary px-base py-half rounded-sm">
+              <div className="flex min-h-9 items-center break-all rounded border border-border bg-surface-raised px-3 py-1.5 font-mono text-[13px] text-normal">
                 {selectedRepo.path}
               </div>
             </SettingsField>
@@ -542,7 +539,7 @@ export function ReposSettingsSection({
                             'settings.repos.general.defaultTargetBranch.placeholder'
                           )
                     }
-                    className="w-full justify-between"
+                    className="h-9 w-full justify-between"
                     disabled={branchesLoading}
                   />
                 }
@@ -561,13 +558,13 @@ export function ReposSettingsSection({
               />
             </SettingsField>
 
-            <div className="border-t border-primary pt-base mt-base">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-normal">
+            <div className="border-t border-divider pt-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className="text-sm font-semibold text-high">
                     {t('settings.repos.remove.title')}
                   </p>
-                  <p className="text-sm text-low">
+                  <p className="text-[12.5px] leading-[1.45] text-low">
                     {t('settings.repos.remove.description')}
                   </p>
                 </div>
@@ -605,7 +602,7 @@ export function ReposSettingsSection({
                 {linkedProjectNames.map((name) => (
                   <span
                     key={name}
-                    className="inline-flex items-center rounded-sm bg-secondary px-2 py-0.5 text-sm text-normal"
+                    className="inline-flex h-[22px] items-center rounded-full bg-panel px-2 text-xs font-medium text-normal"
                   >
                     {name}
                   </span>

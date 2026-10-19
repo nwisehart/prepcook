@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DropResult } from '@hello-pangea/dnd';
-import { Outlet, useNavigate } from '@tanstack/react-router';
+import { Outlet } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import {
-  XIcon,
-  PlusIcon,
-  LayoutIcon,
-  KanbanIcon,
-  DownloadSimpleIcon,
-} from '@phosphor-icons/react';
 import { SyncErrorProvider } from '@/shared/providers/SyncErrorProvider';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
 import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
@@ -16,14 +9,12 @@ import { cn } from '@/shared/lib/utils';
 import { isTauriMac } from '@/shared/lib/platform';
 
 import { NavbarContainer } from './NavbarContainer';
-import { AppBar } from '@prepcook/ui/components/AppBar';
+import { AppSidebarContainer } from './AppSidebarContainer';
 import { MobileDrawer } from '@prepcook/ui/components/MobileDrawer';
-import { AppBarUserPopoverContainer } from './AppBarUserPopoverContainer';
 import { useUserOrganizations } from '@/shared/hooks/useUserOrganizations';
 import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
-import { useAppUpdateStore } from '@/shared/stores/useAppUpdateStore';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 import {
@@ -34,7 +25,6 @@ import {
   CreateRemoteProjectDialog,
   type CreateRemoteProjectResult,
 } from '@/shared/dialogs/org/CreateRemoteProjectDialog';
-import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import { useCommandBarShortcut } from '@/shared/hooks/useCommandBarShortcut';
 import { useWorkspaceSidebarPreviewController } from '@/shared/hooks/useWorkspaceSidebarPreviewController';
@@ -61,7 +51,7 @@ export function SharedAppLayout() {
     (s) => s.isLeftSidebarVisible
   );
   const { hasBoardAccess, isLoaded: isAuthLoaded } = useAuth();
-  const { appVersion, boardStatus, claudeSeatDegraded, launchPauseMinutes } =
+  const { boardStatus, claudeSeatDegraded, launchPauseMinutes } =
     useUserSystem();
   const boardNoticeReason =
     isAuthLoaded && !hasBoardAccess
@@ -69,11 +59,10 @@ export function SharedAppLayout() {
         ? 'no_board'
         : 'no_secret'
       : null;
-  const updateVersion = useAppUpdateStore((s) => s.updateVersion);
-  const restartForUpdate = useAppUpdateStore((s) => s.restart);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAppBarHovered, setIsAppBarHovered] = useState(false);
-  const navigate = useNavigate();
+  const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
+  const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
 
   // Register CMD+K shortcut globally for all routes under SharedAppLayout
   useCommandBarShortcut(() => CommandBarDialog.show());
@@ -94,7 +83,7 @@ export function SharedAppLayout() {
     };
   }, [isMobile, mobileFontScale]);
 
-  // AppBar state - organizations and projects
+  // Sidebar state - organizations and projects
   const { data: orgsData } = useUserOrganizations();
   const organizations = useMemo(
     () => orgsData?.organizations ?? [],
@@ -164,16 +153,11 @@ export function SharedAppLayout() {
     }
   }, [selectedOrgId, sortedProjects, isLoading, appNavigation]);
 
-  // Navigation state for AppBar active indicators
   const projectDestination = useMemo(
     () => getProjectDestination(currentDestination),
     [currentDestination]
   );
   const isWorkspacesActive = isWorkspacesDestination(currentDestination);
-  const isExportActive = currentDestination?.kind === 'export';
-  // Any full-width strip above the navbar occupies one extra grid row,
-  // regardless of how many banners stack inside it.
-  const showTopBanner = claudeSeatDegraded || launchPauseMinutes !== null;
   const isWorkspaceSidebarPreviewEnabled =
     !isMobile && isWorkspacesActive && !isLeftSidebarVisible;
   const activeProjectId = projectDestination?.projectId ?? null;
@@ -191,30 +175,6 @@ export function SharedAppLayout() {
       setSelectedProjectId(activeProjectId);
     }
   }, [activeProjectId, setSelectedProjectId]);
-
-  const handleWorkspacesClick = useCallback(() => {
-    void navigate({ to: '/workspaces' });
-  }, [navigate]);
-
-  const handleExportClick = useCallback(() => {
-    appNavigation.goToExport();
-  }, [appNavigation]);
-
-  // Knowledge targets the active project, falling back to the first project.
-  const knowledgeProjectId = activeProjectId ?? sortedProjects[0]?.id ?? null;
-  const isKnowledgeActive = currentDestination?.kind === 'project-knowledge';
-  const handleKnowledgeClick = useCallback(() => {
-    if (knowledgeProjectId) {
-      appNavigation.goToProjectKnowledge(knowledgeProjectId);
-    }
-  }, [appNavigation, knowledgeProjectId]);
-
-  const handleProjectClick = useCallback(
-    (projectId: string) => {
-      appNavigation.goToProject(projectId);
-    },
-    [appNavigation]
-  );
 
   const handleProjectsDragEnd = useCallback(
     async ({ source, destination }: DropResult) => {
@@ -269,69 +229,58 @@ export function SharedAppLayout() {
     }
   }, [selectedOrgId, appNavigation]);
 
-  const handleOpenBoardSettings = useCallback(async () => {
-    await SettingsDialog.show({ initialSection: 'board' });
-  }, []);
+  const sidebarProps = {
+    projects: orderedProjects,
+    isLoadingProjects: isLoading,
+    isSavingProjectOrder,
+    onProjectsDragEnd: handleProjectsDragEnd,
+    onCreateProject: handleCreateProject,
+  };
+
+  // Seat, launch-pause and board notices sit at the top of the content
+  // column, above the page, in the order of how much they block.
+  const hasNotices =
+    claudeSeatDegraded ||
+    launchPauseMinutes !== null ||
+    boardNoticeReason !== null;
+  const notices = hasNotices ? (
+    <div
+      className={cn(
+        'flex shrink-0 flex-col gap-2',
+        isMobile ? 'px-3 pt-3' : 'px-7 pt-4'
+      )}
+    >
+      {claudeSeatDegraded && <SeatDegradedBanner />}
+      {launchPauseMinutes !== null && (
+        <LaunchPausedBanner minutes={launchPauseMinutes} />
+      )}
+      {boardNoticeReason && <BoardNotice reason={boardNoticeReason} />}
+    </div>
+  ) : null;
 
   return (
     <SyncErrorProvider>
       <div
         className={cn(
-          'bg-primary',
+          'bg-primary text-normal',
           isMobile
             ? 'flex fixed inset-0 pb-[env(safe-area-inset-bottom)]'
-            : cn(
-                'grid grid-cols-[auto_1fr] h-screen',
-                showTopBanner
-                  ? 'grid-rows-[auto_auto_1fr]'
-                  : 'grid-rows-[auto_1fr]'
-              )
+            : 'grid h-screen grid-cols-[232px_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]'
         )}
       >
         {!isMobile && (
           <>
-            {showTopBanner && (
-              <div className="col-span-2">
-                {claudeSeatDegraded && <SeatDegradedBanner />}
-                {launchPauseMinutes !== null && (
-                  <LaunchPausedBanner minutes={launchPauseMinutes} />
-                )}
-              </div>
-            )}
-            {/* Desktop corner spacer. */}
-            <div
-              data-tauri-drag-region
-              className="bg-secondary"
-              style={isTauriMac() ? { minWidth: 56 } : undefined}
-            />
-            {/* Desktop navbar. */}
-            <NavbarContainer onOpenDrawer={() => setIsDrawerOpen(true)} />
-            {/* Desktop AppBar sidebar. */}
-            <AppBar
-              projects={orderedProjects}
-              onCreateProject={handleCreateProject}
-              onExportClick={handleExportClick}
-              onWorkspacesClick={handleWorkspacesClick}
-              onProjectClick={handleProjectClick}
-              onProjectsDragEnd={handleProjectsDragEnd}
-              isSavingProjectOrder={isSavingProjectOrder}
-              isWorkspacesActive={isWorkspacesActive}
-              isExportActive={isExportActive}
-              onKnowledgeClick={
-                knowledgeProjectId ? handleKnowledgeClick : undefined
-              }
-              isKnowledgeActive={isKnowledgeActive}
-              activeProjectId={activeProjectId}
-              hasBoardAccess={hasBoardAccess}
-              isLoadingProjects={isLoading}
-              onOpenBoardSettings={handleOpenBoardSettings}
-              onHoverStart={() => setIsAppBarHovered(true)}
-              onHoverEnd={() => setIsAppBarHovered(false)}
-              userPopover={<AppBarUserPopoverContainer />}
-              appVersion={appVersion}
-              updateVersion={updateVersion}
-              onUpdateClick={restartForUpdate ?? undefined}
-            />
+            {/* Desktop sidebar, full height beside the navbar and content. */}
+            <div className="row-span-2 min-h-0">
+              <AppSidebarContainer
+                {...sidebarProps}
+                onHoverStart={() => setIsAppBarHovered(true)}
+                onHoverEnd={() => setIsAppBarHovered(false)}
+                windowControlsInset={isTauriMac()}
+              />
+            </div>
+            {/* Desktop navbar; it is also the window drag region. */}
+            <NavbarContainer onOpenDrawer={openDrawer} />
             {/* Desktop content. */}
             <div className="relative min-h-0 overflow-hidden">
               {isWorkspaceSidebarPreviewEnabled && (
@@ -340,7 +289,8 @@ export function SharedAppLayout() {
                     active={sidebarPreview.isPreviewOpen}
                     onHoverStart={sidebarPreview.handleHandleHoverStart}
                     onHoverEnd={sidebarPreview.handleHandleHoverEnd}
-                    ariaLabel="Workspaces"
+                    ariaLabel={t('appBar.nav.sessions')}
+                    className="ml-1 focus-visible:ring-offset-primary"
                   />
                 </div>
               )}
@@ -356,16 +306,14 @@ export function SharedAppLayout() {
                   onMouseEnter={sidebarPreview.handlePreviewHoverStart}
                   onMouseLeave={sidebarPreview.handlePreviewHoverEnd}
                 >
-                  <div className="h-full w-full overflow-hidden border-r border-border bg-secondary shadow-lg">
+                  <div className="h-full w-full overflow-hidden border-r border-border bg-secondary shadow-overlay">
                     <WorkspacesSidebarContainer />
                   </div>
                 </div>
               )}
 
               <div className="flex h-full min-h-0 flex-col">
-                {boardNoticeReason && (
-                  <BoardNotice reason={boardNoticeReason} />
-                )}
+                {notices}
                 <div className="min-h-0 flex-1">
                   <Outlet />
                 </div>
@@ -376,147 +324,24 @@ export function SharedAppLayout() {
 
         {isMobile && (
           <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-            {claudeSeatDegraded && <SeatDegradedBanner />}
-            {launchPauseMinutes !== null && (
-              <LaunchPausedBanner minutes={launchPauseMinutes} />
-            )}
-            <NavbarContainer
-              mobileMode={isMobile}
-              onOpenDrawer={() => setIsDrawerOpen(true)}
-            />
-            {boardNoticeReason && <BoardNotice reason={boardNoticeReason} />}
+            <NavbarContainer mobileMode={isMobile} onOpenDrawer={openDrawer} />
+            {notices}
             <div className="flex-1 min-h-0 overflow-hidden">
               <Outlet />
             </div>
           </div>
         )}
 
-        {/* Mobile project navigation drawer */}
-        <MobileDrawer
-          open={isDrawerOpen && isMobile}
-          onClose={() => setIsDrawerOpen(false)}
-        >
-          <div className="flex flex-col h-full">
-            {/* Header: close button */}
-            <div className="flex items-center justify-end p-4 border-b border-border">
-              <button
-                type="button"
-                onClick={() => setIsDrawerOpen(false)}
-                className="p-1 rounded-sm text-low hover:text-normal cursor-pointer"
-              >
-                <XIcon className="h-4 w-4" weight="bold" />
-              </button>
-            </div>
-
-            {/* Workspaces link */}
-            <button
-              type="button"
-              onClick={() => {
-                void navigate({ to: '/workspaces' });
-                setIsDrawerOpen(false);
-              }}
-              className="flex items-center gap-2 px-4 py-3 text-sm text-normal hover:bg-secondary cursor-pointer"
-            >
-              <LayoutIcon className="h-4 w-4" />
-              Workspaces
-            </button>
-
-            {/* Divider */}
-            <div className="border-t border-border mx-4" />
-
-            {/* Export link */}
-            {hasBoardAccess && (
-              <div className="px-4 py-3">
-                <p className="mb-2 text-xs font-medium text-low">Export</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleExportClick();
-                    setIsDrawerOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-sm text-normal hover:bg-secondary cursor-pointer"
-                >
-                  <DownloadSimpleIcon className="h-4 w-4" />
-                  Export data
-                </button>
-              </div>
-            )}
-
-            {/* Divider */}
-            {hasBoardAccess && <div className="border-t border-border mx-4" />}
-
-            {/* Project list */}
-            <div className="flex-1 overflow-y-auto p-2">
-              {hasBoardAccess ? (
-                orderedProjects.map((project) => (
-                  <button
-                    type="button"
-                    key={project.id}
-                    onClick={() => {
-                      handleProjectClick(project.id);
-                      setIsDrawerOpen(false);
-                    }}
-                    className={cn(
-                      'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm text-left cursor-pointer',
-                      'transition-colors',
-                      project.id === activeProjectId
-                        ? 'bg-brand/10 text-high'
-                        : 'text-normal hover:bg-secondary'
-                    )}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: `hsl(${project.color})` }}
-                    />
-                    <span className="truncate">{project.name}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="px-4 py-6 text-center">
-                  <KanbanIcon
-                    className="h-8 w-8 mx-auto text-low"
-                    weight="bold"
-                  />
-                  <p className="mt-3 text-sm font-medium text-high">
-                    {t('appBar.kanban.title')}
-                  </p>
-                  <p className="mt-1 text-xs text-low">
-                    {t('appBar.kanban.description')}
-                  </p>
-                  <div className="mt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleOpenBoardSettings();
-                        setIsDrawerOpen(false);
-                      }}
-                      className="w-full px-3 py-2 rounded-md text-sm font-medium bg-brand text-on-brand hover:bg-brand-hover cursor-pointer"
-                    >
-                      {t('appBar.kanban.action')}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Create Project button */}
-            {hasBoardAccess && (
-              <div className="p-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleCreateProject();
-                    setIsDrawerOpen(false);
-                  }}
-                  className="flex items-center gap-2 w-full px-3 py-2.5 rounded-md text-sm text-low hover:text-normal hover:bg-secondary cursor-pointer"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  Create Project
-                </button>
-              </div>
-            )}
-          </div>
-        </MobileDrawer>
+        {/* Mobile navigation drawer: the same sidebar as desktop. */}
+        {isMobile && (
+          <MobileDrawer open={isDrawerOpen} onClose={closeDrawer}>
+            <AppSidebarContainer
+              {...sidebarProps}
+              onNavigate={closeDrawer}
+              onClose={closeDrawer}
+            />
+          </MobileDrawer>
+        )}
       </div>
     </SyncErrorProvider>
   );

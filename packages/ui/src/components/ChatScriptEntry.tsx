@@ -1,24 +1,28 @@
 import { useTranslation } from 'react-i18next';
-import { TerminalIcon, WrenchIcon } from '@phosphor-icons/react';
+import { WrenchIcon } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
-import { ToolStatusDot, type ToolStatusLike } from './ToolStatusDot';
+import { ChatStep, ChatStepDetail, chatStepStateFromStatus } from './ChatStep';
+import type { ToolStatusLike } from './ToolStatusDot';
 
 interface ChatScriptEntryProps {
   title: string;
   command?: string;
   processId: string;
   exitCode?: number | null;
+  time?: string;
   className?: string;
   status: ToolStatusLike;
   onViewProcess: (processId: string) => void;
   onFix?: () => void;
 }
 
+/** A repository script run (setup, cleanup, ...) as a transcript step. */
 export function ChatScriptEntry({
   title,
   command,
   processId,
   exitCode,
+  time,
   className,
   status,
   onViewProcess,
@@ -29,16 +33,7 @@ export function ChatScriptEntry({
   const isSuccess = status.status === 'success';
   const isFailed = status.status === 'failed';
 
-  const handleFixClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onFix?.();
-  };
-
-  const handleClick = () => {
-    onViewProcess(processId);
-  };
-
-  const getSubtitle = () => {
+  const outcome = (() => {
     if (isRunning) {
       return t('conversation.script.running');
     }
@@ -49,51 +44,48 @@ export function ChatScriptEntry({
       return t('conversation.script.completedSuccessfully');
     }
     return t('conversation.script.clickToViewLogs');
-  };
+  })();
 
   return (
-    <div
-      className={cn(
-        'flex items-start gap-base text-sm cursor-pointer hover:bg-secondary/50 rounded-md -mx-half px-half py-half transition-colors',
-        className
-      )}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
-    >
-      <span className="relative shrink-0 pt-0.5">
-        <TerminalIcon className="size-icon-base text-low" />
-        <ToolStatusDot
-          status={status}
-          className="absolute -bottom-0.5 -left-0.5"
+    <ChatStep
+      state={chatStepStateFromStatus(status)}
+      label={title}
+      detail={
+        <ChatStepDetail
+          parts={[
+            command ? (
+              <span key="command" className="font-mono">
+                {command}
+              </span>
+            ) : null,
+            <span key="outcome" className={cn(isFailed && 'text-error')}>
+              {outcome}
+            </span>,
+          ]}
         />
-      </span>
-      <div className="flex flex-col min-w-0 flex-1">
-        <span className="text-normal font-medium">{title}</span>
-        {command && (
-          <code className="text-low text-xs font-mono truncate block">
-            {command}
-          </code>
-        )}
-        <span className="text-low text-xs">{getSubtitle()}</span>
-      </div>
-      {isFailed && onFix && (
-        <button
-          type="button"
-          onClick={handleFixClick}
-          className="shrink-0 flex items-center gap-1 px-2 py-1 text-xs text-brand hover:text-brand-hover hover:bg-secondary rounded transition-colors"
-          title={t('conversation.script.viewScripts')}
-        >
-          <WrenchIcon className="size-icon-xs" />
-          <span>{t('conversation.script.viewScripts')}</span>
-        </button>
-      )}
-    </div>
+      }
+      time={time}
+      onActivate={() => onViewProcess(processId)}
+      actions={
+        isFailed && onFix ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFix();
+            }}
+            className={cn(
+              'flex h-6 items-center gap-1 rounded px-2 text-xs font-semibold text-brand-secondary transition-colors hover:bg-panel',
+              'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand'
+            )}
+            title={t('conversation.script.viewScripts')}
+          >
+            <WrenchIcon className="size-3.5" />
+            <span>{t('conversation.script.viewScripts')}</span>
+          </button>
+        ) : undefined
+      }
+      className={className}
+    />
   );
 }
