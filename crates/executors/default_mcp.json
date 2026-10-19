@@ -57,9 +57,9 @@
   "meta": {
     "prepcook": {
       "name": "Prepcook",
-      "description": "Create, update and delete Prepcook tasks",
+      "description": "Card comments, review verdicts, evidence search and app runs for the session's card",
       "url": "https://github.com/nwisehart/prepcook",
-      "icon": "favicon-vk-light.svg"
+      "icon": "favicon.svg"
     },
     "context7": {
       "name": "Context7",
