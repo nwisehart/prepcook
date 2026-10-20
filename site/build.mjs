@@ -1,9 +1,11 @@
 // Generates the Prepcook website into site/dist from the repository's own
 // documentation (README.md, CONTRIBUTING.md, docs/*.md) plus two hand-written
-// pages (src/home.html, src/tammy.html). Every link and asset reference it
-// writes is relative, because the site is served under a sub-path
-// (https://nwisehart.github.io/prepcook/). The link check in check-links.mjs
-// runs at the end and fails the build on any broken reference.
+// pages (src/home.html, src/tammy.html). The site is served at
+// https://prepcook.dev/ (SITE_URL). Every link and asset reference it writes
+// is relative, so dist works the same from any host or a local preview; the
+// only absolute self-URLs are the canonical and Open Graph URLs in each page's
+// head, which social cards and search engines require. The link check in
+// check-links.mjs runs at the end and fails the build on any broken reference.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +18,7 @@ const REPO = path.resolve(SITE, '..');
 const SRC = path.join(SITE, 'src');
 const DIST = path.join(SITE, 'dist');
 const GITHUB = 'https://github.com/nwisehart/prepcook';
+const SITE_URL = 'https://prepcook.dev/';
 
 // The sidebar, in reading order. `src` is the markdown file in the repository,
 // `out` the page it becomes in dist, `label` its sidebar entry. Every
@@ -171,8 +174,19 @@ function makeSlugger() {
 
 // Rewrites one URL found in the markdown of `srcFile` for the page `outFile`:
 // rendered pages and copied images get relative site links, anything else in
-// the repository links to the file on GitHub.
+// the repository links to the file on GitHub. A link to the site itself
+// (SITE_URL...) becomes relative too, so the page body holds no absolute
+// self-links.
 function rewriteUrl(url, srcFile, outFile) {
+  if (url.startsWith(SITE_URL)) {
+    const rest = url.slice(SITE_URL.length);
+    const hashAt = rest.indexOf('#');
+    let target = hashAt === -1 ? rest : rest.slice(0, hashAt);
+    if (target === '' || target.endsWith('/')) target += 'index.html';
+    return (
+      relativeUrl(outFile, target) + (hashAt === -1 ? '' : rest.slice(hashAt))
+    );
+  }
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(url) || url === '') return url;
   const hashAt = url.indexOf('#');
   const target = hashAt === -1 ? url : url.slice(0, hashAt);
@@ -272,11 +286,29 @@ function fill(template, values) {
 
 const LAYOUT = fs.readFileSync(path.join(SRC, 'layout.html'), 'utf8');
 
+// The README's board screenshot alt text: the home page's hero and every
+// page's og:image (the same screenshot) use it.
+function boardAlt() {
+  const m = read('README.md').match(
+    /<img src="docs\/images\/board\.png" alt="([^"]+)"/
+  );
+  if (!m) throw new Error('README.md: the board screenshot is missing');
+  return m[1];
+}
+
+// A page's path under SITE_URL, for its canonical and og:url: the dist path,
+// except that index.html is the bare root.
+function sitePath(out) {
+  return out === 'index.html' ? '' : out;
+}
+
 function page({ out, title, description, main, section, docs = false }) {
   const root = rootPrefix(out);
   const html = fill(LAYOUT, {
     title: escapeHtml(title),
     description: escapeHtml(description),
+    path: sitePath(out),
+    boardAlt: escapeHtml(boardAlt()),
     root,
     bodyClass: docs ? 'has-sidebar' : 'plain',
     menuButton: docs
@@ -379,10 +411,7 @@ function homeValues() {
   );
   const sentences = pitch.text.replace(/\s+/g, ' ').split(/(?<=\.) (?=[A-Z])/);
 
-  const boardAlt = readme.match(
-    /<img src="docs\/images\/board\.png" alt="([^"]+)"/
-  );
-  if (!boardAlt) throw new Error('README.md: the board screenshot is missing');
+  const alt = boardAlt();
 
   // "What it does": one paragraph per stage, each opening with **Stage.**
   const start = tokens.findIndex(
@@ -441,8 +470,8 @@ function homeValues() {
   const values = {
     pitchLead: inline(sentences[0]),
     pitchRest: inline(sentences.slice(1).join(' ')),
-    boardAlt: escapeHtml(boardAlt[1]),
-    boardCaption: escapeHtml(boardAlt[1]),
+    boardAlt: escapeHtml(alt),
+    boardCaption: escapeHtml(alt),
     stages: stageHtml,
     installTarball: codeBlockHtml(tarball.text, tarball.lang),
     installNpx: codeBlockHtml(npx.text, npx.lang),

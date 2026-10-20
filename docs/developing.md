@@ -462,7 +462,7 @@ every release, and the sections a change touches before merging it.
 
 ## The website
 
-The project site, `https://nwisehart.github.io/prepcook/`, lives in `site/`
+The project site is published at `https://prepcook.dev/` from `site/`
 (`@prepcook/site`). Its pages are generated from `README.md`,
 `CONTRIBUTING.md` and `docs/*.md` by `site/build.mjs`, so a content change goes
 in those files, not in `site/`; only the home page and the Tammy page are

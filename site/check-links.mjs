@@ -1,12 +1,23 @@
 // Checks every internal reference in site/dist: each href, src and srcset in
 // an HTML page that is not an absolute URL (http:, https:, mailto:, data:)
 // must be relative, must not point at a .md file, must resolve to a file in
-// dist, and its #anchor must be an id on the target page. Run on its own
-// (`node check-links.mjs`) or as the last step of build.mjs.
+// dist, and its #anchor must be an id on the target page.
+//
+// The site is served at https://prepcook.dev/ (SITE_URL). Absolute URLs under
+// it are allowed only where an absolute URL is required: <link rel="canonical">
+// and the og:url and og:image metas. For those, SITE_URL stands for the root
+// of dist: the path after it must resolve to a file there, and the canonical
+// and og:url must both name the page they sit on (index.html as the bare
+// root). An absolute self-URL anywhere else fails the check.
+//
+// Run on its own (`node check-links.mjs`) or as the last step of build.mjs.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const SITE_URL = 'https://prepcook.dev/';
+const SELF = /^https?:\/\/(?:www\.)?prepcook\.dev(?:[/?#]|$)/i;
 
 function htmlFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -23,6 +34,31 @@ function decode(s) {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&');
+}
+
+// The <link rel="canonical"> href and the og:url / og:image contents, each
+// with the tag it came from, and the HTML with those tags removed so the
+// general scan below does not see them again.
+function selfUrls(html) {
+  const found = [];
+  const rest = html.replace(/<(link|meta)\b[^>]*>/gi, (tag) => {
+    const attr = (name) => {
+      const m = tag.match(new RegExp(`\\s${name}="([^"]*)"`));
+      return m ? decode(m[1]) : null;
+    };
+    const rel = attr('rel');
+    const property = attr('property');
+    if (rel === 'canonical') {
+      found.push({ kind: 'canonical', url: attr('href') ?? '' });
+      return '';
+    }
+    if (property === 'og:url' || property === 'og:image') {
+      found.push({ kind: property, url: attr('content') ?? '' });
+      return '';
+    }
+    return tag;
+  });
+  return { found, rest };
 }
 
 function references(html) {
@@ -54,8 +90,31 @@ export function checkLinks(dist) {
 
   for (const file of htmlFiles(dist)) {
     const page = path.relative(dist, file);
-    const html = fs.readFileSync(file, 'utf8');
+    const { found, rest: html } = selfUrls(fs.readFileSync(file, 'utf8'));
+    const ownPath = page === 'index.html' ? '' : page.split(path.sep).join('/');
+    for (const { kind, url } of found) {
+      if (!url.startsWith(SITE_URL)) {
+        failures.push(`${page}: ${kind} is not under ${SITE_URL}: ${url}`);
+        continue;
+      }
+      const rest = url.slice(SITE_URL.length);
+      if ((kind === 'canonical' || kind === 'og:url') && rest !== ownPath) {
+        failures.push(`${page}: ${kind} ${url} does not name this page`);
+        continue;
+      }
+      let resolved = path.join(dist, decodeURI(rest.split(/[?#]/)[0]));
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+        resolved = path.join(resolved, 'index.html');
+      }
+      if (!fs.existsSync(resolved)) {
+        failures.push(`${page}: ${kind} ${url} is missing from the site`);
+      }
+    }
     for (const ref of references(html)) {
+      if (SELF.test(ref)) {
+        failures.push(`${page}: absolute self-link ${ref}; use a relative one`);
+        continue;
+      }
       if (/^(?:https?:|mailto:|data:)/i.test(ref)) continue;
       if (ref === '') {
         failures.push(`${page}: empty reference`);

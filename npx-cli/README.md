@@ -35,7 +35,7 @@ in, and the GitHub CLI for pull requests; see the
 ## Links
 
 - Repository: https://github.com/nwisehart/prepcook
-- Documentation: https://nwisehart.github.io/prepcook/
+- Documentation: https://prepcook.dev/
 - Releases: https://github.com/nwisehart/prepcook/releases
 
 ## License

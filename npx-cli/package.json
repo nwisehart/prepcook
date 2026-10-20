@@ -16,6 +16,7 @@
     "type": "git",
     "url": "https://github.com/nwisehart/prepcook"
   },
+  "homepage": "https://prepcook.dev/",
   "engines": {
     "node": ">=20.19.0"
   },

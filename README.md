@@ -11,6 +11,8 @@ request — and the engineer who owns the ticket signs off. Each ticket is a car
 on a local board, each stage of the card is worked by a coding agent in its own
 git worktree, and when a person takes the ticket over, Prepcook steps aside.
 
+Docs and a tour: [prepcook.dev](https://prepcook.dev/)
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/board-dark.png">
