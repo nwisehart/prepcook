@@ -75,16 +75,39 @@ most of it in Plan; expect 30 to 60 minutes end to end.
 
 ### 1. Install and start Prepcook (about 10 minutes)
 
-Download the tarball for your platform from the
-[releases page](https://github.com/nwisehart/prepcook/releases)
-(`prepcook-<version>-<target>.tar.gz`, with `SHA256SUMS` beside it), unpack it and
-put `prepcook` and `prepcook-mcp` on your `PATH`:
+Node is already a prerequisite, so the quickest route is npx:
 
 ```sh
-tar -xzf prepcook-<version>-macos-arm64.tar.gz
-cp prepcook-<version>-macos-arm64/prepcook prepcook-<version>-macos-arm64/prepcook-mcp ~/.local/bin/
+npx prepcook up
+```
+
+The [`prepcook` package](npx-cli/README.md) downloads the release binaries for
+your platform on first run and keeps them in `~/.prepcook/bin`;
+`npx prepcook --help` lists the commands and `npx prepcook mcp` runs the MCP
+server.
+
+Or install the binaries. This fetches the release tarball for your platform,
+checks it against the release's `SHA256SUMS`, unpacks it and puts `prepcook`
+and `prepcook-mcp` in `~/.local/bin`, which must be on your `PATH`:
+
+```sh
+v=0.1.0 t=macos-arm64   # or macos-x64, linux-x64
+curl -fsSLO "https://github.com/nwisehart/prepcook/releases/download/v$v/prepcook-$v-$t.tar.gz"
+curl -fsSL "https://github.com/nwisehart/prepcook/releases/download/v$v/SHA256SUMS" | grep " prepcook-$v-$t.tar.gz$" | shasum -a 256 -c -
+tar -xzf "prepcook-$v-$t.tar.gz"
+mkdir -p ~/.local/bin
+install -m 755 "prepcook-$v-$t"/prepcook "prepcook-$v-$t"/prepcook-mcp ~/.local/bin/
 prepcook up
 ```
+
+If you download the tarball from the
+[releases page](https://github.com/nwisehart/prepcook/releases) in a browser
+instead, macOS marks the download as quarantined, `tar` passes the mark on to
+the binaries, and the first run is blocked as coming from an unverified
+developer, because the binaries are not notarized. Clear the mark once with
+`xattr -d com.apple.quarantine ~/.local/bin/prepcook ~/.local/bin/prepcook-mcp`,
+or allow the binary under **System Settings → Privacy & Security**. Neither
+`curl` nor npx sets the mark.
 
 `prepcook up` writes the board's Docker Compose file and a generated `.env`
 into the app data directory, starts the board (the first time, Docker pulls

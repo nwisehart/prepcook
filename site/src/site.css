@@ -1010,15 +1010,13 @@ kbd {
   margin-top: 0;
 }
 
+/* One column at every width: the release card's curl lines need the full
+   width to stay readable. */
 .install-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: 16px;
-}
-
-.install:first-child {
-  grid-column: 1 / -1;
 }
 
 .install {
@@ -1164,7 +1162,6 @@ kbd {
   }
   .feature-grid,
   .feature-grid.two,
-  .install-grid,
   .gallery {
     grid-template-columns: minmax(0, 1fr);
   }

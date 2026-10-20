@@ -415,11 +415,22 @@ function homeValues() {
     })
     .join('\n');
 
-  // The release-tarball commands from Quickstart step 1.
+  // The install commands from Quickstart step 1: the npx block (it starts
+  // with `npx`) and the release-tarball block (the one that runs `curl`).
   const installAt = tokens.findIndex(
     (t) => t.type === 'heading' && t.text.startsWith('1. Install and start')
   );
-  const tarball = tokens.slice(installAt).find((t) => t.type === 'code');
+  const installCode = [];
+  for (const t of tokens.slice(installAt + 1)) {
+    if (t.type === 'heading') break;
+    if (t.type === 'code') installCode.push(t);
+  }
+  const npx = installCode.find((t) => t.text.startsWith('npx '));
+  const tarball = installCode.find((t) => /^curl /m.test(t.text));
+  if (installAt === -1 || !npx || !tarball)
+    throw new Error(
+      'README.md: Quickstart step 1 needs an npx code block and a curl code block'
+    );
 
   // Captions: the first sentence of each row's "What it must show".
   const shots = {};
@@ -434,7 +445,7 @@ function homeValues() {
     boardCaption: escapeHtml(boardAlt[1]),
     stages: stageHtml,
     installTarball: codeBlockHtml(tarball.text, tarball.lang),
-    installNpx: codeBlockHtml('npx prepcook', 'sh'),
+    installNpx: codeBlockHtml(npx.text, npx.lang),
   };
   for (const name of [
     'card-rca',

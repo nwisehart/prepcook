@@ -273,29 +273,35 @@
     <h2 id="install">Three ways in</h2>
     <div class="install-grid">
       <div class="install">
+        <h3>With npx</h3>
+        <p>
+          Node is already a prerequisite, so this is the quickest route: the
+          package downloads the release binaries for your platform on first run
+          and keeps them in <code>~/.prepcook/bin</code> (<a
+            href="https://github.com/nwisehart/prepcook/blob/main/npx-cli/README.md"
+            >npx-cli/README.md</a
+          >).
+        </p>
+        {{installNpx}}
+      </div>
+      <div class="install">
         <h3>From a release</h3>
         <p>
-          Download the tarball for your platform from the
+          Fetch the tarball for your platform with <code>curl</code>, check it
+          against <code>SHA256SUMS</code>, and put <code>prepcook</code> and
+          <code>prepcook-mcp</code> in <code>~/.local/bin</code>, which must be
+          on your <code>PATH</code>:
+        </p>
+        {{installTarball}}
+        <p>
+          Downloaded from the
           <a href="https://github.com/nwisehart/prepcook/releases"
             >releases page</a
           >
-          (<code>prepcook-&lt;version&gt;-&lt;target&gt;.tar.gz</code>, with
-          <code>SHA256SUMS</code> beside it), unpack it and put
-          <code>prepcook</code> and <code>prepcook-mcp</code> on your
-          <code>PATH</code>:
+          in a browser instead, the binaries are quarantined and, since they are
+          not notarized, macOS blocks the first run; clear it with
+          <code>xattr -d com.apple.quarantine</code> on both.
         </p>
-        {{installTarball}}
-      </div>
-      <div class="install">
-        <h3>With npx</h3>
-        <p>
-          Run Prepcook without installing it; this launches it locally and opens
-          it in your browser (<a
-            href="https://github.com/nwisehart/prepcook/blob/main/npx-cli/README.md"
-            >npx-cli/README.md</a
-          >):
-        </p>
-        {{installNpx}}
       </div>
       <div class="install">
         <h3>The board image</h3>
