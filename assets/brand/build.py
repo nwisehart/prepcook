@@ -11,12 +11,13 @@ band. Nothing is traced from clip art, a logo or a font glyph. The wordmark in
 the logo files is ordinary text set in the viewer's sans-serif.
 
 Outputs (all overwritten):
-  assets/brand/prepcook-mark.svg            the hat alone, ink on transparent (light backgrounds)
-  assets/brand/prepcook-mark-dark.svg       the hat alone, off-white on transparent (dark backgrounds)
+  assets/brand/prepcook-mark.svg            the hat alone, brand blue on transparent (light backgrounds)
+  assets/brand/prepcook-mark-dark.svg       the hat alone, brand blue on transparent (same as above; kept
+                                            so existing light/dark <picture> references keep working)
   assets/brand/prepcook-mark-mono.svg       single colour, inherits currentColor
   assets/brand/prepcook-app-icon.svg        white hat on the blue tile (favicons, app icons)
-  assets/brand/prepcook-logo.svg            mark + "Prepcook" for light backgrounds
-  assets/brand/prepcook-logo-dark.svg       mark + "Prepcook" for dark backgrounds
+  assets/brand/prepcook-logo.svg            brand-blue mark + "Prepcook" in ink, for light backgrounds
+  assets/brand/prepcook-logo-dark.svg       brand-blue mark + "Prepcook" in off-white, for dark backgrounds
   packages/public/favicon.svg               = prepcook-app-icon.svg
   packages/public/favicon-16.png, favicon-32.png, favicon.ico (16/32/48)
   packages/public/apple-touch-icon.png      180 px
@@ -40,9 +41,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 BRAND = os.path.join(ROOT, "assets", "brand")
 PUBLIC = os.path.join(ROOT, "packages", "public")
 
-INK = "#1F2328"        # near-black, light backgrounds
-INK_DARK = "#F4F1EA"   # warm off-white, dark backgrounds
-BLUE = "#3F6AA6"       # the one accent colour: chef-jacket blue
+BLUE = "#3F6AA6"       # the one accent colour: chef-jacket blue; the toque on any background
+INK = "#1F2328"        # near-black: the word on light backgrounds
+INK_DARK = "#F4F1EA"   # warm off-white: the word on dark backgrounds
 WHITE = "#FFFFFF"
 
 # Geometry on a 64 x 64 grid.
@@ -107,16 +108,17 @@ def app_icon_svg() -> str:
     )
 
 
-def logo_svg(fill: str) -> str:
-    """The mark beside the word "Prepcook". 265 x 64; the mark fills the height,
-    and the width leaves room for the word at the mark's 40 px type size (about
-    182 px of bold sans-serif from x=70, with a margin on the right)."""
+def logo_svg(text_fill: str) -> str:
+    """The brand-blue mark beside the word "Prepcook" in `text_fill`. 265 x 64;
+    the mark fills the height, and the width leaves room for the word at the
+    mark's 40 px type size (about 182 px of bold sans-serif from x=70, with a
+    margin on the right)."""
     font = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 265 64" role="img" aria-label="Prepcook">\n'
-        f'<g fill="{fill}">\n  {hat_paths()}\n'
-        f'  <text x="70" y="49" font-family="{font}" font-size="40" font-weight="700" letter-spacing="-0.5">Prepcook</text>\n'
-        "</g>\n</svg>\n"
+        f'<g fill="{BLUE}">\n  {hat_paths()}\n</g>\n'
+        f'<text x="70" y="49" fill="{text_fill}" font-family="{font}" font-size="40" font-weight="700" letter-spacing="-0.5">Prepcook</text>\n'
+        "</svg>\n"
     )
 
 
@@ -142,7 +144,7 @@ def write(path: str, text: str) -> None:
 def main() -> None:
     os.makedirs(BRAND, exist_ok=True)
     os.makedirs(PUBLIC, exist_ok=True)
-    mark, mark_dark, mono, app = mark_svg(INK), mark_svg(INK_DARK), mark_svg("currentColor"), app_icon_svg()
+    mark, mark_dark, mono, app = mark_svg(BLUE), mark_svg(BLUE), mark_svg("currentColor"), app_icon_svg()
     write(os.path.join(BRAND, "prepcook-mark.svg"), mark)
     write(os.path.join(BRAND, "prepcook-mark-dark.svg"), mark_dark)
     write(os.path.join(BRAND, "prepcook-mark-mono.svg"), mono)
