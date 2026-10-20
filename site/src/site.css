@@ -190,9 +190,10 @@ kbd {
   text-decoration: none;
 }
 
-.brand img {
+.brand-mark {
   display: block;
   flex-shrink: 0;
+  color: var(--brand);
 }
 
 .header-nav {
@@ -757,13 +758,26 @@ kbd {
   text-align: center;
 }
 
+/* The lockup: the mark in brand blue, the name in ink, Figtree 700. Sized in
+   em so the mobile rule only has to change the font size. */
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
   margin: 0 0 24px;
-  line-height: 0;
+  color: var(--text-high);
+  font-size: 50px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
 }
 
-.wordmark img {
-  width: 318px;
+.wordmark-mark {
+  display: block;
+  flex-shrink: 0;
+  width: 1.28em;
+  height: 1.28em;
+  color: var(--brand);
 }
 
 .pitch-lead {
@@ -1139,8 +1153,8 @@ kbd {
   .hero {
     padding-top: 40px;
   }
-  .wordmark img {
-    width: 240px;
+  .wordmark {
+    font-size: 38px;
   }
   .pitch-lead {
     font-size: 20px;

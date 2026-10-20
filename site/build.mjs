@@ -466,6 +466,11 @@ function build() {
   for (const f of fs.readdirSync(path.join(SITE, 'assets'))) {
     copy(path.join(SITE, 'assets', f), `assets/${f}`);
   }
+  // The app's own tab and home-screen icons: the white mark on a blue tile
+  // reads on light and dark tab strips alike.
+  for (const f of ['favicon.svg', 'apple-touch-icon.png']) {
+    copy(path.join(REPO, 'packages/public', f), f);
+  }
   copy(path.join(SRC, 'site.css'), 'static/site.css');
   copy(path.join(SRC, 'site.js'), 'static/site.js');
 
