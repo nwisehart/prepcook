@@ -465,18 +465,24 @@ every release, and the sections a change touches before merging it.
 The project site is published at `https://prepcook.dev/` from `site/`
 (`@prepcook/site`). Its pages are generated from `README.md`,
 `CONTRIBUTING.md` and `docs/*.md` by `site/build.mjs`, so a content change goes
-in those files, not in `site/`; only the home page and the Tammy page are
-written by hand (`site/src/`). Build and preview it with:
+in those files, not in `site/`; only the home page, the Tammy page and the
+vibe-kanban page are written by hand (`site/src/`). Each page's meta
+description is written for search results in the `DESCRIPTIONS` map in
+`build.mjs`. Build and preview it with:
 
 ```sh
 pnpm --filter @prepcook/site run build
 python3 -m http.server -d site/dist    # or: npx serve site/dist
 ```
 
-The build ends with a link check (`site/check-links.mjs`) that fails on any
-link, image or `#anchor` that does not resolve; every link it writes is
-relative, because the site is served under `/prepcook/`. A new page in `docs/`
-needs an entry in the sidebar list at the top of `build.mjs`.
+The build writes `sitemap.xml` (each page's `lastmod` is the last commit that
+touched its sources) and `robots.txt`, and ends with a link check
+(`site/check-links.mjs`) that fails on any link, image or `#anchor` that does
+not resolve and on a sitemap that does not match the pages, then with
+`structured-data.test.mjs`, which checks the JSON-LD on the home and Tammy
+pages. Every link it writes is relative, so the site works from any path
+prefix. A new page in `docs/` needs an entry in the sidebar list at the top of
+`build.mjs`, and a description in `DESCRIPTIONS`.
 `.github/workflows/pages.yml` publishes the site on every push to `main` that
 touches it, once the repository's **Settings → Pages → Source** is set to
 **GitHub Actions**.

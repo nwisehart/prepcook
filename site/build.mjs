@@ -4,9 +4,11 @@
 // https://prepcook.dev/ (SITE_URL). Every link and asset reference it writes
 // is relative, so dist works the same from any host or a local preview; the
 // only absolute self-URLs are the canonical and Open Graph URLs in each page's
-// head, which social cards and search engines require. The link check in
+// head, the JSON-LD on the home and Tammy pages, sitemap.xml and robots.txt,
+// which social cards and search engines require. The link check in
 // check-links.mjs runs at the end and fails the build on any broken reference.
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -363,11 +365,80 @@ function sitePath(out) {
   return out === 'index.html' ? '' : out;
 }
 
-function page({ out, title, description, main, section, docs = false }) {
+// JSON-LD for a <script type="application/ld+json"> in the head. `<` is
+// escaped so no string in it can close the script element.
+function structuredData(data) {
+  if (!data) return '';
+  const json = JSON.stringify(data, null, 2).replace(/</g, '\\u003c');
+  return `<script type="application/ld+json">\n${json}\n</script>`;
+}
+
+const APACHE_LICENSE = 'https://www.apache.org/licenses/LICENSE-2.0';
+const AUTHOR = {
+  '@type': 'Person',
+  name: 'Nick Wisehart',
+  url: 'https://github.com/nwisehart',
+};
+
+// The home page's structured data: Prepcook as a SoftwareApplication (typed
+// SoftwareSourceCode too, which is where codeRepository and
+// programmingLanguage are defined) and the site as a WebSite.
+function homeStructuredData() {
+  const { version } = JSON.parse(read('package.json'));
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': ['SoftwareApplication', 'SoftwareSourceCode'],
+        name: 'Prepcook',
+        description: readmeTagline(),
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'macOS, Linux',
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        license: APACHE_LICENSE,
+        url: SITE_URL,
+        downloadUrl: `${GITHUB}/releases`,
+        softwareVersion: version,
+        author: AUTHOR,
+        codeRepository: GITHUB,
+        programmingLanguage: ['Rust', 'TypeScript'],
+        screenshot: `${SITE_URL}docs/images/board.png`,
+      },
+      { '@type': 'WebSite', name: 'Prepcook', url: SITE_URL },
+    ],
+  };
+}
+
+function tammyStructuredData() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': ['SoftwareApplication', 'SoftwareSourceCode'],
+    name: 'Tammy',
+    description: DESCRIPTIONS['site/src/tammy.html'],
+    applicationCategory: 'BusinessApplication',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    license: APACHE_LICENSE,
+    url: `${SITE_URL}tammy.html`,
+    author: AUTHOR,
+    codeRepository: 'https://github.com/nwisehart/tammy',
+    programmingLanguage: 'TypeScript',
+  };
+}
+
+function page({
+  out,
+  title,
+  description,
+  main,
+  section,
+  docs = false,
+  jsonLd = null,
+}) {
   const root = rootPrefix(out);
   const html = fill(LAYOUT, {
     title: escapeHtml(title),
     description: escapeHtml(description),
+    structuredData: structuredData(jsonLd),
     path: sitePath(out),
     boardAlt: escapeHtml(boardAlt()),
     root,
@@ -626,6 +697,53 @@ function homeDescription() {
   return text;
 }
 
+// The files each page is built from, for its lastmod in the sitemap.
+function pageSources() {
+  return [
+    {
+      out: 'index.html',
+      sources: ['site/src/home.html', 'README.md', 'docs/images/README.md'],
+    },
+    ...PAGES.map((p) => ({ out: p.out, sources: [p.src] })),
+    { out: 'tammy.html', sources: ['site/src/tammy.html'] },
+  ];
+}
+
+// The date of the last commit that touched any of `sources`, or null when git
+// has none (an uncommitted file, or no repository).
+function lastCommitDate(sources) {
+  try {
+    const date = execFileSync(
+      'git',
+      ['log', '-1', '--format=%cI', '--', ...sources],
+      { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    ).trim();
+    return date || null;
+  } catch {
+    return null;
+  }
+}
+
+// sitemap.xml: every page's canonical URL, with the date its sources last
+// changed (the build time when git cannot say).
+function writeSitemap() {
+  const buildTime = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const urls = pageSources().map(({ out, sources }) => {
+    const lastmod = lastCommitDate(sources) ?? buildTime;
+    return (
+      `  <url>\n    <loc>${escapeHtml(SITE_URL + sitePath(out))}</loc>\n` +
+      `    <lastmod>${lastmod}</lastmod>\n  </url>\n`
+    );
+  });
+  write(
+    'sitemap.xml',
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+      urls.join('') +
+      '</urlset>\n'
+  );
+}
+
 // Every HTML page in dist, as a dist-relative path with / separators.
 function distPages(dir = DIST) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -673,6 +791,7 @@ function build() {
       description: homeDescription(),
       main: home,
       section: 'home',
+      jsonLd: homeStructuredData(),
     })
   );
 
@@ -685,7 +804,14 @@ function build() {
       description: description('site/src/tammy.html'),
       main: tammy,
       section: 'tammy',
+      jsonLd: tammyStructuredData(),
     })
+  );
+
+  writeSitemap();
+  write(
+    'robots.txt',
+    `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}sitemap.xml\n`
   );
 
   for (const file of distPages()) {

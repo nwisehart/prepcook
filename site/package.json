@@ -5,7 +5,8 @@
   "type": "module",
   "description": "The Prepcook website: a static site generated from the repository's docs",
   "scripts": {
-    "build": "node build.mjs",
+    "build": "node build.mjs && node --test structured-data.test.mjs",
+    "test": "node --test structured-data.test.mjs",
     "check": "node check-links.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
