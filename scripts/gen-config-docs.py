@@ -95,8 +95,11 @@ MCP_WIRING = {
 }
 
 
-def render_agents(agents: list) -> list:
-    """The coding agents: what each needs and how it signs in, not fields."""
+def render_agents(descriptors: list) -> list:
+    """The coding agents: what each needs and how it signs in, not fields;
+    then the `agents` section's own settings, which are fields."""
+    agents = [descriptor for descriptor in descriptors if descriptor.get("agent")]
+    settings = [descriptor for descriptor in descriptors if not descriptor.get("agent")]
     lines = [
         "",
         f"### {AREA_TITLES['agents']}",
@@ -113,15 +116,31 @@ def render_agents(agents: list) -> list:
         agent = descriptor["agent"]
         name = f"`{descriptor['kind']}` ({cell(descriptor['display_name'])})"
         command = f"`{agent['command']}`" if agent["command"] else "built in"
-        economy = agent.get("economy_variant")
+        roles = {
+            agent.get("economy_variant"): " (economy)",
+            agent.get("guarded_variant"): " (guarded)",
+        }
         variants = ", ".join(
-            f"`{variant}`" + (" (economy)" if variant == economy else "")
-            for variant in agent["variants"]
+            f"`{variant}`" + roles.get(variant, "") for variant in agent["variants"]
         )
         lines.append(
             f"| {name} | {command} | {cell(agent['sign_in'])} | "
             f"{MCP_WIRING[agent['mcp']]} | {variants} |"
         )
+    fields = [field for descriptor in settings for field in descriptor["fields"]]
+    if fields:
+        lines += [
+            "",
+            "The `agents` section's other settings, from the same descriptors; each is "
+            "also a key of a board's `agents`, which wins over the global one.",
+            "",
+            "| Key | What it is |",
+            "| --- | --- |",
+        ]
+        for field in fields:
+            lines.append(
+                f"| `agents.{field['key']}` | **{cell(field['label'])}**. {cell(field['help'])} |"
+            )
     return lines
 
 

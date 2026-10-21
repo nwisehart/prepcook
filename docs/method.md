@@ -99,6 +99,28 @@ and the RCA graph's analysis run often and only read. Together they spend most
 of a subscription seat's session budget. A follow-up continues its own
 session, so it can change variant but never agent.
 
+### Cards from outside the team
+
+A card's text is not always the team's. A card filed through `POST /api/cards`
+(by Tammy, an incident tool or any other service, which is to say any card with
+an `origin`) and a GitHub issue opened by someone who is not an owner, member or
+collaborator of the repository (recorded on the card at intake) count as filed
+from outside the team; a ticket from the team's own Jira, and a card made on the
+board, do not. Such a card plans under `agents.external` instead of the planning
+profile ([configuration.md](configuration.md#agents)). Unset, that is the
+planning profile's agent with its guarded variant: for Claude Code, `GUARDED`,
+which takes away the `WebFetch` and `WebSearch` tools and never skips
+permissions; an agent that ships no guarded variant plans the card under the
+planning profile unchanged. The card panel's Origin line then says "Planned
+under the guarded profile". Executing and Reviewing run their usual profiles:
+an investigation never executes until a person converts it, and a bug or story
+executes from a plan that was approved. In Chef mode a person approves it; in
+Prep mode a plan that clears the bar approves itself, so a bug filed from
+outside the team can reach Executing with no one having read it. A service that
+files reports from outside the team should file them as investigations, as Tammy
+does: an investigation always waits for a person. The guarded profile narrows the agent's own
+tools; it does not confine the shell the agent runs commands in.
+
 ## Investigations
 
 An investigation is a reported problem Prepcook reproduces and explains but

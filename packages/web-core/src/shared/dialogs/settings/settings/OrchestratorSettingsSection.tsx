@@ -91,7 +91,7 @@ const pickGlobalFields = (
 const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   repo_ids: [],
   executor_profile: null,
-  agents: { stages: EMPTY_STAGE_PROFILES },
+  agents: { stages: EMPTY_STAGE_PROFILES, external: null },
   label: null,
   ticketing: {
     watcher_enabled: null,

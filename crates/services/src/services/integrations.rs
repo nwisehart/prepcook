@@ -33,6 +33,9 @@ pub enum FieldKind {
     },
     Bool,
     Number,
+    /// A coding agent profile (`{ "executor": …, "variant": … }`), rendered
+    /// as the profile picker Settings → Agents uses for the stages.
+    Profile,
 }
 
 /// One setting a provider reads.
@@ -313,6 +316,10 @@ mod tests {
             ["sentry", "dataset", "datadog", "cloudwatch", "log_files"]
         );
         for descriptor in &all["agents"] {
+            if descriptor.kind == agents::SETTINGS_KIND {
+                assert!(descriptor.agent.is_none());
+                continue;
+            }
             let agent = descriptor.agent.as_ref().expect("agent details");
             assert_eq!(descriptor.kind, agent.executor.to_string());
             assert!(descriptor.fields.is_empty());

@@ -67,6 +67,13 @@
         "null"
       ]
     },
+    "disallowed_tools": {
+      "description": "Tools the session may not use, by Claude Code's tool names (`WebFetch`,\n`WebSearch`, `Bash(curl:*)`, …). Passed as `--disallowedTools`, merged\nwith the `AskUserQuestion` entry an unattended session always carries.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "base_command_override": {
       "title": "Base Command Override",
       "description": "Override the base command with a custom command",

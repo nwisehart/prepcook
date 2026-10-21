@@ -50,10 +50,13 @@ shipped variants are listed under [Coding agents](#coding-agents), and
 | `agents.stages.reviewing` | unset (`executor_profile` with the economy variant) | **Reviewing**: the independent review session. A fresh review started from a workspace defaults to it when it is set. |
 | `agents.stages.comment_reply` | unset (`executor_profile` with the economy variant) | **Comment replies**: answers to comments on shipped tickets (the `comment_reply` playbook). |
 | `agents.stages.pattern` | unset (`executor_profile` with the economy variant) | **Pattern reviews**: the `pattern:planning` session and the `rca_analysis` runs that link RCAs into the graph. |
+| `agents.external` | unset (the planning profile's agent with its guarded variant: Claude Code `GUARDED`; the planning profile itself for an agent with none) | **Externally filed cards**: the profile Planning runs for a card filed from outside the team — any card with an `origin` (the card API, Tammy, an incident) and a GitHub issue whose author is not an owner, member or collaborator. Executing and Reviewing are unaffected ([method.md](method.md#cards-from-outside-the-team)). |
 
 A stage resolves, most specific first: the board's `agents.stages.<stage>`, the
 global `agents.stages.<stage>`, then the stage's default built from the
-board's `executor_profile`, else the global one. A follow-up continues its
+board's `executor_profile`, else the global one. `agents.external` resolves
+the same way, the board's then the global one, its default built from the
+resolved planning profile. A follow-up continues its
 session's conversation, so it can change variant but not agent: a stage moved
 to another agent takes effect from that stage's next new session.
 
@@ -160,7 +163,7 @@ Generated from the agents' descriptors. `executor_profile` and every `agents.sta
 
 | `executor` | Command | Signs in | MCP servers | Variants |
 | --- | --- | --- | --- | --- |
-| `CLAUDE_CODE` (Claude Code) | `claude` | Run `claude` once and sign in, or set `ANTHROPIC_API_KEY` (billed per token instead of the subscription). | Per session, on its command line, on top of its own | `DEFAULT`, `SONNET` (economy) |
+| `CLAUDE_CODE` (Claude Code) | `claude` | Run `claude` once and sign in, or set `ANTHROPIC_API_KEY` (billed per token instead of the subscription). | Per session, on its command line, on top of its own | `DEFAULT`, `GUARDED` (guarded), `SONNET` (economy) |
 | `AMP` (Amp) | `npx -y @sourcegraph/amp@latest` | Run `amp login` once, or set `AMP_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `GEMINI` (Gemini CLI) | `npx -y @google/gemini-cli@0.29.3` | Run `gemini` once and sign in with Google, or set `GEMINI_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `CODEX` (Codex) | `npx -y @openai/codex@0.124.0` | Run `codex login` once, or set `CODEX_API_KEY`. | Per session, on its command line, on top of its own | `DEFAULT` |
@@ -169,6 +172,12 @@ Generated from the agents' descriptors. `executor_profile` and every `agents.sta
 | `QWEN_CODE` (Qwen Code) | `npx -y @qwen-code/qwen-code@0.9.1` | Run `qwen` once and sign in, or set `OPENAI_API_KEY` for an OpenAI-compatible endpoint. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `COPILOT` (GitHub Copilot CLI) | `npx -y @github/copilot@0.0.403` | Run `copilot` once and use `/login`, or set `GH_TOKEN` to a token with Copilot access. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `DROID` (Droid) | `droid` | Run `droid` once and sign in, or set `FACTORY_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+
+The `agents` section's other settings, from the same descriptors; each is also a key of a board's `agents`, which wins over the global one.
+
+| Key | What it is |
+| --- | --- |
+| `agents.external` | **Externally filed cards**. Planning profile for cards filed from outside the team (API, public issues). Unset, the planning profile's agent with its guarded variant, which narrows the agent's own tools and does not confine its shell: Claude Code (`GUARDED`). Amp, Gemini CLI, Codex, OpenCode, Cursor Agent, Qwen Code, GitHub Copilot CLI and Droid can express nothing comparable and plan these cards under the planning profile unchanged. |
 
 ### Evidence sources
 
@@ -353,6 +362,7 @@ empty inherits the global value.
 | `label` | unset | **Board label**: tagged on its RCAs as `board:<label>`. |
 | `executor_profile` | unset (inherit) | **Default agent**: the profile this board's stages start from. |
 | `agents.stages.<stage>` | unset (inherit) | **Planning**, **Executing**, **Reviewing**, **Comment replies**, **Pattern reviews**: this board's profile for that stage, over the global one ([Agents](#agents)). |
+| `agents.external` | unset (inherit) | *File only.* This board's profile for planning externally filed cards, over the global one ([Agents](#agents)). |
 | `autonomy` | unset (inherit) | Autonomy for this board. |
 | `autonomy_review_iterations` | unset (inherit) | Review-fix rounds for this board. |
 | `pattern_threshold` | unset (inherit) | Pattern-review threshold for this board (`investigation_threshold` in older configs). |

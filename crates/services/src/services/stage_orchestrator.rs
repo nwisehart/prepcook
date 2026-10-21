@@ -674,6 +674,21 @@ fn stage_executor_config(settings: &EffectiveProjectSettings, stage: AgentStage)
     settings.agents.get(stage).clone().into()
 }
 
+/// The executor a board-column launch's first session runs: its stage
+/// agent's profile, or `agents.external` when Planning a card filed from
+/// outside the team (see [`crate::services::agents::StageAgents::for_launch`]).
+fn launch_executor_config(
+    settings: &EffectiveProjectSettings,
+    stage: Stage,
+    metadata: &IssueExtMetadata,
+) -> ExecutorConfig {
+    settings
+        .agents
+        .for_launch(launch_agent_stage(stage, metadata), metadata)
+        .clone()
+        .into()
+}
+
 /// The agent a board-column launch runs as. A pattern review plans in the
 /// Plan column but is the pattern agent's work, as its playbook is.
 fn launch_agent_stage(stage: Stage, metadata: &IssueExtMetadata) -> AgentStage {
@@ -5317,6 +5332,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         if stage == Stage::Planning
             && let serde_json::Value::Object(map) = &mut claimed_metadata
         {
+            // Whether this plan runs under `agents.external`, for the card to
+            // say so; a re-plan under the planning profile clears it.
+            if settings
+                .agents
+                .plans_guarded(launch_agent_stage(stage, &metadata), &metadata)
+            {
+                map.insert("planned_guarded".to_string(), serde_json::Value::Bool(true));
+            } else {
+                map.remove("planned_guarded");
+            }
             map.remove("planning");
             if let Some(serde_json::Value::Object(spec)) = map.get_mut("spec") {
                 spec.remove("approved_at");
@@ -5401,7 +5426,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                             settings,
                             issue,
                             &prompt,
-                            launch_agent_stage(stage, &metadata),
+                            launch_executor_config(settings, stage, &metadata),
                         )
                         .await
                     }
@@ -11688,7 +11713,13 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             let prompt = interpolate_playbook(&template, issue, &metadata, &context)
                 .replace("{{comments}}", tracker::format_comments(&fresh).trim());
             match self
-                .launch_workspace(client, settings, issue, &prompt, AgentStage::CommentReply)
+                .launch_workspace(
+                    client,
+                    settings,
+                    issue,
+                    &prompt,
+                    stage_executor_config(settings, AgentStage::CommentReply),
+                )
                 .await
             {
                 Ok(_) => {
@@ -11715,22 +11746,18 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
     /// Same internal path as the `create_and_start_workspace` route:
     /// workspace record, repo worktrees, container start, remote issue link.
-    /// The session runs `stage`'s profile.
+    /// The session runs `executor`.
     async fn launch_workspace(
         &self,
         client: &RemoteClient,
         settings: &EffectiveProjectSettings,
         issue: &Issue,
         prompt: &str,
-        stage: AgentStage,
+        executor: ExecutorConfig,
     ) -> Result<Workspace, StageOrchestratorError> {
         let workspace = self.create_launch_workspace(settings, issue).await?;
         self.container
-            .start_workspace(
-                &workspace,
-                stage_executor_config(settings, stage),
-                prompt.to_string(),
-            )
+            .start_workspace(&workspace, executor, prompt.to_string())
             .await?;
         self.link_launch_workspace(client, settings, issue, &workspace)
             .await;
@@ -11910,10 +11937,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     })?;
                 (
                     workspace,
-                    PendingStart::NewWorkspace(stage_executor_config(
-                        settings,
-                        launch_agent_stage(stage, metadata),
-                    )),
+                    PendingStart::NewWorkspace(launch_executor_config(settings, stage, metadata)),
                     prompt,
                 )
             }
@@ -14452,6 +14476,34 @@ mod tests {
         }
         assert_eq!(
             stage_executor_config(&settings, AgentStage::Planning).variant,
+            None
+        );
+    }
+
+    /// A card filed through the API plans under the guarded profile; its
+    /// later stages, and a card the owner made, launch as before.
+    #[test]
+    fn an_externally_filed_card_plans_under_the_external_profile() {
+        let settings = Config::default().project_settings(Uuid::new_v4());
+        let filed = IssueExtMetadata::from_value(&json!({
+            "work_class": "bug",
+            "origin": { "kind": "api", "ref": "support-123" }
+        }));
+        let own = IssueExtMetadata::from_value(&json!({ "work_class": "bug" }));
+        assert_eq!(
+            launch_executor_config(&settings, Stage::Planning, &filed)
+                .variant
+                .as_deref(),
+            Some("GUARDED")
+        );
+        assert_eq!(
+            launch_executor_config(&settings, Stage::Executing, &filed)
+                .variant
+                .as_deref(),
+            Some("SONNET")
+        );
+        assert_eq!(
+            launch_executor_config(&settings, Stage::Planning, &own).variant,
             None
         );
     }

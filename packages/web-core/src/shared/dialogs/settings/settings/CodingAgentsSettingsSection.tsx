@@ -5,6 +5,7 @@ import { cloneDeep, isEqual } from 'lodash';
 import { useQueries } from '@tanstack/react-query';
 import type {
   AgentDescriptor,
+  AgentsConfig,
   AvailabilityInfo,
   ExecutorProfileId,
   StageProfiles,
@@ -24,7 +25,9 @@ import { useSettingsDirty } from './SettingsDirtyContext';
 import { useIntegrationDescriptors } from './IntegrationSection';
 import {
   EMPTY_STAGE_PROFILES,
+  ProfileSelect,
   StageProfileFields,
+  externalDefault,
   parseProfileKey,
   profileKey,
   stageDefault,
@@ -33,9 +36,16 @@ import {
 
 export const AGENTS_AREA = 'agents';
 
+/** The agents area's descriptor for the `agents` section's own settings. */
+const AGENT_SETTINGS_KIND = 'settings';
+
+/** The `agents` keys the settings descriptor names, beside `stages`. */
+type AgentSettingKey = Exclude<keyof AgentsConfig, 'stages'>;
+
 interface Draft {
   executor_profile: ExecutorProfileId;
   stages: StageProfiles;
+  settings: Pick<AgentsConfig, AgentSettingKey>;
 }
 
 /** Every coding agent's own descriptor, from the `agents` area. */
@@ -60,6 +70,13 @@ export function CodingAgentsSettingsSection() {
   const { config, loading, profiles, updateAndSaveConfig } = useUserSystem();
   const descriptorsQuery = useIntegrationDescriptors();
   const agents = useAgentDescriptors();
+  const settingsFields = useMemo(
+    () =>
+      descriptorsQuery.data?.[AGENTS_AREA]?.find(
+        (descriptor) => descriptor.kind === AGENT_SETTINGS_KIND
+      )?.fields ?? [],
+    [descriptorsQuery.data]
+  );
   const profileOptions = useProfileOptions(profiles);
 
   const saved: Draft | null = useMemo(
@@ -68,6 +85,7 @@ export function CodingAgentsSettingsSection() {
         ? {
             executor_profile: config.executor_profile,
             stages: { ...EMPTY_STAGE_PROFILES, ...config.agents?.stages },
+            settings: { external: config.agents?.external ?? null },
           }
         : null,
     [config]
@@ -129,7 +147,7 @@ export function CodingAgentsSettingsSection() {
     try {
       await updateAndSaveConfig({
         executor_profile: draft.executor_profile,
-        agents: { ...config?.agents, stages: draft.stages },
+        agents: { ...config?.agents, ...draft.settings, stages: draft.stages },
       });
       setDirty(false);
       setSuccess(true);
@@ -214,6 +232,39 @@ export function CodingAgentsSettingsSection() {
             setDraft((prev) => (prev ? { ...prev, stages } : prev));
           }}
         />
+        {settingsFields
+          .filter((field) => field.kind.type === 'profile')
+          .map((field) => {
+            const key = field.key as AgentSettingKey;
+            const planning =
+              draft.stages.planning ??
+              stageDefault('planning', draft.executor_profile, agents);
+            return (
+              <SettingsField
+                key={field.key}
+                label={field.label}
+                description={field.help}
+              >
+                <ProfileSelect
+                  value={draft.settings[key]}
+                  inherited={externalDefault(planning, agents)}
+                  inheritLabel={t('settings.codingAgents.stages.inherit')}
+                  options={profileOptions}
+                  onChange={(profile) => {
+                    setDirty(true);
+                    setDraft((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            settings: { ...prev.settings, [key]: profile },
+                          }
+                        : prev
+                    );
+                  }}
+                />
+              </SettingsField>
+            );
+          })}
       </SettingsCard>
 
       <SettingsCard
@@ -273,7 +324,9 @@ export function CodingAgentsSettingsSection() {
                         .map((variant) =>
                           variant === agent.economy_variant
                             ? t('settings.codingAgents.economy', { variant })
-                            : variant
+                            : variant === agent.guarded_variant
+                              ? t('settings.codingAgents.guarded', { variant })
+                              : variant
                         )
                         .join(', ')}
                     </dd>

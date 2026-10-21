@@ -435,6 +435,7 @@
       "mcp": "MCP servers",
       "variants": "Variants",
       "economy": "{{variant}} (economy)",
+      "guarded": "{{variant}} (guarded)",
       "builtIn": "Built in",
       "mcpWiring": {
         "per_session": "Per session, on its command line, on top of its own",

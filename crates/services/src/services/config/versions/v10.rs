@@ -958,6 +958,12 @@ pub struct StageProfiles {
 pub struct AgentsConfig {
     #[serde(default)]
     pub stages: StageProfiles,
+    /// The profile Planning runs for a card filed from outside the team (see
+    /// `IssueExtMetadata::is_filed_externally`). Unset, the planning profile's
+    /// agent with its guarded variant, or the planning profile itself for an
+    /// agent that has none (see `services::agents`).
+    #[serde(default)]
+    pub external: Option<ExecutorProfileId>,
 }
 
 /// Per-project defaults the orchestrator uses when auto-launching playbook
@@ -1544,8 +1550,7 @@ impl Config {
             .executor_profile
             .clone()
             .unwrap_or_else(|| self.executor_profile.clone());
-        let agents =
-            StageAgents::resolve(&board.agents.stages, &self.agents.stages, &executor_profile);
+        let agents = StageAgents::resolve(&board.agents, &self.agents, &executor_profile);
 
         EffectiveProjectSettings {
             project_id,

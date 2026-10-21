@@ -89,6 +89,13 @@ curl -sS -X POST "http://localhost:$PORT/api/cards" \
 }
 ```
 
+A filed card counts as coming from outside the team: its Planning session runs
+under `agents.external`, by default the planning profile's agent with its
+guarded variant (Claude Code's `GUARDED`, without `WebFetch` and `WebSearch`),
+and its later stages under their usual profiles
+([method.md](method.md#cards-from-outside-the-team)). The same goes for a GitHub
+issue imported from someone outside the repository's team.
+
 | Status | When |
 | --- | --- |
 | 201 | Filed. |

@@ -895,6 +895,17 @@ attachments?: Array<CardAttachment>,
  */
 external?: JsonValue | null, 
 /**
+ * The ticket's author is outside the team: a public issue whose author
+ * is not an owner, member or collaborator of the repository. Recorded at
+ * intake when the tracker says; see [`Self::is_filed_externally`].
+ */
+filed_externally?: boolean, 
+/**
+ * Planning ran under `agents.external`, a profile other than the board's
+ * planning profile, because the card was filed from outside the team.
+ */
+planned_guarded?: boolean, 
+/**
  * An investigation's finished triage; see [`TriageRecord`].
  */
 triage?: TriageRecord | null, 
@@ -1546,7 +1557,7 @@ export type Field = {
  */
 key: string, label: string, kind: FieldKind, required: boolean, help: string, };
 
-export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<string>, } | { "type": "bool" } | { "type": "number" };
+export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<string>, } | { "type": "bool" } | { "type": "number" } | { "type": "profile" };
 
 export type TestOutcome = { ok: boolean, message: string, };
 
@@ -1578,11 +1589,26 @@ variants: Array<string>,
  * to when the configured profile names no variant. `None` when the
  * agent ships no such variant.
  */
-economy_variant: string | null, docs_url: string, };
+economy_variant: string | null, 
+/**
+ * The variant that plans a card filed from outside the team when
+ * `agents.external` names no profile: the agent's own tools narrowed to
+ * what reproducing a report needs. `None` when the agent's config can
+ * express nothing comparable; such a card then plans under the planning
+ * profile unchanged.
+ */
+guarded_variant: string | null, docs_url: string, };
 
 export type McpWiring = "per_session" | "agent_config" | "unsupported";
 
-export type AgentsConfig = { stages: StageProfiles, };
+export type AgentsConfig = { stages: StageProfiles, 
+/**
+ * The profile Planning runs for a card filed from outside the team (see
+ * `IssueExtMetadata::is_filed_externally`). Unset, the planning profile's
+ * agent with its guarded variant, or the planning profile itself for an
+ * agent that has none (see `services::agents`).
+ */
+external: ExecutorProfileId | null, };
 
 export type StageProfiles = { 
 /**
@@ -2037,7 +2063,13 @@ export enum BaseAgentCapability { SESSION_FORK = "SESSION_FORK", SETUP_HELPER = 
 
 export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
-export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, effort?: ClaudeEffort | null, agent?: string | null, dangerously_skip_permissions?: boolean | null, disable_api_key?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
+export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, effort?: ClaudeEffort | null, agent?: string | null, dangerously_skip_permissions?: boolean | null, disable_api_key?: boolean | null, 
+/**
+ * Tools the session may not use, by Claude Code's tool names (`WebFetch`,
+ * `WebSearch`, `Bash(curl:*)`, …). Passed as `--disallowedTools`, merged
+ * with the `AskUserQuestion` entry an unattended session always carries.
+ */
+disallowed_tools?: Array<string>, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
 export type Gemini = { append_prompt: AppendPrompt, model?: string | null, yolo?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 

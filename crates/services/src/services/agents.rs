@@ -7,14 +7,24 @@
 //! the global one). Planning runs that profile as it is; every other stage
 //! takes the agent's economy variant when the profile names no variant (see
 //! [`economy_variant_of`]).
+//!
+//! A card filed from outside the team plans under `agents.external` instead
+//! (the board's, then the global one), which defaults to the planning
+//! profile's agent with its guarded variant ([`guarded_variant_of`]): the
+//! agent's own tools narrowed, never the shell confined. Executing and
+//! Reviewing are unaffected.
 
+use api_types::IssueExtMetadata;
 use executors::{
-    descriptor::{self as agent_descriptor, economy_variant_of},
+    descriptor::{self as agent_descriptor, economy_variant_of, guarded_variant_of},
     executors::BaseCodingAgent,
     profile::ExecutorProfileId,
 };
 
-use crate::services::{config::StageProfiles, integrations::Descriptor};
+use crate::services::{
+    config::{AgentsConfig, StageProfiles},
+    integrations::{Descriptor, Field, FieldKind},
+};
 
 /// The integration area name the descriptors route keys the agents under.
 pub const AREA: &str = "agents";
@@ -94,31 +104,60 @@ pub struct StageAgents {
     pub reviewing: ExecutorProfileId,
     pub comment_reply: ExecutorProfileId,
     pub pattern: ExecutorProfileId,
+    /// Planning for a card filed from outside the team.
+    pub external: ExecutorProfileId,
 }
 
 impl StageAgents {
     /// Resolves each stage: the board's override, then the global one, then
     /// the stage's default built from `default` (the board's default profile,
-    /// already resolved against the global one).
+    /// already resolved against the global one). `external` resolves the same
+    /// way, its default built from the resolved planning profile.
     pub fn resolve(
-        board: &StageProfiles,
-        global: &StageProfiles,
+        board: &AgentsConfig,
+        global: &AgentsConfig,
         default: &ExecutorProfileId,
     ) -> Self {
         let resolve = |stage: AgentStage| {
             board
+                .stages
                 .get(stage)
-                .or_else(|| global.get(stage))
+                .or_else(|| global.stages.get(stage))
                 .cloned()
                 .unwrap_or_else(|| stage.default_profile(default))
         };
+        let planning = resolve(AgentStage::Planning);
+        let external = board
+            .external
+            .as_ref()
+            .or(global.external.as_ref())
+            .cloned()
+            .unwrap_or_else(|| guarded_variant_of(&planning));
         Self {
-            planning: resolve(AgentStage::Planning),
+            planning,
             executing: resolve(AgentStage::Executing),
             reviewing: resolve(AgentStage::Reviewing),
             comment_reply: resolve(AgentStage::CommentReply),
             pattern: resolve(AgentStage::Pattern),
+            external,
         }
+    }
+
+    /// The profile a launch of `stage` runs for this card: the stage's own,
+    /// except Planning for a card filed from outside the team, which runs
+    /// [`Self::external`].
+    pub fn for_launch(&self, stage: AgentStage, card: &IssueExtMetadata) -> &ExecutorProfileId {
+        if stage == AgentStage::Planning && card.is_filed_externally() {
+            &self.external
+        } else {
+            self.get(stage)
+        }
+    }
+
+    /// Whether this launch runs a profile other than the stage's own because
+    /// the card was filed from outside the team, which the card then records.
+    pub fn plans_guarded(&self, stage: AgentStage, card: &IssueExtMetadata) -> bool {
+        self.for_launch(stage, card) != self.get(stage)
     }
 
     pub fn get(&self, stage: AgentStage) -> &ExecutorProfileId {
@@ -132,10 +171,15 @@ impl StageAgents {
     }
 }
 
-/// Every coding agent as an integration descriptor: no fields to configure,
-/// the agent's own description under `agent`.
+/// The `kind` of the agents area's one descriptor that is not an agent: the
+/// `agents` section's own settings, rendered as fields.
+pub const SETTINGS_KIND: &str = "settings";
+
+/// Every coding agent as an integration descriptor (no fields to configure,
+/// the agent's own description under `agent`), then the `agents` section's
+/// own settings as [`SETTINGS_KIND`].
 pub fn descriptors() -> Vec<Descriptor> {
-    agent_descriptor::descriptors()
+    let mut all: Vec<Descriptor> = agent_descriptor::descriptors()
         .into_iter()
         .map(|agent| Descriptor {
             kind: agent.executor.to_string(),
@@ -147,7 +191,78 @@ pub fn descriptors() -> Vec<Descriptor> {
             available: true,
             agent: Some(agent),
         })
-        .collect()
+        .collect();
+    all.push(settings_descriptor());
+    all
+}
+
+/// The `agents` section's settings beyond the per-stage profiles, each a key
+/// of `agents` (and of a board's `agents`).
+pub fn settings_descriptor() -> Descriptor {
+    Descriptor::new(
+        SETTINGS_KIND,
+        "Agent settings",
+        "How the orchestrator picks a profile beyond the per-stage ones.",
+        vec![Field::new(
+            "external",
+            "Externally filed cards",
+            FieldKind::Profile,
+            false,
+            &external_help(&agent_descriptor::descriptors()),
+        )],
+        "https://github.com/nwisehart/prepcook/blob/main/docs/configuration.md#agents",
+    )
+}
+
+/// The `external` field's help: what it is for, and what each agent falls
+/// back to when it is unset, from whether the agent ships a guarded variant.
+fn external_help(agents: &[agent_descriptor::AgentDescriptor]) -> String {
+    let guarded: Vec<String> = agents
+        .iter()
+        .filter_map(|agent| {
+            agent
+                .guarded_variant
+                .as_ref()
+                .map(|variant| format!("{} (`{variant}`)", agent.display_name))
+        })
+        .collect();
+    let unguarded: Vec<&str> = agents
+        .iter()
+        .filter(|agent| agent.guarded_variant.is_none())
+        .map(|agent| agent.display_name.as_str())
+        .collect();
+    let mut help = "Planning profile for cards filed from outside the team (API, public issues). \
+                    Unset, the planning profile's agent with its guarded variant, which narrows \
+                    the agent's own tools and does not confine its shell"
+        .to_string();
+    if !guarded.is_empty() {
+        help.push_str(&format!(": {}", names(&guarded)));
+    }
+    help.push('.');
+    if !unguarded.is_empty() {
+        help.push_str(&format!(
+            " {} can express nothing comparable and plan these cards under the planning profile \
+             unchanged.",
+            names(&unguarded)
+        ));
+    }
+    help
+}
+
+/// "A", "A and B", "A, B and C".
+fn names<S: AsRef<str>>(items: &[S]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.as_ref().to_string(),
+        [rest @ .., last] => format!(
+            "{} and {}",
+            rest.iter()
+                .map(AsRef::as_ref)
+                .collect::<Vec<_>>()
+                .join(", "),
+            last.as_ref()
+        ),
+    }
 }
 
 /// The Test button: the agent's version probe on this machine.
@@ -166,7 +281,7 @@ pub async fn test_agent(kind: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::config::{AgentsConfig, Config, ProjectAutomationDefaults};
+    use crate::services::config::{Config, ProjectAutomationDefaults};
 
     fn profile(executor: BaseCodingAgent, variant: Option<&str>) -> ExecutorProfileId {
         ExecutorProfileId {
@@ -224,6 +339,7 @@ mod tests {
                     pattern: Some(profile(BaseCodingAgent::Amp, None)),
                     ..Default::default()
                 },
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -253,10 +369,8 @@ mod tests {
             assert_eq!(
                 agents.get(stage),
                 StageAgents::resolve(
-                    &config.orchestrator.project_defaults[&board_id.to_string()]
-                        .agents
-                        .stages,
-                    &config.agents.stages,
+                    &config.orchestrator.project_defaults[&board_id.to_string()].agents,
+                    &config.agents,
                     &claude(None),
                 )
                 .get(stage)
@@ -282,6 +396,7 @@ mod tests {
         // A config without the section reads as no overrides.
         let empty: AgentsConfig = serde_json::from_value(serde_json::json!({})).unwrap();
         assert_eq!(empty, AgentsConfig::default());
+        assert_eq!(empty.external, None);
         let keys: Vec<&str> = AgentStage::ALL.iter().map(|stage| stage.key()).collect();
         let written = serde_json::to_value(StageProfiles::default()).unwrap();
         let mut written: Vec<&str> = written
@@ -296,10 +411,196 @@ mod tests {
         assert_eq!(written, sorted);
     }
 
+    fn card(metadata: serde_json::Value) -> IssueExtMetadata {
+        IssueExtMetadata::from_value(&metadata)
+    }
+
+    /// Which profile plans a card, by where the card came from.
+    #[test]
+    fn externally_filed_cards_plan_under_the_external_profile() {
+        let agents = Config::default()
+            .project_settings(uuid::Uuid::new_v4())
+            .agents;
+        let guarded = claude(Some("GUARDED"));
+        assert_eq!(agents.external, guarded);
+
+        let tammy = card(serde_json::json!({
+            "work_class": "investigation",
+            "origin": { "kind": "tammy", "ref": "https://acme.slack.com/archives/C1/p1" }
+        }));
+        let api = card(serde_json::json!({
+            "work_class": "bug",
+            "origin": { "kind": "api", "ref": "ticket-9" }
+        }));
+        let outside_issue = card(serde_json::json!({
+            "work_class": "bug",
+            "jira": { "key": "acme/widgets#12" },
+            "filed_externally": true
+        }));
+        let owners_issue = card(serde_json::json!({
+            "work_class": "bug",
+            "jira": { "key": "acme/widgets#13" }
+        }));
+        let jira = card(serde_json::json!({
+            "work_class": "bug",
+            "jira": { "key": "PC-42", "issue_type": "Bug" }
+        }));
+        let made_on_the_board = card(serde_json::json!({ "work_class": "bug" }));
+
+        for (name, metadata) in [
+            ("tammy", &tammy),
+            ("api", &api),
+            ("public issue", &outside_issue),
+        ] {
+            assert_eq!(
+                agents.for_launch(AgentStage::Planning, metadata),
+                &guarded,
+                "{name}"
+            );
+            assert!(
+                agents.plans_guarded(AgentStage::Planning, metadata),
+                "{name}"
+            );
+            // Executing and Reviewing run their own profiles whoever filed it.
+            for stage in [AgentStage::Executing, AgentStage::Reviewing] {
+                assert_eq!(
+                    agents.for_launch(stage, metadata),
+                    agents.get(stage),
+                    "{name}"
+                );
+                assert!(!agents.plans_guarded(stage, metadata), "{name}");
+            }
+        }
+        for (name, metadata) in [
+            ("owner's issue", &owners_issue),
+            ("jira", &jira),
+            ("board", &made_on_the_board),
+        ] {
+            assert_eq!(
+                agents.for_launch(AgentStage::Planning, metadata),
+                &agents.planning,
+                "{name}"
+            );
+            assert!(
+                !agents.plans_guarded(AgentStage::Planning, metadata),
+                "{name}"
+            );
+        }
+    }
+
+    /// `agents.external` resolves board, then global, then the planning
+    /// profile's guarded variant; an agent without one plans external cards
+    /// under the planning profile, and nothing is recorded as guarded.
+    #[test]
+    fn the_external_profile_resolves_board_then_global_then_the_guarded_variant() {
+        let api = card(serde_json::json!({ "origin": { "kind": "api", "ref": "x" } }));
+
+        let mut config = Config::default();
+        config.agents.stages.planning = Some(claude(Some("SONNET")));
+        let agents = config.project_settings(uuid::Uuid::new_v4()).agents;
+        assert_eq!(agents.external, claude(Some("GUARDED")));
+
+        config.agents.external = Some(profile(BaseCodingAgent::Gemini, None));
+        let board_id = uuid::Uuid::new_v4();
+        let board = ProjectAutomationDefaults {
+            agents: AgentsConfig {
+                external: Some(claude(Some("DEFAULT"))),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        config
+            .orchestrator
+            .project_defaults
+            .insert(board_id.to_string(), board);
+        assert_eq!(
+            config
+                .project_settings(uuid::Uuid::new_v4())
+                .agents
+                .external,
+            profile(BaseCodingAgent::Gemini, None)
+        );
+        assert_eq!(
+            config.project_settings(board_id).agents.external,
+            claude(Some("DEFAULT"))
+        );
+
+        let codex = Config {
+            executor_profile: profile(BaseCodingAgent::Codex, None),
+            ..Default::default()
+        }
+        .project_settings(uuid::Uuid::new_v4())
+        .agents;
+        assert_eq!(codex.external, codex.planning);
+        assert_eq!(
+            codex.for_launch(AgentStage::Planning, &api),
+            &codex.planning
+        );
+        assert!(!codex.plans_guarded(AgentStage::Planning, &api));
+    }
+
+    /// The settings descriptor's fields are keys of `agents`, the saved
+    /// value reads back, and a config saved without the key reads as unset.
+    #[test]
+    fn the_external_field_round_trips_through_its_descriptor_and_the_config() {
+        let descriptor = settings_descriptor();
+        let written = serde_json::to_value(AgentsConfig::default()).unwrap();
+        for field in &descriptor.fields {
+            assert!(
+                written.get(&field.key).is_some(),
+                "{} is not an agents key",
+                field.key
+            );
+            assert_eq!(field.kind, FieldKind::Profile);
+        }
+        let external = &descriptor.fields[0];
+        assert!(external.help.starts_with(
+            "Planning profile for cards filed from outside the team (API, public issues)."
+        ));
+        assert!(external.help.contains("Claude Code (`GUARDED`)"));
+        assert!(external.help.contains("Codex"));
+        assert!(external.help.contains("planning profile unchanged"));
+        assert!(external.help.contains("does not confine its shell"));
+        assert!(descriptors().iter().any(|d| d.kind == SETTINGS_KIND));
+
+        assert_eq!(external.key, "external");
+        let saved = serde_json::json!({
+            "stages": {},
+            "external": { "executor": "CLAUDE_CODE", "variant": "GUARDED" }
+        });
+        let parsed: AgentsConfig = serde_json::from_value(saved.clone()).unwrap();
+        assert_eq!(parsed.external, Some(claude(Some("GUARDED"))));
+        assert_eq!(
+            serde_json::to_value(&parsed).unwrap()["external"],
+            saved["external"]
+        );
+
+        // A config file saved before the key existed.
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        raw["agents"] = serde_json::json!({ "stages": { "planning": { "executor": "CODEX" } } });
+        let config = Config::from(raw.to_string());
+        assert_eq!(config.agents.external, None);
+        assert_eq!(
+            config.agents.stages.planning,
+            Some(profile(BaseCodingAgent::Codex, None))
+        );
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        raw.as_object_mut().unwrap().remove("agents");
+        let config = Config::from(raw.to_string());
+        assert_eq!(config.agents, AgentsConfig::default());
+        assert_eq!(
+            config
+                .project_settings(uuid::Uuid::new_v4())
+                .agents
+                .external,
+            claude(Some("GUARDED"))
+        );
+    }
+
     #[test]
     fn every_agent_is_described_and_unknown_kinds_fail_the_test() {
         let described = descriptors();
-        assert_eq!(described.len(), BaseCodingAgent::all().len());
+        assert_eq!(described.len(), BaseCodingAgent::all().len() + 1);
         let claude = described
             .iter()
             .find(|descriptor| descriptor.kind == "CLAUDE_CODE")

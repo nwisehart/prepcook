@@ -162,6 +162,11 @@ pub struct ClaudeCode {
     pub dangerously_skip_permissions: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disable_api_key: Option<bool>,
+    /// Tools the session may not use, by Claude Code's tool names (`WebFetch`,
+    /// `WebSearch`, `Bash(curl:*)`, …). Passed as `--disallowedTools`, merged
+    /// with the `AskUserQuestion` entry an unattended session always carries.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disallowed_tools: Vec<String>,
     #[serde(flatten)]
     pub cmd: CmdOverrides,
 
@@ -186,6 +191,7 @@ impl ClaudeCode {
             "https://docs.anthropic.com/en/docs/claude-code/overview",
         )
         .with_economy_variant("SONNET")
+        .with_guarded_variant("GUARDED")
     }
 
     async fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
@@ -237,8 +243,9 @@ impl ClaudeCode {
                 "--permission-mode={}",
                 PermissionMode::BypassPermissions
             )]);
-        } else {
-            builder = builder.extend_params(["--disallowedTools=AskUserQuestion"]);
+        }
+        if let Some(disallowed) = self.disallowed_tools_arg(plan || approvals) {
+            builder = builder.extend_params([disallowed]);
         }
         if self.dangerously_skip_permissions.unwrap_or(false) {
             builder = builder.extend_params(["--dangerously-skip-permissions"]);
@@ -261,6 +268,23 @@ impl ClaudeCode {
         ]);
 
         apply_overrides(builder, &self.cmd)
+    }
+
+    /// `--disallowedTools=<comma list>`: the configured tools, after
+    /// `AskUserQuestion` when nobody can answer one (no plan or approvals
+    /// session), each once. `None` when the list is empty.
+    fn disallowed_tools_arg(&self, interactive: bool) -> Option<String> {
+        let mut tools: Vec<&str> = Vec::new();
+        if !interactive {
+            tools.push("AskUserQuestion");
+        }
+        for tool in &self.disallowed_tools {
+            let tool = tool.trim();
+            if !tool.is_empty() && !tools.contains(&tool) {
+                tools.push(tool);
+            }
+        }
+        (!tools.is_empty()).then(|| format!("--disallowedTools={}", tools.join(",")))
     }
 
     pub fn permission_mode(&self) -> PermissionMode {
@@ -3274,6 +3298,7 @@ mod tests {
             },
             approvals_service: None,
             disable_api_key: None,
+            disallowed_tools: Vec::new(),
         };
         let msg_store = Arc::new(MsgStore::new());
         let current_dir = std::path::PathBuf::from("/tmp/test-worktree");
@@ -3657,5 +3682,75 @@ mod tests {
             .position(|arg| arg == "--add-dir")
             .expect("--add-dir on the command line");
         assert_eq!(args[flag + 1], "/opt/prepcook data/agent-skills");
+    }
+
+    fn disallowed_tools_args(config: serde_json::Value) -> Vec<String> {
+        let executor: ClaudeCode = serde_json::from_value(config).unwrap();
+        let parts = executor
+            .build_command_builder_with(None, None)
+            .unwrap()
+            .build_initial()
+            .unwrap();
+        parts
+            .args()
+            .iter()
+            .filter(|arg| arg.starts_with("--disallowedTools"))
+            .cloned()
+            .collect()
+    }
+
+    /// The configured tools reach the command line as one flag, after the
+    /// `AskUserQuestion` entry an unattended session always carries, each
+    /// once; a plan or approvals session, where a person can answer a
+    /// question, carries only the configured ones.
+    #[test]
+    fn disallowed_tools_merge_with_ask_user_question() {
+        assert_eq!(
+            disallowed_tools_args(serde_json::json!({})),
+            ["--disallowedTools=AskUserQuestion"]
+        );
+        assert_eq!(
+            disallowed_tools_args(serde_json::json!({
+                "disallowed_tools": ["WebFetch", "WebSearch", "AskUserQuestion", " ", "WebFetch"]
+            })),
+            ["--disallowedTools=AskUserQuestion,WebFetch,WebSearch"]
+        );
+        assert_eq!(
+            disallowed_tools_args(serde_json::json!({
+                "approvals": true,
+                "disallowed_tools": ["WebFetch"]
+            })),
+            ["--disallowedTools=WebFetch"]
+        );
+        assert!(disallowed_tools_args(serde_json::json!({ "plan": true })).is_empty());
+    }
+
+    /// The shipped `GUARDED` variant: web tools off, permissions not skipped,
+    /// no plan or approvals session.
+    #[test]
+    fn the_guarded_variant_drops_the_web_tools_and_keeps_permissions() {
+        let profiles = crate::profile::ExecutorConfigs::from_defaults();
+        let guarded = profiles
+            .get_coding_agent(&crate::profile::ExecutorProfileId::with_variant(
+                BaseCodingAgent::ClaudeCode,
+                "GUARDED".to_string(),
+            ))
+            .expect("a GUARDED Claude Code variant");
+        let crate::executors::CodingAgent::ClaudeCode(claude) = guarded else {
+            panic!("GUARDED is a Claude Code profile");
+        };
+        assert_eq!(claude.disallowed_tools, ["WebFetch", "WebSearch"]);
+        assert_ne!(claude.dangerously_skip_permissions, Some(true));
+        assert_ne!(claude.plan, Some(true));
+        assert_ne!(claude.approvals, Some(true));
+        let args = claude
+            .build_command_builder_with(None, None)
+            .unwrap()
+            .build_initial()
+            .unwrap()
+            .args()
+            .to_vec();
+        assert!(args.contains(&"--disallowedTools=AskUserQuestion,WebFetch,WebSearch".to_string()));
+        assert!(!args.contains(&"--dangerously-skip-permissions".to_string()));
     }
 }

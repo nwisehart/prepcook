@@ -781,6 +781,7 @@ impl TrackerWatcherService {
             }),
             epic_key,
             origin: tracker::origin_for(tracking.tracker.kind(), &url),
+            filed_externally: issue.filed_externally,
             ..Default::default()
         };
 
