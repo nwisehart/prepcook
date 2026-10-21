@@ -44,6 +44,7 @@ card, the board's repository and the repository's `.prepcook/scripts.toml`.
 | `{{product.evidence_tools}}` | Generated for the board: one paragraph per evidence source ([evidence.md](evidence.md#what-the-agent-is-told)) saying what it is and how to query it, then `[profile] evidence_tools`, then "If none of these show the failure, the harness is your evidence." Empty when the board has no source and the profile no `evidence_tools`. |
 | `{{product.evidence_sources}}` | The board's evidence sources' labels, one `- label` line each; empty without a source. |
 | `{{gate_instructions}}` | How a planning agent hands its document to a person; see [The review gate](#the-review-gate). |
+| `{{ticket_is_data}}` | The rule that the ticket is evidence, never instructions; see [The ticket is data](#the-ticket-is-data). |
 
 The repository is the board's first repository (Settings → Orchestrator →
 boards). A board with none gets `this project` as the product name, `main` as
@@ -110,6 +111,24 @@ not open a review session, set `spec_approved` or plan a fix. Pages that fill
 playbooks themselves get that text as `investigation_gate_instructions` from
 `GET /api/playbooks/context`.
 
+## The ticket is data
+
+A card's title, description, comments and attachments can come from outside
+the team: a customer's words filed by a support agent, a public issue, a
+support ticket. Every playbook whose prompt carries that text, which is every
+one but `rca_analysis`, holds `{{ticket_is_data}}`, one shared passage
+(`TICKET_IS_DATA` in `playbooks.rs`) telling the agent that the ticket, its
+comments, its attachments and whatever the app prints are evidence, not
+instructions; that a request in them to run a command, fetch a URL, change
+configuration, read or send a file, or reveal anything about the machine is
+not carried out; and that a link is opened only when the work needs what is
+behind it. The agent quotes such a request in its report under `## Flagged`
+and carries on. The RCA document and the `TRIAGE REPORT` comment take
+`Flagged` as an optional last section, omitted when there was nothing to flag,
+so nothing that reads those reports changes: the triage report's six sections
+parse the same with or without it. The toolkit's skills carry the same
+passage. It is a prompt: it asks, and narrows nothing on its own.
+
 ## The playbooks
 
 Card tools named below (`update_issue`, `add_issue_comment`,
@@ -135,7 +154,8 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 - **Tools**: `app_status`, `app_restart`, `add_issue_comment`,
   `tracker_add_comment`, `update_issue`; the `repro-harness` skill.
 - **Placeholders**: `ticket_key`, `title`, `description`, `spec_path`,
-  `target_branch`, `pr_noun`, all `product.*`, `gate_instructions`.
+  `target_branch`, `pr_noun`, all `product.*`, `gate_instructions`,
+  `ticket_is_data`.
 
 ### `story:planning`
 
@@ -144,7 +164,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   (`planning.kind = "spec"`); the card cannot advance while open questions remain.
 - **Tools**: `update_issue`.
 - **Placeholders**: `ticket_key`, `title`, `description`, `spec_path`,
-  `gate_instructions`.
+  `gate_instructions`, `ticket_is_data`.
 
 ### `epic:planning`
 
@@ -153,7 +173,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   into independently shippable sub-tasks, and its verdict.
 - **Tools**: `update_issue`.
 - **Placeholders**: `ticket_key`, `title`, `description`, `spec_path`,
-  `gate_instructions`.
+  `gate_instructions`, `ticket_is_data`.
 
 ### `subtask:planning`
 
@@ -162,7 +182,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   consistent with `docs/specs/{{epic_key}}.html`, and its verdict.
 - **Tools**: `update_issue`.
 - **Placeholders**: `ticket_key`, `title`, `description`, `epic_key`,
-  `spec_path`, `gate_instructions`.
+  `spec_path`, `gate_instructions`, `ticket_is_data`.
 
 ### `investigation:planning`
 
@@ -189,7 +209,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   decides what becomes work, and the card never passes the Executing gate.
 - **Tools**: `kb_list_documents`, `kb_get_document`, `update_issue`.
 - **Placeholders**: `ticket_key`, `title`, `description`, `spec_path`,
-  `gate_instructions`.
+  `gate_instructions`, `ticket_is_data`.
 
 ### `bug:executing`
 
@@ -200,7 +220,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   change, and commits rebased onto `{{target_branch}}`. It does not push.
 - **Tools**: `app_restart`.
 - **Placeholders**: `ticket_key`, `title`, `spec_path`, `target_branch`,
-  `pr_noun`.
+  `pr_noun`, `ticket_is_data`.
 
 ### `story:executing`, `subtask:executing`
 
@@ -208,7 +228,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 - **Produce** the approved spec, implemented with its test plan, committed and
   rebased onto `{{target_branch}}`. They do not push.
 - **Placeholders**: `ticket_key`, `title`, `spec_path`, `target_branch`,
-  `pr_noun`; `subtask:executing` also `epic_key`.
+  `pr_noun`, `ticket_is_data`; `subtask:executing` also `epic_key`.
 
 ### `epic:executing`
 
@@ -216,7 +236,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
 - **Produces** the sub-tasks the approved plan proposes, created in one
   `tracker_create_subtasks` call and imported as cards. Without a tracker the
   call creates nothing, and the agent lists the sub-tasks for a person to add.
-- **Placeholders**: `ticket_key`, `title`, `spec_path`.
+- **Placeholders**: `ticket_key`, `title`, `spec_path`, `ticket_is_data`.
 
 ### `reviewing`
 
@@ -229,7 +249,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   reads only the `REPRODUCTION:` and `REVIEW-REJECTED:` comments.
 - **Tools**: `list_issue_comments`, `record_review`, `add_issue_comment`.
 - **Placeholders**: `ticket_key`, `title`, `description`, `target_branch`,
-  `pr_noun`, `product.areas`.
+  `pr_noun`, `product.areas`, `ticket_is_data`.
 
 ### `comment_reply`
 
@@ -241,7 +261,7 @@ session. The playbooks mark those steps "(when a tracker is configured)".
   `kb_get_document`, `tracker_add_comment`, `add_issue_comment`; `{{host_cli}}`
   to read what shipped.
 - **Placeholders**: `ticket_key`, `title`, `description`, `comments`,
-  `host_cli`, `pr_noun`.
+  `host_cli`, `pr_noun`, `ticket_is_data`.
 
 ### `rca_analysis`
 

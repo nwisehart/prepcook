@@ -45,6 +45,24 @@ pub(super) const SUPERSEDED_PLAYBOOKS: &[(&str, &str)] = &[
     ),
     ("pattern:planning", superseded_playbooks::PATTERN_PLANNING_1),
     ("rca_analysis", superseded_playbooks::RCA_ANALYSIS_1),
+    ("bug:planning", superseded_playbooks::BUG_PLANNING_3),
+    ("story:planning", superseded_playbooks::STORY_PLANNING_1),
+    ("epic:planning", superseded_playbooks::EPIC_PLANNING_1),
+    ("subtask:planning", superseded_playbooks::SUBTASK_PLANNING_1),
+    (
+        "investigation:planning",
+        superseded_playbooks::INVESTIGATION_PLANNING_2,
+    ),
+    ("pattern:planning", superseded_playbooks::PATTERN_PLANNING_2),
+    ("bug:executing", superseded_playbooks::BUG_EXECUTING_1),
+    ("story:executing", superseded_playbooks::STORY_EXECUTING_1),
+    ("epic:executing", superseded_playbooks::EPIC_EXECUTING_2),
+    (
+        "subtask:executing",
+        superseded_playbooks::SUBTASK_EXECUTING_1,
+    ),
+    ("reviewing", superseded_playbooks::REVIEWING_1),
+    ("comment_reply", superseded_playbooks::COMMENT_REPLY_1),
 ];
 
 /// The playbook key names a config was saved with, in `playbook_keys`. A
