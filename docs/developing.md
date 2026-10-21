@@ -475,7 +475,10 @@ pnpm --filter @prepcook/site run build
 python3 -m http.server -d site/dist    # or: npx serve site/dist
 ```
 
-The build writes `sitemap.xml` (each page's `lastmod` is the last commit that
+The build serves each screenshot in `docs/images/` as WebP too, at full size
+and 880 pixels wide (with `sharp`), and turns every screenshot `<img>` into a
+`<picture>` that offers them ahead of the PNG; the PNGs themselves stay as
+they are for GitHub. It writes `sitemap.xml` (each page's `lastmod` is the last commit that
 touched its sources) and `robots.txt`, and ends with a link check
 (`site/check-links.mjs`) that fails on any link, image or `#anchor` that does
 not resolve and on a sitemap that does not match the pages, then with

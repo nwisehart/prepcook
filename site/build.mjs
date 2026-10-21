@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Marked } from 'marked';
+import sharp from 'sharp';
 import { checkLinks } from './check-links.mjs';
 
 const SITE = path.dirname(fileURLToPath(import.meta.url));
@@ -151,6 +152,15 @@ const COPIED = [
   ...listFiles('assets/brand', (f) => f.endsWith('.svg')),
 ];
 const COPIED_SET = new Set(COPIED);
+
+// The screenshots are 2880 pixels wide; the content column is at most 880.
+// Each docs/images PNG is also served as WebP, at full size and at
+// WEBP_SMALL wide, and every <img> of one the site emits becomes a <picture>
+// offering both through srcset, with the PNG as the fallback.
+const SCREENSHOT = /^docs\/images\/[^/]+\.png$/;
+const WEBP_QUALITY = 82;
+const WEBP_SMALL = 880;
+const IMAGE_SIZES = '(max-width: 920px) 100vw, 880px';
 
 const problems = [];
 
@@ -448,9 +458,138 @@ function page({
       : '',
     main,
   });
+  return responsiveImages(
+    html.replace(
+      `data-section="${section}"`,
+      `data-section="${section}" aria-current="page"`
+    ),
+    out
+  );
+}
+
+// A PNG's dimensions, from its IHDR chunk.
+function pngSize(rel) {
+  const head = Buffer.alloc(24);
+  const fd = fs.openSync(path.join(REPO, rel), 'r');
+  try {
+    fs.readSync(fd, head, 0, 24, 0);
+  } finally {
+    fs.closeSync(fd);
+  }
+  if (head.toString('ascii', 12, 16) !== 'IHDR')
+    throw new Error(`${rel}: not a PNG`);
+  return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) };
+}
+
+// Writes the WebP versions of every screenshot: <name>.webp at full size and
+// <name>-880.webp, for the srcset responsiveImages writes.
+async function writeWebp() {
+  await Promise.all(
+    COPIED.filter((rel) => SCREENSHOT.test(rel)).map(async (rel) => {
+      const base = path.join(DIST, rel.replace(/\.png$/, ''));
+      const input = path.join(REPO, rel);
+      await sharp(input).webp({ quality: WEBP_QUALITY }).toFile(`${base}.webp`);
+      if (pngSize(rel).width > WEBP_SMALL) {
+        await sharp(input)
+          .resize({ width: WEBP_SMALL })
+          .webp({ quality: WEBP_QUALITY })
+          .toFile(`${base}-${WEBP_SMALL}.webp`);
+      }
+    })
+  );
+}
+
+// An element's attributes, values left as written (still HTML-escaped).
+function tagAttributes(tag) {
+  const attrs = new Map();
+  for (const m of tag.matchAll(/\s([a-z][a-z-]*)(?:="([^"]*)")?/g)) {
+    attrs.set(m[1], m[2] ?? '');
+  }
+  return attrs;
+}
+
+// The repository path of the screenshot `url` points at from the page at
+// `out`, or null when it is not one.
+function screenshotAt(url, out) {
+  if (!url || /^(?:[a-z][a-z0-9+.-]*:|\/|#)/i.test(url)) return null;
+  const rel = path.posix.normalize(
+    path.posix.join(path.posix.dirname(out), url)
+  );
+  return SCREENSHOT.test(rel) && COPIED_SET.has(rel) ? rel : null;
+}
+
+function webpSource(rel, out, media, sizes) {
+  const base = rel.replace(/\.png$/, '');
+  const { width } = pngSize(rel);
+  const candidates = [`${relativeUrl(out, `${base}.webp`)} ${width}w`];
+  if (width > WEBP_SMALL)
+    candidates.unshift(
+      `${relativeUrl(out, `${base}-${WEBP_SMALL}.webp`)} ${WEBP_SMALL}w`
+    );
+  const mediaAttr = media === undefined ? '' : ` media="${media}"`;
+  return `<source${mediaAttr} type="image/webp" srcset="${candidates.join(', ')}" sizes="${sizes}" />`;
+}
+
+// Rewrites every screenshot <img> on a page, alone or in a <picture>, to a
+// <picture> that offers the WebP versions first: per theme, the -dark WebP
+// and the -dark PNG under the original dark media query (which site.js
+// switches with the theme toggle), then the light WebP, then the PNG <img>.
+// The <img> gets the PNG's real width and height, so the layout does not
+// shift as it loads, and loading="lazy" unless it is marked
+// fetchpriority="high". The sources' sizes is IMAGE_SIZES, the docs column,
+// unless the <img> carries its own `sizes` for a wider slot.
+function responsiveImages(html, out) {
   return html.replace(
-    `data-section="${section}"`,
-    `data-section="${section}" aria-current="page"`
+    /<picture>([\s\S]*?)<\/picture>|<img\b[^>]*>/g,
+    (match, inner) => {
+      const imgTag =
+        inner === undefined ? match : inner.match(/<img\b[^>]*>/)?.[0];
+      if (!imgTag) return match;
+      const img = tagAttributes(imgTag);
+      const light = screenshotAt(img.get('src'), out);
+      if (!light) return match;
+      const sizes = img.get('sizes') ?? IMAGE_SIZES;
+      const sources = [];
+      for (const tag of inner?.match(/<source\b[^>]*>/g) ?? []) {
+        const source = tagAttributes(tag);
+        const rel = screenshotAt(source.get('srcset'), out);
+        if (!rel) {
+          sources.push(tag);
+          continue;
+        }
+        const media = source.get('media');
+        sources.push(
+          webpSource(rel, out, media, sizes),
+          `<source${media === undefined ? '' : ` media="${media}"`} srcset="${source.get('srcset')}" />`
+        );
+      }
+      sources.push(webpSource(light, out, undefined, sizes));
+      const { width, height } = pngSize(light);
+      const loading =
+        img.get('fetchpriority') === 'high'
+          ? ' fetchpriority="high"'
+          : ' loading="lazy"';
+      const others = [...img]
+        .filter(
+          ([name]) =>
+            ![
+              'src',
+              'alt',
+              'width',
+              'height',
+              'loading',
+              'fetchpriority',
+              'sizes',
+            ].includes(name)
+        )
+        .map(([name, value]) => ` ${name}="${value}"`)
+        .join('');
+      return (
+        `<picture>${sources.join('')}` +
+        `<img src="${img.get('src')}" alt="${img.get('alt') ?? ''}" width="${width}" height="${height}"${loading}${others} />` +
+        `</picture>`
+      );
+    }
   );
 }
 
@@ -755,7 +894,7 @@ function distPages(dir = DIST) {
   });
 }
 
-function build() {
+async function build() {
   fs.rmSync(DIST, { recursive: true, force: true });
   fs.mkdirSync(DIST, { recursive: true });
 
@@ -766,6 +905,7 @@ function build() {
   }
 
   for (const rel of COPIED) copy(path.join(REPO, rel), rel);
+  await writeWebp();
   for (const f of fs.readdirSync(path.join(SITE, 'assets'))) {
     copy(path.join(SITE, 'assets', f), `assets/${f}`);
   }
@@ -836,4 +976,4 @@ function build() {
   );
 }
 
-build();
+await build();

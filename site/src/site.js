@@ -12,9 +12,11 @@
     return darkQuery.matches ? 'dark' : 'light';
   }
 
-  // <picture> sources pick the -dark image through prefers-color-scheme,
-  // which follows the system, not the toggle. When the reader has chosen a
-  // theme, each dark source is forced on or off to match it.
+  // <picture> sources pick the -dark image (its WebP sizes and its PNG)
+  // through prefers-color-scheme, which follows the system, not the toggle.
+  // When the reader has chosen a theme, each dark source is forced on or off
+  // to match it; the light sources carry no media and follow whichever dark
+  // ones are off.
   function syncImages() {
     var explicit = root.getAttribute('data-theme');
     var sources = document.querySelectorAll('picture source[media]');
