@@ -31,7 +31,9 @@ Filing a card (`POST /api/cards`) takes the token only. A refused request is a
 
 The script and app-run endpoints at the end of this page are the local server's
 own, for the Settings page and for agents running on the same machine; they
-take no token.
+take no token. What that means for a server reachable beyond `127.0.0.1`, and
+for the agents that read what a filer wrote, is in
+[security.md](security.md).
 
 ## Cards
 

@@ -58,6 +58,7 @@ const GROUPS = [
       { src: 'docs/configuration.md', label: 'Configuration' },
       { src: 'docs/scripts.md', label: '.prepcook/scripts.toml', mono: true },
       { src: 'docs/api.md', label: 'The HTTP API' },
+      { src: 'docs/security.md', label: 'Security' },
     ],
   },
   {

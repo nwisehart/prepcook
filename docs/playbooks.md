@@ -127,7 +127,8 @@ and carries on. The RCA document and the `TRIAGE REPORT` comment take
 `Flagged` as an optional last section, omitted when there was nothing to flag,
 so nothing that reads those reports changes: the triage report's six sections
 parse the same with or without it. The toolkit's skills carry the same
-passage. It is a prompt: it asks, and narrows nothing on its own.
+passage. It is a prompt: it asks, and narrows nothing on its own; what does is
+in [security.md](security.md).
 
 ## The playbooks
 
