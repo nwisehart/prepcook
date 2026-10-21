@@ -488,6 +488,7 @@ impl Tracker for JiraTracker {
                         .map(str::to_string),
                     status_name: fields["status"]["name"].as_str().map(str::to_string),
                     labels: labels_of(fields),
+                    filed_externally: false,
                     area: None,
                 });
             }

@@ -31,7 +31,9 @@ Filing a card (`POST /api/cards`) takes the token only. A refused request is a
 
 The script and app-run endpoints at the end of this page are the local server's
 own, for the Settings page and for agents running on the same machine; they
-take no token.
+take no token. What that means for a server reachable beyond `127.0.0.1`, and
+for the agents that read what a filer wrote, is in
+[security.md](security.md).
 
 ## Cards
 
@@ -89,6 +91,21 @@ curl -sS -X POST "http://localhost:$PORT/api/cards" \
 }
 ```
 
+A filed card counts as coming from outside the team: its Planning session runs
+under `agents.external`, by default the planning profile's agent with its
+guarded variant (Claude Code's `GUARDED`, without `WebFetch` and `WebSearch`),
+and its later stages under their usual profiles
+([method.md](method.md#cards-from-outside-the-team)). The same goes for a GitHub
+issue imported from someone outside the repository's team.
+
+Such a card is also held for a person. With `orchestrator.external_cards` at its
+default, `wait_for_a_person`, a bug or story filed here is picked up and planned
+in Chef and Prep mode alike, and then waits at the plan gate: in Prep mode its
+plan never approves itself, so the RCA or spec is ready when someone looks, and
+only a decision from Lavish, the card, an approver on the ticket or
+`POST /api/approvals/{issue_id}` moves it on. `follow_board` gives filed cards the
+board's mode, as before. An investigation waits for a person either way.
+
 | Status | When |
 | --- | --- |
 | 201 | Filed. |
@@ -96,7 +113,33 @@ curl -sS -X POST "http://localhost:$PORT/api/cards" \
 | 401 | No bearer token, or the wrong one. |
 | 404 | No such board. |
 | 409 | The board has no Plan column (`start: true`) or no To Do column. |
+| 429 | `api.cards.daily_limit` cards (50 by default) were filed in the last 24 hours. Nothing was written. |
 | 503 | The board could not be reached. |
+
+The daily limit counts every card this route filed in the 24 hours before the
+request, whichever board it went to; a card made on the board, imported from a
+tracker or converted does not count, and a card deleted from the board still
+does. Past it, the answer is the usual failure envelope with the limit and the
+moment the oldest filing in the window leaves it, and a `Retry-After` header in
+seconds:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 5391
+```
+
+```json
+{
+  "success": false,
+  "data": null,
+  "error_data": { "limit": 50, "retry_at": "2026-10-21T09:14:03.120Z" },
+  "message": "the card API files at most 50 cards in 24 hours; the next can be filed at 2026-10-21T09:14:03Z"
+}
+```
+
+A filer should tell whoever it is acting for that the card was not filed and
+when it can be, not retry in a loop. `0` turns the limit off
+([configuration.md](configuration.md#approvals)).
 
 ### Read a card
 

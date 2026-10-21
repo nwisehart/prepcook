@@ -281,6 +281,11 @@ export function verifyPrepCookSignature(
 // });
 ```
 
+Give every webhook target a secret: an unsigned delivery is one any process
+that learns the receiver's URL can forge. An event can quote what a ticket's
+filer wrote (an investigation's report, a card's title), so a receiver treats
+its text as data too; [security.md](security.md) has the whole trust model.
+
 ## Discord and Teams
 
 **Discord** posts each event as one embed through the channel webhook: the

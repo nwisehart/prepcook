@@ -27,8 +27,10 @@ END = "<!-- END GENERATED: integrations -->"
 # Section titles for areas whose name does not read well capitalised.
 AREA_TITLES = {
     "agents": "Coding agents",
+    "api": "Card API",
     "evidence": "Evidence sources",
     "notifications": "Notification providers",
+    "orchestrator": "Orchestrator settings",
     "reproduction": "Reproduction targets",
     "ticketing": "Ticketing providers",
 }
@@ -39,6 +41,10 @@ SECRET_NOTE = (
     "from the config, then from the environment variable of that name"
 )
 AREA_NOTES = {
+    "api": (
+        "Each field is a key of `api.<kind>` (`api.cards.daily_limit`), shown under "
+        "**Settings → Orchestrator**."
+    ),
     "evidence": (
         f"{SECRET_NOTE}; a board's own source reads its config value first. Every source also "
         "takes `label`, `areas` and `notes` ([evidence.md](evidence.md#configuring-sources)), "
@@ -87,6 +93,21 @@ def cell(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
+def choices(field: dict) -> str:
+    """A select field's values and what Settings calls them, after its help."""
+    if field["kind"]["type"] != "select":
+        return ""
+    options = [
+        f"`{option['value']}` ({cell(option['label'])})"
+        for option in field["kind"]["options"]
+    ]
+    if len(options) > 1:
+        listed = ", ".join(options[:-1]) + " or " + options[-1]
+    else:
+        listed = "".join(options)
+    return f" One of {listed}."
+
+
 # How each agent's sessions get MCP servers, by the descriptor's `mcp`.
 MCP_WIRING = {
     "per_session": "Per session, on its command line, on top of its own",
@@ -95,8 +116,11 @@ MCP_WIRING = {
 }
 
 
-def render_agents(agents: list) -> list:
-    """The coding agents: what each needs and how it signs in, not fields."""
+def render_agents(descriptors: list) -> list:
+    """The coding agents: what each needs and how it signs in, not fields;
+    then the `agents` section's own settings, which are fields."""
+    agents = [descriptor for descriptor in descriptors if descriptor.get("agent")]
+    settings = [descriptor for descriptor in descriptors if not descriptor.get("agent")]
     lines = [
         "",
         f"### {AREA_TITLES['agents']}",
@@ -113,16 +137,63 @@ def render_agents(agents: list) -> list:
         agent = descriptor["agent"]
         name = f"`{descriptor['kind']}` ({cell(descriptor['display_name'])})"
         command = f"`{agent['command']}`" if agent["command"] else "built in"
-        economy = agent.get("economy_variant")
+        roles = {
+            agent.get("economy_variant"): " (economy)",
+            agent.get("guarded_variant"): " (guarded)",
+        }
         variants = ", ".join(
-            f"`{variant}`" + (" (economy)" if variant == economy else "")
-            for variant in agent["variants"]
+            f"`{variant}`" + roles.get(variant, "") for variant in agent["variants"]
         )
         lines.append(
             f"| {name} | {command} | {cell(agent['sign_in'])} | "
             f"{MCP_WIRING[agent['mcp']]} | {variants} |"
         )
+    fields = [field for descriptor in settings for field in descriptor["fields"]]
+    if fields:
+        lines += [
+            "",
+            "The `agents` section's other settings, from the same descriptors. Each is "
+            "also a key of a board's `agents`, which wins over the global one, unless its "
+            "text says it applies on every board.",
+            "",
+            "| Key | What it is |",
+            "| --- | --- |",
+        ]
+        for field in fields:
+            lines.append(
+                f"| `agents.{field['key']}` | **{cell(field['label'])}**. "
+                f"{cell(field['help'])}{choices(field)} |"
+            )
     return lines
+
+
+def render_settings(area: str, descriptors: list) -> list:
+    """An area whose descriptors are a section's own settings rather than
+    providers: one row per key of that section."""
+    lines = [
+        "",
+        f"### {AREA_TITLES[area]}",
+        "",
+        f"Generated from the `{area}` section's settings descriptor, shown under "
+        f"**Settings → {area.capitalize()}**.",
+        "",
+        "| Key | What it is |",
+        "| --- | --- |",
+    ]
+    for descriptor in descriptors:
+        for field in descriptor["fields"]:
+            help_text = cell(field["help"])
+            if not help_text.endswith("."):
+                help_text += "."
+            lines.append(
+                f"| `{area}.{field['key']}` | **{cell(field['label'])}**. "
+                f"{help_text}{choices(field)} |"
+            )
+    return lines
+
+
+# Areas that describe a config section's own settings, not providers.
+SETTINGS_AREAS = {"orchestrator"}
 
 
 def render(descriptors: dict) -> str:
@@ -130,6 +201,9 @@ def render(descriptors: dict) -> str:
     for area in sorted(descriptors):
         if area == "agents":
             lines += render_agents(descriptors[area])
+            continue
+        if area in SETTINGS_AREAS:
+            lines += render_settings(area, descriptors[area])
             continue
         title = AREA_TITLES.get(area, area.replace("_", " ").capitalize())
         lines += [
@@ -158,7 +232,7 @@ def render(descriptors: dict) -> str:
                 required = "yes" if field["required"] else "no"
                 lines.append(
                     f"| | `{field['key']}` | {required} | {secret} | "
-                    f"**{cell(field['label'])}**. {cell(field['help'])} |"
+                    f"**{cell(field['label'])}**. {cell(field['help'])}{choices(field)} |"
                 )
     lines += ["", END]
     return "\n".join(lines)

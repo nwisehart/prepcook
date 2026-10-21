@@ -83,8 +83,8 @@ export function FieldInput({
       );
     case 'select': {
       const options = field.kind.options.map((option) => ({
-        value: option,
-        label: option,
+        value: option.value,
+        label: option.label,
       }));
       return (
         <SettingsField label={label} description={field.help}>

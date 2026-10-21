@@ -482,6 +482,35 @@ impl ExecutorConfigs {
             .cloned()
     }
 
+    /// The permission policy a session of `profile` is launched with when the
+    /// owner's setting is `setting`, or `None` to run the variant exactly as
+    /// it is configured.
+    ///
+    /// `None` for an agent that cannot put a permission request in front of
+    /// anyone ([`BaseCodingAgent::supervises_tool_calls`]): the policy would
+    /// only change its flags. `None` too for a variant whose own config asks
+    /// for supervision or a plan session (Claude Code's `approvals` or
+    /// `plan`, Codex's `ask_for_approval`, Gemini without `yolo`, …): a
+    /// profile's own policy wins, and the setting fills the gap everywhere
+    /// else, so the shipped auto variants run under whichever policy the
+    /// owner chose.
+    pub fn launch_permission_policy(
+        &self,
+        profile: &ExecutorProfileId,
+        setting: PermissionPolicy,
+    ) -> Option<PermissionPolicy> {
+        if !profile.executor.supervises_tool_calls() {
+            return None;
+        }
+        let own = self
+            .get_coding_agent(profile)
+            .and_then(|agent| agent.get_preset_options().permission_policy);
+        match own {
+            Some(PermissionPolicy::Supervised | PermissionPolicy::Plan) => None,
+            _ => Some(setting),
+        }
+    }
+
     pub fn get_coding_agent_or_default(
         &self,
         executor_profile_id: &ExecutorProfileId,
@@ -554,5 +583,83 @@ impl ExecutorConfigs {
         let selected = agents_with_info[0].0;
         tracing::info!("Recommended executor: {}", selected);
         Ok(ExecutorProfileId::new(selected))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn variant(executor: BaseCodingAgent, variant: &str) -> ExecutorProfileId {
+        ExecutorProfileId::with_variant(executor, variant.to_string())
+    }
+
+    /// The setting fills every shipped auto variant of an agent that can be
+    /// supervised; a variant that asks for supervision or a plan keeps it;
+    /// an agent that cannot be supervised is never given a policy.
+    #[test]
+    fn the_launch_policy_fills_the_gap_a_profile_leaves() {
+        let mut configs = ExecutorConfigs::from_defaults();
+        for setting in [PermissionPolicy::Auto, PermissionPolicy::Supervised] {
+            for profile in [
+                ExecutorProfileId::new(BaseCodingAgent::ClaudeCode),
+                variant(BaseCodingAgent::ClaudeCode, "SONNET"),
+                variant(BaseCodingAgent::ClaudeCode, "GUARDED"),
+                ExecutorProfileId::new(BaseCodingAgent::Codex),
+                ExecutorProfileId::new(BaseCodingAgent::Gemini),
+                ExecutorProfileId::new(BaseCodingAgent::QwenCode),
+                ExecutorProfileId::new(BaseCodingAgent::Opencode),
+            ] {
+                assert_eq!(
+                    configs.launch_permission_policy(&profile, setting.clone()),
+                    Some(setting.clone()),
+                    "{profile}"
+                );
+            }
+            for executor in [
+                BaseCodingAgent::Amp,
+                BaseCodingAgent::CursorAgent,
+                BaseCodingAgent::Copilot,
+                BaseCodingAgent::Droid,
+            ] {
+                assert_eq!(
+                    configs.launch_permission_policy(
+                        &ExecutorProfileId::new(executor),
+                        setting.clone()
+                    ),
+                    None,
+                    "{executor}"
+                );
+            }
+        }
+
+        let claude = configs
+            .executors
+            .get_mut(&BaseCodingAgent::ClaudeCode)
+            .unwrap();
+        claude
+            .set_variant(
+                "ASKS".to_string(),
+                serde_json::from_value(serde_json::json!({ "CLAUDE_CODE": { "approvals": true } }))
+                    .unwrap(),
+            )
+            .unwrap();
+        claude
+            .set_variant(
+                "PLANS".to_string(),
+                serde_json::from_value(serde_json::json!({ "CLAUDE_CODE": { "plan": true } }))
+                    .unwrap(),
+            )
+            .unwrap();
+        for own in ["ASKS", "PLANS"] {
+            let profile = variant(BaseCodingAgent::ClaudeCode, own);
+            for setting in [PermissionPolicy::Auto, PermissionPolicy::Supervised] {
+                assert_eq!(
+                    configs.launch_permission_policy(&profile, setting),
+                    None,
+                    "{own}"
+                );
+            }
+        }
     }
 }

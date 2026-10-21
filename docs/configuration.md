@@ -22,6 +22,7 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.poll_interval_secs` | `15` | **Poll interval**: seconds between scans. |
 | `orchestrator.max_launches_per_tick` | `3` | **Max launches per tick**: new agent sessions started per scan, highest priority first. |
 | `orchestrator.autonomy` | `off` | **Autonomy mode**. `full` is Prep mode: passing plans self-approve, verified fixes go to Review, approved reviews go to Shipped. `off` is Chef mode. |
+| `orchestrator.external_cards` | `wait_for_a_person` | **Externally filed cards**: `follow_board` gives a card filed from outside the team (any card with an `origin`, and a GitHub issue from someone outside the repository's team) the board's mode; `wait_for_a_person` plans it in either mode and then holds it at the plan gate for a person, even in Prep mode, where its escalation says so. An approval only the agent reported does not count for such a card. One setting for every board ([method.md](method.md#cards-from-outside-the-team)). |
 | `orchestrator.autonomy_review_iterations` | `3` | **Review-fix rounds before escalating**: fix rounds before a card that keeps getting REQUEST CHANGES waits for a person. Applies in both modes. |
 | `orchestrator.pattern_threshold` | `5` | **Pattern-review threshold**: linked RCAs on one graph node that file a pattern review ([rca-graph.md](rca-graph.md#pattern-reviews)). Older configs call it `investigation_threshold`, which is still read. |
 | `orchestrator.default_board` | unset (the first board in `project_defaults`) | *File only.* The board `POST /api/cards` files into when the request names none ([api.md](api.md#file-a-card)). |
@@ -50,10 +51,14 @@ shipped variants are listed under [Coding agents](#coding-agents), and
 | `agents.stages.reviewing` | unset (`executor_profile` with the economy variant) | **Reviewing**: the independent review session. A fresh review started from a workspace defaults to it when it is set. |
 | `agents.stages.comment_reply` | unset (`executor_profile` with the economy variant) | **Comment replies**: answers to comments on shipped tickets (the `comment_reply` playbook). |
 | `agents.stages.pattern` | unset (`executor_profile` with the economy variant) | **Pattern reviews**: the `pattern:planning` session and the `rca_analysis` runs that link RCAs into the graph. |
+| `agents.external` | unset (the planning profile's agent with its guarded variant: Claude Code `GUARDED`; the planning profile itself for an agent with none) | **Externally filed cards**: the profile Planning runs for a card filed from outside the team — any card with an `origin` (the card API, Tammy, an incident) and a GitHub issue whose author is not an owner, member or collaborator. Executing and Reviewing are unaffected ([method.md](method.md#cards-from-outside-the-team)). |
+| `agents.permissions` | `auto` | **Permissions**: whether the agents the orchestrator launches ask before they use a tool. `supervised` sends each tool permission request to the board owner through the approvals service, for Claude Code, Codex, Gemini CLI, Qwen Code and OpenCode; the other agents run as their profile says. A variant that sets its own policy (Claude Code's `approvals` or `plan`, for example) keeps it. One setting for every board ([working-alongside-people.md](working-alongside-people.md#plans-and-tool-calls)). |
 
 A stage resolves, most specific first: the board's `agents.stages.<stage>`, the
 global `agents.stages.<stage>`, then the stage's default built from the
-board's `executor_profile`, else the global one. A follow-up continues its
+board's `executor_profile`, else the global one. `agents.external` resolves
+the same way, the board's then the global one, its default built from the
+resolved planning profile. A follow-up continues its
 session's conversation, so it can change variant but not agent: a stage moved
 to another agent takes effect from that stage's next new session.
 
@@ -160,7 +165,7 @@ Generated from the agents' descriptors. `executor_profile` and every `agents.sta
 
 | `executor` | Command | Signs in | MCP servers | Variants |
 | --- | --- | --- | --- | --- |
-| `CLAUDE_CODE` (Claude Code) | `claude` | Run `claude` once and sign in, or set `ANTHROPIC_API_KEY` (billed per token instead of the subscription). | Per session, on its command line, on top of its own | `DEFAULT`, `SONNET` (economy) |
+| `CLAUDE_CODE` (Claude Code) | `claude` | Run `claude` once and sign in, or set `ANTHROPIC_API_KEY` (billed per token instead of the subscription). | Per session, on its command line, on top of its own | `DEFAULT`, `GUARDED` (guarded), `SONNET` (economy) |
 | `AMP` (Amp) | `npx -y @sourcegraph/amp@latest` | Run `amp login` once, or set `AMP_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `GEMINI` (Gemini CLI) | `npx -y @google/gemini-cli@0.29.3` | Run `gemini` once and sign in with Google, or set `GEMINI_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `CODEX` (Codex) | `npx -y @openai/codex@0.124.0` | Run `codex login` once, or set `CODEX_API_KEY`. | Per session, on its command line, on top of its own | `DEFAULT` |
@@ -169,6 +174,22 @@ Generated from the agents' descriptors. `executor_profile` and every `agents.sta
 | `QWEN_CODE` (Qwen Code) | `npx -y @qwen-code/qwen-code@0.9.1` | Run `qwen` once and sign in, or set `OPENAI_API_KEY` for an OpenAI-compatible endpoint. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `COPILOT` (GitHub Copilot CLI) | `npx -y @github/copilot@0.0.403` | Run `copilot` once and use `/login`, or set `GH_TOKEN` to a token with Copilot access. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `DROID` (Droid) | `droid` | Run `droid` once and sign in, or set `FACTORY_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
+
+The `agents` section's other settings, from the same descriptors. Each is also a key of a board's `agents`, which wins over the global one, unless its text says it applies on every board.
+
+| Key | What it is |
+| --- | --- |
+| `agents.permissions` | **Permissions**. Whether the agents the orchestrator runs ask before they use a tool, on every board. Supervised sends each tool permission request to you as an approval on the card's session; one nobody answers within 10 hours is refused. A profile whose variant sets its own policy keeps it. Honoured by Claude Code, Gemini CLI, Codex, OpenCode and Qwen Code. Amp, Cursor Agent, GitHub Copilot CLI and Droid cannot route a request to you and run as their profile says under either. One of `auto` (Auto — agents run without asking) or `supervised` (Supervised — tool permission requests come to you). |
+| `agents.external` | **Externally filed cards**. Planning profile for cards filed from outside the team (API, public issues). Unset, the planning profile's agent with its guarded variant, which narrows the agent's own tools and does not confine its shell: Claude Code (`GUARDED`). Amp, Gemini CLI, Codex, OpenCode, Cursor Agent, Qwen Code, GitHub Copilot CLI and Droid can express nothing comparable and plan these cards under the planning profile unchanged. |
+
+### Card API
+
+Generated from the providers' descriptors. Each field is a key of `api.<kind>` (`api.cards.daily_limit`), shown under **Settings → Orchestrator**.
+
+| `kind` | Field | Required | Secret name | What it is |
+| --- | --- | --- | --- | --- |
+| `cards` (Card API) | | | | Cards other services file through POST /api/cards with the API token. |
+| | `daily_limit` | no |  | **Cards filed per day**. Most cards POST /api/cards files in any 24 hours; past it the route answers 429 with when a slot frees up. 0 files without a limit. Cards made on the board or imported from a tracker do not count. |
 
 ### Evidence sources
 
@@ -215,6 +236,14 @@ Generated from the providers' descriptors. A secret field is read from the secre
 | | `webhook_url` | yes | `DISCORD_WEBHOOK_URL` | **Webhook URL**. The channel's webhook (Channel settings → Integrations → Webhooks), https://discord.com/api/webhooks/…. |
 | `teams` (Microsoft Teams) | | | | Posts each event as an Adaptive Card to a Teams channel through an incoming webhook. |
 | | `webhook_url` | yes | `TEAMS_WEBHOOK_URL` | **Webhook URL**. The URL of a Teams workflow that posts webhook requests to a channel, or of a channel's Incoming Webhook connector. |
+
+### Orchestrator settings
+
+Generated from the `orchestrator` section's settings descriptor, shown under **Settings → Orchestrator**.
+
+| Key | What it is |
+| --- | --- |
+| `orchestrator.external_cards` | **Externally filed cards**. Cards filed from outside the team (API, public issues): follow the board's mode, or always wait for a person at the plan gate. One of `follow_board` (Follow the board's mode) or `wait_for_a_person` (Always wait for a person). |
 
 ### Reproduction targets
 
@@ -325,6 +354,7 @@ The board reads no sign-in or OAuth settings: `SELF_HOST_LOCAL_AUTH_EMAIL`,
 | `approvals.in_app_gate` | `lavish` | **Settings → Orchestrator → Plan approvals**. `lavish` puts Approve and Request changes buttons in the plan document; `none` leaves them out and the decision comes from the card, the ticket or the API ([approvals.md](approvals.md)). |
 | `ticketing.approvers` | empty | See [Ticketing](#ticketing). |
 | `PREPCOOK_API_TOKEN` (secret) | unset (bearer access off) | The bearer token the approvals and card APIs accept from scripts and other services ([api.md](api.md)). Filing a card needs it. |
+| `api.cards.daily_limit` | `50` | **Settings → Orchestrator → Cards filed per day**: the most cards `POST /api/cards` files in any 24 hours; past it the route answers `429` with `Retry-After` ([api.md](api.md#file-a-card)). `0` files without a limit. Cards made on the board or imported from a tracker do not count. |
 
 ## Secrets
 
@@ -353,6 +383,7 @@ empty inherits the global value.
 | `label` | unset | **Board label**: tagged on its RCAs as `board:<label>`. |
 | `executor_profile` | unset (inherit) | **Default agent**: the profile this board's stages start from. |
 | `agents.stages.<stage>` | unset (inherit) | **Planning**, **Executing**, **Reviewing**, **Comment replies**, **Pattern reviews**: this board's profile for that stage, over the global one ([Agents](#agents)). |
+| `agents.external` | unset (inherit) | *File only.* This board's profile for planning externally filed cards, over the global one ([Agents](#agents)). |
 | `autonomy` | unset (inherit) | Autonomy for this board. |
 | `autonomy_review_iterations` | unset (inherit) | Review-fix rounds for this board. |
 | `pattern_threshold` | unset (inherit) | Pattern-review threshold for this board (`investigation_threshold` in older configs). |

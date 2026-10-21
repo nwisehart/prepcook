@@ -259,6 +259,7 @@ knowledge store; see [toolkit/README.md](toolkit/README.md).
 - [docs/incidents.md](docs/incidents.md): incidents mode with PagerDuty, and the webhook alternative.
 - [docs/rca-graph.md](docs/rca-graph.md): the knowledge store, the root-cause graph and pattern reviews.
 - [docs/api.md](docs/api.md): the stable HTTP API: cards, plan decisions, evidence, scripts and app runs.
+- [docs/security.md](docs/security.md): the trust model: what the server trusts, what an agent can do, and how to confine it.
 - [docs/manual-testing.md](docs/manual-testing.md): the end-to-end check by hand before every release.
 - [docs/developing.md](docs/developing.md): the architecture, the repository and how to extend Prepcook.
 - [docs/images/README.md](docs/images/README.md): the screenshots and how to regenerate them.

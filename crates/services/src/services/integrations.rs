@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::services::{
-    agents, config::Config, evidence, notifications, reproduction, secrets::Secrets, tracker,
+    agents, cards, config::Config, evidence, notifications, reproduction, secrets::Secrets,
+    stage_orchestrator, tracker,
 };
 
 /// How Settings renders one field and what the config holds for it.
@@ -29,10 +30,30 @@ pub enum FieldKind {
     Secret,
     Url,
     Select {
-        options: Vec<String>,
+        options: Vec<SelectOption>,
     },
     Bool,
     Number,
+    /// A coding agent profile (`{ "executor": …, "variant": … }`), rendered
+    /// as the profile picker Settings → Agents uses for the stages.
+    Profile,
+}
+
+/// One choice of a [`FieldKind::Select`]: the value the config holds, and
+/// what Settings shows for it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct SelectOption {
+    pub value: String,
+    pub label: String,
+}
+
+impl SelectOption {
+    pub fn new(value: &str, label: &str) -> Self {
+        Self {
+            value: value.to_string(),
+            label: label.to_string(),
+        }
+    }
 }
 
 /// One setting a provider reads.
@@ -133,6 +154,11 @@ pub fn descriptors() -> BTreeMap<String, Vec<Descriptor>> {
         (reproduction::AREA.to_string(), reproduction::descriptors()),
         (evidence::AREA.to_string(), evidence::descriptors()),
         (agents::AREA.to_string(), agents::descriptors()),
+        (cards::AREA.to_string(), cards::descriptors()),
+        (
+            stage_orchestrator::SETTINGS_AREA.to_string(),
+            stage_orchestrator::settings_descriptors(),
+        ),
     ])
 }
 
@@ -313,6 +339,10 @@ mod tests {
             ["sentry", "dataset", "datadog", "cloudwatch", "log_files"]
         );
         for descriptor in &all["agents"] {
+            if descriptor.kind == agents::SETTINGS_KIND {
+                assert!(descriptor.agent.is_none());
+                continue;
+            }
             let agent = descriptor.agent.as_ref().expect("agent details");
             assert_eq!(descriptor.kind, agent.executor.to_string());
             assert!(descriptor.fields.is_empty());

@@ -33,7 +33,7 @@ use executors::{
     },
     approvals::{ExecutorApprovalService, NoopExecutorApprovalService},
     env::{ExecutionEnv, RepoContext},
-    executors::{BaseCodingAgent, CancellationToken, ExecutorExitResult, ExecutorExitSignal},
+    executors::{CancellationToken, ExecutorExitResult, ExecutorExitSignal},
     logs::{
         NormalizedEntryError, NormalizedEntryType,
         utils::patch::extract_normalized_entry_from_patch,
@@ -1567,22 +1567,21 @@ impl ContainerService for LocalContainerService {
             )))?;
         let current_dir = PathBuf::from(container_ref);
 
-        let approvals_service: Arc<dyn ExecutorApprovalService> =
-            match executor_action.base_executor() {
-                Some(
-                    BaseCodingAgent::Codex
-                    | BaseCodingAgent::ClaudeCode
-                    | BaseCodingAgent::Gemini
-                    | BaseCodingAgent::QwenCode
-                    | BaseCodingAgent::Opencode,
-                ) => ExecutorApprovalBridge::new(
-                    self.approvals.clone(),
-                    self.db.clone(),
-                    self.notification_service.clone(),
-                    execution_process.id,
-                ),
-                _ => Arc::new(NoopExecutorApprovalService {}),
-            };
+        // The agents whose permission requests can reach the board owner get
+        // the approvals service; the `supervised` policy's help text names
+        // the same set from the same predicate.
+        let approvals_service: Arc<dyn ExecutorApprovalService> = match executor_action
+            .base_executor()
+            .filter(|executor| executor.supervises_tool_calls())
+        {
+            Some(_) => ExecutorApprovalBridge::new(
+                self.approvals.clone(),
+                self.db.clone(),
+                self.notification_service.clone(),
+                execution_process.id,
+            ),
+            None => Arc::new(NoopExecutorApprovalService {}),
+        };
 
         let repos = WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id).await?;
         let repo_names: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();

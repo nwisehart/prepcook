@@ -67,6 +67,18 @@ pub struct AgentDescriptor {
     /// to when the configured profile names no variant. `None` when the
     /// agent ships no such variant.
     pub economy_variant: Option<String>,
+    /// The variant that plans a card filed from outside the team when
+    /// `agents.external` names no profile: the agent's own tools narrowed to
+    /// what reproducing a report needs. `None` when the agent's config can
+    /// express nothing comparable; such a card then plans under the planning
+    /// profile unchanged.
+    pub guarded_variant: Option<String>,
+    /// Whether the `supervised` permission policy puts this agent's tool
+    /// permission requests in front of the board owner, through the approvals
+    /// service. False for an agent whose requests cannot be routed there: it
+    /// runs as its profile says under either policy (see
+    /// [`BaseCodingAgent::supervises_tool_calls`]).
+    pub supervised: bool,
     pub docs_url: String,
 }
 
@@ -93,6 +105,8 @@ impl AgentDescriptor {
             mcp,
             variants: shipped_variants(executor),
             economy_variant: None,
+            guarded_variant: None,
+            supervised: executor.supervises_tool_calls(),
             docs_url: docs_url.to_string(),
         }
     }
@@ -101,6 +115,13 @@ impl AgentDescriptor {
     /// of the shipped variants.
     pub fn with_economy_variant(mut self, variant: &str) -> Self {
         self.economy_variant = Some(variant.to_string());
+        self
+    }
+
+    /// Names the variant externally filed cards plan under by default. It
+    /// must be one of the shipped variants.
+    pub fn with_guarded_variant(mut self, variant: &str) -> Self {
+        self.guarded_variant = Some(variant.to_string());
         self
     }
 }
@@ -137,6 +158,25 @@ impl BaseCodingAgent {
         }
     }
 
+    /// Whether a session of this agent under the `supervised` permission
+    /// policy asks the board owner before it uses a tool: its executor routes
+    /// permission requests to the approvals service that the session is given.
+    ///
+    /// Copilot's requests reach only a service that approves everything,
+    /// Cursor Agent and Droid have no way to hand a request back to Prepcook,
+    /// and Amp has no permission setting at all, so none of the four can be
+    /// supervised.
+    /// The session container gives the approvals service to exactly the
+    /// agents this names.
+    pub fn supervises_tool_calls(self) -> bool {
+        match self {
+            Self::ClaudeCode | Self::Codex | Self::Gemini | Self::QwenCode | Self::Opencode => true,
+            Self::Amp | Self::CursorAgent | Self::Copilot | Self::Droid => false,
+            #[cfg(feature = "qa-mode")]
+            Self::QaMock => false,
+        }
+    }
+
     /// Every agent, in the order the [`CodingAgent`] enum declares them.
     pub fn all() -> Vec<BaseCodingAgent> {
         CodingAgent::VARIANTS
@@ -164,6 +204,17 @@ pub fn economy_variant_of(profile: &ExecutorProfileId) -> ExecutorProfileId {
     ) {
         (None, Some(variant)) => ExecutorProfileId::with_variant(profile.executor, variant),
         _ => profile.clone(),
+    }
+}
+
+/// The profile a card filed from outside the team plans under when nothing
+/// names one: `planning`'s agent with its guarded variant, whatever variant
+/// `planning` names, or `planning` itself for an agent with no guarded
+/// variant.
+pub fn guarded_variant_of(planning: &ExecutorProfileId) -> ExecutorProfileId {
+    match planning.executor.descriptor().guarded_variant {
+        Some(variant) => ExecutorProfileId::with_variant(planning.executor, variant),
+        None => planning.clone(),
     }
 }
 
@@ -370,6 +421,9 @@ mod tests {
             if let Some(economy) = &descriptor.economy_variant {
                 assert!(descriptor.variants.contains(economy), "{executor}");
             }
+            if let Some(guarded) = &descriptor.guarded_variant {
+                assert!(descriptor.variants.contains(guarded), "{executor}");
+            }
             // The QA mock ships no profile and runs nothing on PATH.
             if executor.to_string() == "QA_MOCK" {
                 continue;
@@ -401,8 +455,9 @@ mod tests {
         let claude = BaseCodingAgent::ClaudeCode.descriptor();
         assert_eq!(claude.binary, "claude");
         assert!(claude.sign_in.contains("`claude`"));
-        assert_eq!(claude.variants, vec!["DEFAULT", "SONNET"]);
+        assert_eq!(claude.variants, vec!["DEFAULT", "GUARDED", "SONNET"]);
         assert_eq!(claude.economy_variant.as_deref(), Some("SONNET"));
+        assert_eq!(claude.guarded_variant.as_deref(), Some("GUARDED"));
         let codex = BaseCodingAgent::Codex.descriptor();
         assert!(codex.sign_in.contains("CODEX_API_KEY"));
         assert_eq!(codex.economy_variant, None);
@@ -420,6 +475,30 @@ mod tests {
         assert_eq!(economy_variant_of(&chosen), chosen);
         let codex = ExecutorProfileId::new(BaseCodingAgent::Codex);
         assert_eq!(economy_variant_of(&codex), codex);
+    }
+
+    /// Claude Code is the one agent that ships a guarded variant; it replaces
+    /// whatever variant the planning profile names. Every other agent plans
+    /// an external card under the planning profile as it is.
+    #[test]
+    fn the_guarded_variant_replaces_the_planning_variant_where_one_ships() {
+        let guarded =
+            ExecutorProfileId::with_variant(BaseCodingAgent::ClaudeCode, "GUARDED".to_string());
+        for variant in [None, Some("DEFAULT"), Some("SONNET")] {
+            let planning = ExecutorProfileId {
+                executor: BaseCodingAgent::ClaudeCode,
+                variant: variant.map(str::to_string),
+            };
+            assert_eq!(guarded_variant_of(&planning), guarded, "{variant:?}");
+        }
+        for descriptor in descriptors() {
+            if descriptor.executor == BaseCodingAgent::ClaudeCode {
+                continue;
+            }
+            assert_eq!(descriptor.guarded_variant, None, "{}", descriptor.executor);
+            let planning = ExecutorProfileId::new(descriptor.executor);
+            assert_eq!(guarded_variant_of(&planning), planning);
+        }
     }
 
     #[cfg(unix)]
