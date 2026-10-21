@@ -155,6 +155,11 @@ const COPIED = [
   ...listFiles('site/blog/images', (f) => /\.(?:png|jpe?g|webp|svg)$/.test(f), {
     optional: true,
   }),
+  // The board film, once scripts/board-video.mjs has made it: the hero plays
+  // the WebM and MP4, and the README's GIF line resolves here too.
+  ...listFiles('docs/media', (f) => /\.(?:webm|mp4|gif)$/.test(f), {
+    optional: true,
+  }),
 ];
 const COPIED_SET = new Set(COPIED);
 
@@ -843,6 +848,32 @@ function homeValues() {
   return values;
 }
 
+// The board film (scripts/board-video.mjs writes it into docs/media). When
+// board.webm is there, the home page's hero plays it, with board.mp4 as the
+// second source when that is there too, and the board screenshot as its
+// poster; without it, the hero is the screenshot as home.html has it.
+const BOARD_FILM = 'docs/media/board.webm';
+const BOARD_FILM_MP4 = 'docs/media/board.mp4';
+const HERO_LINK = /<a\s+href="docs\/images\/board\.png"[\s\S]*?<\/a>/;
+
+function heroWithFilm(home, alt) {
+  if (!COPIED_SET.has(BOARD_FILM)) return home;
+  if (!HERO_LINK.test(home))
+    throw new Error(
+      'site/src/home.html: the hero has no <a href="docs/images/board.png"> for the film to replace'
+    );
+  const sources = [
+    `<source src="${BOARD_FILM}" type="video/webm" />`,
+    ...(COPIED_SET.has(BOARD_FILM_MP4)
+      ? [`<source src="${BOARD_FILM_MP4}" type="video/mp4" />`]
+      : []),
+  ];
+  return home.replace(
+    HERO_LINK,
+    `<video class="board-film" autoplay muted loop playsinline poster="docs/images/board.png" width="1440" height="900" aria-label="${escapeHtml(alt)}">${sources.join('')}</video>`
+  );
+}
+
 function homeDescription() {
   const text = `${readmeTagline()} Open-source, Apache-2.0, Rust and TypeScript.`;
   if (text.length < DESCRIPTION_MIN || text.length > DESCRIPTION_MAX)
@@ -1196,7 +1227,12 @@ function pageSources(posts) {
   return [
     {
       out: 'index.html',
-      sources: ['site/src/home.html', 'README.md', 'docs/images/README.md'],
+      sources: [
+        'site/src/home.html',
+        'README.md',
+        'docs/images/README.md',
+        'docs/media',
+      ],
     },
     ...PAGES.map((p) => ({ out: p.out, sources: [p.src] })),
     { out: 'tammy.html', sources: ['site/src/tammy.html'] },
@@ -1277,7 +1313,10 @@ async function build() {
   PAGES.forEach(docPage);
 
   const home = fill(
-    fs.readFileSync(path.join(SRC, 'home.html'), 'utf8'),
+    heroWithFilm(
+      fs.readFileSync(path.join(SRC, 'home.html'), 'utf8'),
+      boardAlt()
+    ),
     homeValues()
   );
   write(

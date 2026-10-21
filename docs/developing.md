@@ -479,7 +479,10 @@ python3 -m http.server -d site/dist    # or: npx serve site/dist
 The build serves each screenshot in `docs/images/` as WebP too, at full size
 and 880 pixels wide (with `sharp`), and turns every screenshot `<img>` into a
 `<picture>` that offers them ahead of the PNG; the PNGs themselves stay as
-they are for GitHub. It writes `sitemap.xml` (each page's `lastmod` is the last commit that
+they are for GitHub. When `docs/media/board.webm` exists (made by
+`scripts/board-video.mjs`; see [docs/images/README.md](images/README.md#video)),
+the home page's hero plays it, with `board.mp4` as a second source and the
+board screenshot as its poster; until then the hero is the screenshot. It writes `sitemap.xml` (each page's `lastmod` is the last commit that
 touched its sources) and `robots.txt`, and ends with a link check
 (`site/check-links.mjs`) that fails on any link, image or `#anchor` that does
 not resolve and on a sitemap that does not match the pages, then with

@@ -1,0 +1,5 @@
+# The board film (docs/media/) is binary: never diffed, merged or
+# normalised as text.
+*.mp4 binary
+*.webm binary
+*.gif binary

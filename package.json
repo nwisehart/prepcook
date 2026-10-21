@@ -45,7 +45,8 @@
     "remote:dev:clean": "cd crates/remote && docker compose --env-file .env.remote down -v --remove-orphans",
     "remote:prepare-db": "cd crates/remote && bash scripts/prepare-db.sh",
     "remote:prepare-db:check": "cd crates/remote && bash scripts/prepare-db.sh --check",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "board-video": "node scripts/board-video.mjs"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",

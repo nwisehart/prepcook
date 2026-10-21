@@ -1,5 +1,5 @@
-// Checks every internal reference in site/dist: each href, src and srcset
-// candidate (every one of them, so each WebP size of a screenshot) in
+// Checks every internal reference in site/dist: each href, src, poster and
+// srcset candidate (every one of them, so each WebP size of a screenshot) in
 // an HTML page that is not an absolute URL (http:, https:, mailto:, data:)
 // must be relative, must not point at a .md file, must resolve to a file in
 // dist, and its #anchor must be an id on the target page.
@@ -73,7 +73,7 @@ function selfUrls(html) {
 
 function references(html) {
   const refs = [];
-  for (const m of html.matchAll(/\s(href|src)="([^"]*)"/g)) {
+  for (const m of html.matchAll(/\s(href|src|poster)="([^"]*)"/g)) {
     refs.push(decode(m[2]));
   }
   for (const m of html.matchAll(/\ssrcset="([^"]*)"/g)) {

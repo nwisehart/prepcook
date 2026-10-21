@@ -40,6 +40,9 @@ Docs and a tour: [prepcook.dev](https://prepcook.dev/)
   </picture>
 </p>
 
+<!-- Uncomment the next line once scripts/board-video.mjs has generated docs/media/board.gif. -->
+<!-- ![The board in motion](docs/media/board.gif) -->
+
 ## What it does
 
 A card moves through five stages, left to right across the board.
