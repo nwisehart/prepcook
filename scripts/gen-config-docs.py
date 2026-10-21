@@ -30,6 +30,7 @@ AREA_TITLES = {
     "api": "Card API",
     "evidence": "Evidence sources",
     "notifications": "Notification providers",
+    "orchestrator": "Orchestrator settings",
     "reproduction": "Reproduction targets",
     "ticketing": "Ticketing providers",
 }
@@ -166,11 +167,43 @@ def render_agents(descriptors: list) -> list:
     return lines
 
 
+def render_settings(area: str, descriptors: list) -> list:
+    """An area whose descriptors are a section's own settings rather than
+    providers: one row per key of that section."""
+    lines = [
+        "",
+        f"### {AREA_TITLES[area]}",
+        "",
+        f"Generated from the `{area}` section's settings descriptor, shown under "
+        f"**Settings → {area.capitalize()}**.",
+        "",
+        "| Key | What it is |",
+        "| --- | --- |",
+    ]
+    for descriptor in descriptors:
+        for field in descriptor["fields"]:
+            help_text = cell(field["help"])
+            if not help_text.endswith("."):
+                help_text += "."
+            lines.append(
+                f"| `{area}.{field['key']}` | **{cell(field['label'])}**. "
+                f"{help_text}{choices(field)} |"
+            )
+    return lines
+
+
+# Areas that describe a config section's own settings, not providers.
+SETTINGS_AREAS = {"orchestrator"}
+
+
 def render(descriptors: dict) -> str:
     lines = [BEGIN]
     for area in sorted(descriptors):
         if area == "agents":
             lines += render_agents(descriptors[area])
+            continue
+        if area in SETTINGS_AREAS:
+            lines += render_settings(area, descriptors[area])
             continue
         title = AREA_TITLES.get(area, area.replace("_", " ").capitalize())
         lines += [

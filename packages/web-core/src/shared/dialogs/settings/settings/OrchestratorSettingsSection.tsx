@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import type {
   ApiConfig,
   DeployWatch,
+  ExternalCards,
   InAppGate,
   NotificationTarget,
   NotifierKind,
@@ -64,6 +65,7 @@ const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
   max_launches_per_tick: 3,
   workspace_retention_days: 30,
   autonomy: 'off',
+  external_cards: 'wait_for_a_person',
   autonomy_review_iterations: 3,
   digest_at_local: null,
   eob_at_local: null,
@@ -83,12 +85,20 @@ const GLOBAL_FIELD_KEYS = [
   'max_launches_per_tick',
   'workspace_retention_days',
   'autonomy',
+  'external_cards',
   'autonomy_review_iterations',
 ] as const;
 
 const pickGlobalFields = (
   config: OrchestratorConfig = DEFAULT_ORCHESTRATOR_CONFIG
 ) => pick(config, GLOBAL_FIELD_KEYS);
+
+/** The orchestrator's own settings that come from a descriptor. */
+const ORCHESTRATOR_AREA = 'orchestrator';
+const ORCHESTRATOR_SETTINGS_KIND = 'settings';
+const EXTERNAL_CARDS: ExternalCards[] = ['follow_board', 'wait_for_a_person'];
+const isExternalCards = (value: unknown): value is ExternalCards =>
+  EXTERNAL_CARDS.includes(value as ExternalCards);
 
 /** The stable HTTP API's settings area, and its card route's descriptor. */
 const API_AREA = 'api';
@@ -233,6 +243,9 @@ export function OrchestratorSettingsSection() {
     descriptorsQuery.data?.[API_AREA]?.find(
       (descriptor) => descriptor.kind === CARD_API_KIND
     )?.fields ?? [];
+  const externalCardsField = descriptorsQuery.data?.[ORCHESTRATOR_AREA]?.find(
+    (descriptor) => descriptor.kind === ORCHESTRATOR_SETTINGS_KIND
+  )?.fields.find((field) => field.key === 'external_cards');
   const agentDescriptors = useAgentDescriptors();
   const profileOptions = useProfileOptions(profiles);
 
@@ -512,6 +525,18 @@ export function OrchestratorSettingsSection() {
             }}
           />
         </div>
+        {externalCardsField && (
+          <FieldInput
+            id={`${ORCHESTRATOR_AREA}-${ORCHESTRATOR_SETTINGS_KIND}-external_cards`}
+            field={externalCardsField}
+            value={draft.external_cards ?? 'wait_for_a_person'}
+            onChange={(value) => {
+              if (!isExternalCards(value)) return;
+              markDirty();
+              setDraft((prev) => ({ ...prev, external_cards: value }));
+            }}
+          />
+        )}
       </SettingsCard>
 
       <SettingsCard>

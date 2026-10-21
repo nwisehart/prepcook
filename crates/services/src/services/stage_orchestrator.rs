@@ -100,12 +100,13 @@ use crate::services::{
     cards::{CardError, CardHost},
     config::{
         AutonomyMode, COMMENT_REPLY_PLAYBOOK_KEY, Config, DEFAULT_PR_DESCRIPTION_PROMPT,
-        EffectiveProjectSettings, INVESTIGATION_PLAYBOOK_KEY, OrchestratorMode,
+        EffectiveProjectSettings, ExternalCards, INVESTIGATION_PLAYBOOK_KEY, OrchestratorMode,
         PATTERN_PLAYBOOK_KEY, RCA_ANALYSIS_PLAYBOOK_KEY, REVIEWING_PLAYBOOK_KEY, StatusMapping,
         TicketingMode, TrackerConfig,
     },
     container::{ContainerError, ContainerService},
     daily,
+    integrations::{Descriptor, Field, FieldKind, SelectOption},
     notifications::{
         self, Confidence, Digest, DigestItem, DigestSectionId, Event, HarnessRef,
         InvestigationCompleted, IssueRef, Mention, NotificationSource, PlanKind,
@@ -667,6 +668,34 @@ fn dispatch_rank(stage: Option<Stage>, priority: Option<IssuePriority>) -> (u8, 
         None => 4,
     };
     (stage_rank, priority_rank)
+}
+
+/// The integration area the orchestrator's own settings are described
+/// under, for Settings → Orchestrator and the configuration reference.
+pub const SETTINGS_AREA: &str = "orchestrator";
+
+/// The orchestrator's settings that are rendered from a descriptor, each a
+/// key of `orchestrator`.
+pub fn settings_descriptors() -> Vec<Descriptor> {
+    vec![Descriptor::new(
+        "settings",
+        "Orchestrator settings",
+        "How the orchestrator treats cards beyond the board's mode.",
+        vec![Field::new(
+            "external_cards",
+            "Externally filed cards",
+            FieldKind::Select {
+                options: vec![
+                    SelectOption::new("follow_board", "Follow the board's mode"),
+                    SelectOption::new("wait_for_a_person", "Always wait for a person"),
+                ],
+            },
+            false,
+            "Cards filed from outside the team (API, public issues): follow the board's mode, \
+             or always wait for a person at the plan gate",
+        )],
+        "https://github.com/nwisehart/prepcook/blob/main/docs/configuration.md#orchestrator",
+    )]
 }
 
 /// The executor a launch's first session runs: the board's profile for that
@@ -1582,6 +1611,81 @@ fn executing_gate_passes(work_class: WorkClass, metadata: &IssueExtMetadata) -> 
         .and_then(|spec| spec.approved_at)
         .is_some();
     verdict_passes && approved
+}
+
+/// Whether a card's plan waits for a person whatever the board's mode: a card
+/// filed from outside the team while `orchestrator.external_cards` is
+/// `wait_for_a_person`.
+fn held_for_a_person(external_cards: ExternalCards, metadata: &IssueExtMetadata) -> bool {
+    external_cards == ExternalCards::WaitForAPerson && metadata.is_filed_externally()
+}
+
+/// Whether the card's plan approval came through a channel that checked it
+/// was a person: the Lavish gate, a card comment from a member, a tracker
+/// comment from an approver, or the approvals API. An approval the agent
+/// reported for itself, or one Prep mode wrote, did not.
+fn approved_by_a_person(metadata: &IssueExtMetadata) -> bool {
+    metadata.spec.as_ref().is_some_and(|spec| {
+        spec.approved_at.is_some()
+            && matches!(
+                spec.approved_via,
+                Some(
+                    api_types::ApprovalSource::Lavish
+                        | api_types::ApprovalSource::BoardComment
+                        | api_types::ApprovalSource::TrackerComment
+                        | api_types::ApprovalSource::Api
+                )
+            )
+    })
+}
+
+/// Whether a recorded approval is set aside rather than acted on: the card
+/// is held for a person and no person approved it.
+fn sets_aside_approval(external_cards: ExternalCards, metadata: &IssueExtMetadata) -> bool {
+    let approved = metadata
+        .spec
+        .as_ref()
+        .and_then(|spec| spec.approved_at)
+        .is_some();
+    approved && held_for_a_person(external_cards, metadata) && !approved_by_a_person(metadata)
+}
+
+/// What Prep mode does with a recorded planning verdict.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AutonomousPlanGate {
+    /// The verdict clears the bar and nothing holds the card: approve it and
+    /// advance to Executing.
+    SelfApprove,
+    /// The verdict is below the bar: escalate for a person.
+    BelowTheBar,
+    /// The verdict clears the bar but the card was filed from outside the
+    /// team: escalate for a person all the same.
+    HeldForAPerson,
+}
+
+fn autonomous_plan_gate(
+    verdict_passes: bool,
+    external_cards: ExternalCards,
+    metadata: &IssueExtMetadata,
+) -> AutonomousPlanGate {
+    if !verdict_passes {
+        AutonomousPlanGate::BelowTheBar
+    } else if held_for_a_person(external_cards, metadata) {
+        AutonomousPlanGate::HeldForAPerson
+    } else {
+        AutonomousPlanGate::SelfApprove
+    }
+}
+
+/// Whether a tracker comment's author may decide on a plan: someone on the
+/// configured approver list, and never the agent's own tracker account. The
+/// same rule holds for every card, whoever filed it.
+fn tracker_author_may_decide(
+    author: &str,
+    agent: Option<&str>,
+    approvers: &BTreeMap<String, String>,
+) -> bool {
+    !author.is_empty() && agent != Some(author) && approvers.contains_key(author)
 }
 
 /// The ticket's tracker key, or the card's own id when it has none.
@@ -5070,7 +5174,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                 if !decided
                     && stage == Stage::Planning
                     && let Err(e) = self
-                        .handle_plan_comments(client, project_id, issue, &metadata)
+                        .handle_plan_comments(client, settings, issue, &metadata)
                         .await
                 {
                     warn!(
@@ -5704,7 +5808,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
 
         let result = match stage {
             Stage::Planning => {
-                self.autonomy_planning(client, project_id, issue, metadata)
+                self.autonomy_planning(client, settings, issue, metadata)
                     .await
             }
             Stage::Executing => {
@@ -5862,13 +5966,40 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     async fn handle_plan_comments(
         &self,
         client: &RemoteClient,
-        project_id: Uuid,
+        settings: &EffectiveProjectSettings,
         issue: &Issue,
         metadata: &IssueExtMetadata,
     ) -> Result<(), StageOrchestratorError> {
+        let project_id = settings.project_id;
         // Taken-over tickets get no further comment injection or
         // self-heal advances — the human owns them now.
         if takeover_active(metadata) {
+            return Ok(());
+        }
+
+        // A card held for a person whose approval no person gave (the agent
+        // reported one): set it aside rather than advance on it, so the card
+        // waits at the gate and reads as waiting.
+        if sets_aside_approval(settings.external_cards, metadata) {
+            let mut blob = match &issue.extension_metadata {
+                Value::Object(map) => map.clone(),
+                _ => serde_json::Map::new(),
+            };
+            if let Some(Value::Object(spec)) = blob.get_mut("spec") {
+                spec.remove("approved_at");
+                spec.remove("approved_by");
+                spec.remove("approved_via");
+            }
+            client
+                .update_issue(issue.id, &ext_metadata_update(Value::Object(blob)))
+                .await?;
+            self.post_autonomy_comment(
+                client,
+                issue,
+                "gate: set aside an approval no person gave — this card was filed from outside \
+                 the team, so a person decides its plan",
+            )
+            .await;
             return Ok(());
         }
 
@@ -6049,14 +6180,16 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
     /// Planning gate: a passing verdict (spec: 0 open questions, RCA: high
     /// confidence) self-approves through the local route and advances to
     /// Executing. A recorded-but-failing verdict escalates to the board's
-    /// notification targets once.
+    /// notification targets once, and so does a passing one on a card held
+    /// for a person (see [`autonomous_plan_gate`]).
     async fn autonomy_planning(
         &self,
         client: &RemoteClient,
-        project_id: Uuid,
+        settings: &EffectiveProjectSettings,
         issue: &Issue,
         metadata: &IssueExtMetadata,
     ) -> Result<(), StageOrchestratorError> {
+        let project_id = settings.project_id;
         // Throughout planning, forward any new Jira comments to the agent so
         // teammate guidance left on the ticket reaches it. Self-throttled and
         // idle-guarded; only runs while the ticket is in Planning, so it
@@ -6107,8 +6240,9 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
         }
 
         let jira_key = jira_key_for(issue, metadata);
+        let gate = autonomous_plan_gate(verdict_passes, settings.external_cards, metadata);
 
-        if verdict_passes {
+        if gate == AutonomousPlanGate::SelfApprove {
             // Self-approve, preserving the recorded spec path.
             let approval = IssueExtMetadata {
                 spec: Some(SpecRef {
@@ -6187,6 +6321,14 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
                     ),
                 ),
             };
+            // A held card's plan cleared the bar; what it waits on is who
+            // filed it.
+            let detail = match gate {
+                AutonomousPlanGate::HeldForAPerson => {
+                    "filed from outside the team, so a person decides its plan".to_string()
+                }
+                _ => detail,
+            };
             // Cleaned again at render time, not only at ingress: tickets
             // planned before the ingress fix still hold the agent's tool
             // syntax in this field, and the escalation is the one place the
@@ -6245,7 +6387,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             .await;
             self.tag_issue_rca(client, project_id, issue, "process:escalated")
                 .await;
-            info!("Stage orchestrator: autonomy escalated {jira_key} (low-confidence plan)");
+            info!("Stage orchestrator: autonomy escalated {jira_key} ({detail})");
         }
         Ok(())
     }
@@ -7867,9 +8009,7 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             .await
             .ok()
             .map(|identity| identity.account_id);
-        let authorised = !author.is_empty()
-            && agent.as_deref() != Some(author)
-            && approvers.contains_key(author);
+        let authorised = tracker_author_may_decide(author, agent.as_deref(), &approvers);
         if !authorised {
             let denial = format!(
                 "{label} from {} was not acted on: only the people chosen as approvers in the \
@@ -14603,6 +14743,184 @@ mod tests {
             );
             assert_eq!(resumed.permission_policy, Some(policy));
         }
+    }
+
+    fn high_confidence_bug(extra: serde_json::Value) -> IssueExtMetadata {
+        let mut value = json!({
+            "work_class": "bug",
+            "planning": {
+                "kind": "rca",
+                "confidence": "high",
+                "recorded_at": "2026-10-20T12:00:00Z"
+            }
+        });
+        if let (Value::Object(base), Value::Object(extra)) = (&mut value, extra) {
+            base.extend(extra);
+        }
+        IssueExtMetadata::from_value(&value)
+    }
+
+    /// In Prep mode an external bug whose RCA clears the bar waits at the
+    /// gate under `wait_for_a_person` and approves itself under
+    /// `follow_board`; a bug the owner made approves itself under both, and
+    /// a verdict below the bar escalates whoever filed the card.
+    #[test]
+    fn an_external_card_waits_at_the_plan_gate_unless_it_follows_the_board() {
+        let api = high_confidence_bug(json!({ "origin": { "kind": "api", "ref": "support-7" } }));
+        let public_issue = high_confidence_bug(json!({ "filed_externally": true }));
+        let own = high_confidence_bug(json!({}));
+
+        let mut config = Config::default();
+        config.orchestrator.autonomy = AutonomyMode::Full;
+        let settings = config.project_settings(Uuid::new_v4());
+        assert_eq!(settings.external_cards, ExternalCards::WaitForAPerson);
+        for external in [&api, &public_issue] {
+            assert_eq!(
+                autonomous_plan_gate(true, settings.external_cards, external),
+                AutonomousPlanGate::HeldForAPerson
+            );
+            assert_eq!(
+                autonomous_plan_gate(true, ExternalCards::FollowBoard, external),
+                AutonomousPlanGate::SelfApprove
+            );
+        }
+        for external_cards in [ExternalCards::WaitForAPerson, ExternalCards::FollowBoard] {
+            assert_eq!(
+                autonomous_plan_gate(true, external_cards, &own),
+                AutonomousPlanGate::SelfApprove
+            );
+            for card in [&api, &own] {
+                assert_eq!(
+                    autonomous_plan_gate(false, external_cards, card),
+                    AutonomousPlanGate::BelowTheBar
+                );
+            }
+        }
+    }
+
+    /// A tracker comment approval on an external card counts when an
+    /// approver wrote it, and the card then clears the Executing gate; an
+    /// approval only the agent reported is set aside on a held card and
+    /// stands everywhere else.
+    #[test]
+    fn a_person_approves_an_external_card_and_the_agent_cannot() {
+        let api = high_confidence_bug(json!({ "origin": { "kind": "api", "ref": "support-7" } }));
+        let own = high_confidence_bug(json!({}));
+
+        let approvers = BTreeMap::from([("acct-ada".to_string(), "Ada".to_string())]);
+        assert!(tracker_author_may_decide(
+            "acct-ada",
+            Some("acct-bot"),
+            &approvers
+        ));
+        // The reporter of a public issue, or anyone else not on the list,
+        // cannot approve by commenting.
+        assert!(!tracker_author_may_decide(
+            "acct-reporter",
+            Some("acct-bot"),
+            &approvers
+        ));
+        assert!(!tracker_author_may_decide("", Some("acct-bot"), &approvers));
+        let listed_bot = BTreeMap::from([("acct-bot".to_string(), "Bot".to_string())]);
+        assert!(!tracker_author_may_decide(
+            "acct-bot",
+            Some("acct-bot"),
+            &listed_bot
+        ));
+
+        let tracker_approval = api_types::ApprovalRecord {
+            decision: Decision::Approve,
+            by: "Ada".to_string(),
+            source: DecisionSource::Tracker,
+            comment: String::new(),
+            at: Utc::now(),
+        };
+        let approved = IssueExtMetadata::from_value(&decisions::recorded(
+            &serde_json::to_value(&api).unwrap(),
+            &tracker_approval,
+        ));
+        assert!(approved_by_a_person(&approved));
+        assert!(!sets_aside_approval(
+            ExternalCards::WaitForAPerson,
+            &approved
+        ));
+        assert!(executing_gate_passes(WorkClass::Bug, &approved));
+
+        let agent_reported = |card: &IssueExtMetadata| {
+            let mut card = card.clone();
+            card.spec = Some(SpecRef {
+                approved_at: Some(Utc::now()),
+                approved_via: Some(api_types::ApprovalSource::Agent),
+                ..Default::default()
+            });
+            card
+        };
+        let api_by_agent = agent_reported(&api);
+        assert!(!approved_by_a_person(&api_by_agent));
+        assert!(sets_aside_approval(
+            ExternalCards::WaitForAPerson,
+            &api_by_agent
+        ));
+        assert!(!sets_aside_approval(
+            ExternalCards::FollowBoard,
+            &api_by_agent
+        ));
+        assert!(!sets_aside_approval(
+            ExternalCards::WaitForAPerson,
+            &agent_reported(&own)
+        ));
+        // Nothing approved: nothing to set aside.
+        assert!(!sets_aside_approval(ExternalCards::WaitForAPerson, &api));
+    }
+
+    /// `orchestrator.external_cards`: absent reads as `wait_for_a_person`,
+    /// both values round-trip, and the settings descriptor offers exactly
+    /// them under the key it documents.
+    #[test]
+    fn external_cards_defaults_to_waiting_and_round_trips() {
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        raw["orchestrator"]
+            .as_object_mut()
+            .unwrap()
+            .remove("external_cards");
+        let config = Config::from(raw.to_string());
+        assert_eq!(
+            config.orchestrator.external_cards,
+            ExternalCards::WaitForAPerson
+        );
+        for (value, parsed) in [
+            ("follow_board", ExternalCards::FollowBoard),
+            ("wait_for_a_person", ExternalCards::WaitForAPerson),
+        ] {
+            let mut raw = serde_json::to_value(Config::default()).unwrap();
+            raw["orchestrator"]["external_cards"] = json!(value);
+            let config = Config::from(raw.to_string());
+            assert_eq!(config.orchestrator.external_cards, parsed);
+            assert_eq!(
+                serde_json::to_value(&config).unwrap()["orchestrator"]["external_cards"],
+                json!(value)
+            );
+            assert_eq!(
+                config.project_settings(Uuid::new_v4()).external_cards,
+                parsed
+            );
+        }
+
+        let descriptors = settings_descriptors();
+        let field = &descriptors[0].fields[0];
+        assert_eq!(field.key, "external_cards");
+        assert_eq!(
+            field.help,
+            "Cards filed from outside the team (API, public issues): follow the board's mode, \
+             or always wait for a person at the plan gate"
+        );
+        let FieldKind::Select { options } = &field.kind else {
+            panic!("external_cards is a select");
+        };
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["follow_board", "wait_for_a_person"]);
+        let written = serde_json::to_value(Config::default()).unwrap();
+        assert!(written["orchestrator"].get(&field.key).is_some());
     }
 
     #[test]

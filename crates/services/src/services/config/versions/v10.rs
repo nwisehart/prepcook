@@ -1124,6 +1124,21 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
     }
 }
 
+/// What the board's autonomy means for a card filed from outside the team
+/// (`orchestrator.external_cards`; see `IssueExtMetadata::is_filed_externally`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalCards {
+    /// External cards get the board's autonomy: in Prep mode a plan that
+    /// clears the bar approves itself, whoever filed the card.
+    FollowBoard,
+    /// An external card's plan is never approved by anyone but a person: it
+    /// is planned in either mode, and then waits at the plan gate. An
+    /// approval the agent reported for itself does not count.
+    #[default]
+    WaitForAPerson,
+}
+
 /// Background playbook orchestrator settings. Disabled (`Off`) by default.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub struct OrchestratorConfig {
@@ -1173,6 +1188,11 @@ pub struct OrchestratorConfig {
     /// See [`AutonomyMode`]. Default `Off`; enable only on the runner.
     #[serde(default)]
     pub autonomy: AutonomyMode,
+    /// Whether a card filed from outside the team follows the board's
+    /// autonomy or always waits for a person at the plan gate. Global: every
+    /// board reads this one.
+    #[serde(default)]
+    pub external_cards: ExternalCards,
     /// REQUEST CHANGES → fix → re-review cycles autonomy runs before
     /// escalating to the notification targets and leaving the ticket for a
     /// human.
@@ -1217,6 +1237,7 @@ impl Default for OrchestratorConfig {
             max_launches_per_tick: default_max_launches_per_tick(),
             workspace_retention_days: default_workspace_retention_days(),
             autonomy: AutonomyMode::Off,
+            external_cards: ExternalCards::default(),
             autonomy_review_iterations: default_autonomy_review_iterations(),
             digest_at_local: None,
             eob_at_local: None,
@@ -1239,6 +1260,7 @@ impl From<v9::OrchestratorConfig> for OrchestratorConfig {
             workspace_retention_days: old.workspace_retention_days,
             max_launches_per_tick: old.max_launches_per_tick,
             autonomy: old.autonomy,
+            external_cards: ExternalCards::default(),
             autonomy_review_iterations: old.autonomy_review_iterations,
             digest_at_local: old.digest_at_local,
             eob_at_local: old.eob_at_local,
@@ -1276,6 +1298,8 @@ pub struct EffectiveProjectSettings {
     pub assigned_jql: Option<String>,
     pub playbooks: BTreeMap<String, String>,
     pub autonomy: AutonomyMode,
+    /// The global `orchestrator.external_cards`.
+    pub external_cards: ExternalCards,
     pub autonomy_review_iterations: u32,
     pub deployed_retention_days: Option<u32>,
     pub cleanup_retention_days: Option<u32>,
@@ -1630,6 +1654,7 @@ impl Config {
             assigned_jql,
             playbooks,
             autonomy: board.autonomy.unwrap_or(self.orchestrator.autonomy),
+            external_cards: self.orchestrator.external_cards,
             autonomy_review_iterations: board
                 .autonomy_review_iterations
                 .unwrap_or(self.orchestrator.autonomy_review_iterations),

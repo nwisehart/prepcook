@@ -98,6 +98,14 @@ and its later stages under their usual profiles
 ([method.md](method.md#cards-from-outside-the-team)). The same goes for a GitHub
 issue imported from someone outside the repository's team.
 
+Such a card is also held for a person. With `orchestrator.external_cards` at its
+default, `wait_for_a_person`, a bug or story filed here is picked up and planned
+in Chef and Prep mode alike, and then waits at the plan gate: in Prep mode its
+plan never approves itself, so the RCA or spec is ready when someone looks, and
+only a decision from Lavish, the card, an approver on the ticket or
+`POST /api/approvals/{issue_id}` moves it on. `follow_board` gives filed cards the
+board's mode, as before. An investigation waits for a person either way.
+
 | Status | When |
 | --- | --- |
 | 201 | Filed. |

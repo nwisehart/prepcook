@@ -22,6 +22,7 @@ Defaults below are what a new config starts with. "Unset" means the key is
 | `orchestrator.poll_interval_secs` | `15` | **Poll interval**: seconds between scans. |
 | `orchestrator.max_launches_per_tick` | `3` | **Max launches per tick**: new agent sessions started per scan, highest priority first. |
 | `orchestrator.autonomy` | `off` | **Autonomy mode**. `full` is Prep mode: passing plans self-approve, verified fixes go to Review, approved reviews go to Shipped. `off` is Chef mode. |
+| `orchestrator.external_cards` | `wait_for_a_person` | **Externally filed cards**: `follow_board` gives a card filed from outside the team (any card with an `origin`, and a GitHub issue from someone outside the repository's team) the board's mode; `wait_for_a_person` plans it in either mode and then holds it at the plan gate for a person, even in Prep mode, where its escalation says so. An approval only the agent reported does not count for such a card. One setting for every board ([method.md](method.md#cards-from-outside-the-team)). |
 | `orchestrator.autonomy_review_iterations` | `3` | **Review-fix rounds before escalating**: fix rounds before a card that keeps getting REQUEST CHANGES waits for a person. Applies in both modes. |
 | `orchestrator.pattern_threshold` | `5` | **Pattern-review threshold**: linked RCAs on one graph node that file a pattern review ([rca-graph.md](rca-graph.md#pattern-reviews)). Older configs call it `investigation_threshold`, which is still read. |
 | `orchestrator.default_board` | unset (the first board in `project_defaults`) | *File only.* The board `POST /api/cards` files into when the request names none ([api.md](api.md#file-a-card)). |
@@ -235,6 +236,14 @@ Generated from the providers' descriptors. A secret field is read from the secre
 | | `webhook_url` | yes | `DISCORD_WEBHOOK_URL` | **Webhook URL**. The channel's webhook (Channel settings → Integrations → Webhooks), https://discord.com/api/webhooks/…. |
 | `teams` (Microsoft Teams) | | | | Posts each event as an Adaptive Card to a Teams channel through an incoming webhook. |
 | | `webhook_url` | yes | `TEAMS_WEBHOOK_URL` | **Webhook URL**. The URL of a Teams workflow that posts webhook requests to a channel, or of a channel's Incoming Webhook connector. |
+
+### Orchestrator settings
+
+Generated from the `orchestrator` section's settings descriptor, shown under **Settings → Orchestrator**.
+
+| Key | What it is |
+| --- | --- |
+| `orchestrator.external_cards` | **Externally filed cards**. Cards filed from outside the team (API, public issues): follow the board's mode, or always wait for a person at the plan gate. One of `follow_board` (Follow the board's mode) or `wait_for_a_person` (Always wait for a person). |
 
 ### Reproduction targets
 

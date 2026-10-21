@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::services::{
-    agents, cards, config::Config, evidence, notifications, reproduction, secrets::Secrets, tracker,
+    agents, cards, config::Config, evidence, notifications, reproduction, secrets::Secrets,
+    stage_orchestrator, tracker,
 };
 
 /// How Settings renders one field and what the config holds for it.
@@ -154,6 +155,10 @@ pub fn descriptors() -> BTreeMap<String, Vec<Descriptor>> {
         (evidence::AREA.to_string(), evidence::descriptors()),
         (agents::AREA.to_string(), agents::descriptors()),
         (cards::AREA.to_string(), cards::descriptors()),
+        (
+            stage_orchestrator::SETTINGS_AREA.to_string(),
+            stage_orchestrator::settings_descriptors(),
+        ),
     ])
 }
 

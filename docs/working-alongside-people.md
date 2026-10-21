@@ -94,6 +94,17 @@ approvals service gives up on it, after ten hours, so a session never waits for
 ever. Claude Code, Codex, Gemini CLI, Qwen Code and OpenCode can be supervised;
 the other agents run as their profile says.
 
+A card filed from outside the team, through the card API or as a public issue
+from someone outside the repository's team, is the exception to Prep mode. With
+**Settings → Orchestrator → Externally filed cards** at its default ("Always wait
+for a person", `orchestrator.external_cards: wait_for_a_person`), its plan never
+approves itself: the agent plans it as usual, the card shows "Needs you" with the
+RCA or plan ready, and the board's escalation says it was filed from outside the
+team. A decision from Lavish, the card, an approver's comment on the ticket or
+the API moves it on, with the same rules about who may decide as any other card;
+an approval the agent reports for itself is set aside. "Follow the board's mode"
+gives these cards the board's autonomy instead.
+
 ## Approvals through comments
 
 A plan is decided from a comment as well as from Lavish or the API

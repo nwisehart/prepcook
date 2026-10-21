@@ -112,14 +112,16 @@ planning profile's agent with its guarded variant: for Claude Code, `GUARDED`,
 which takes away the `WebFetch` and `WebSearch` tools and does not carry the
 skip-permissions flag; an agent that ships no guarded variant plans the card
 under the planning profile unchanged. Whether its other tool calls wait for a
-person is `agents.permissions`, the same as for every session. The card panel's Origin line then says "Planned
-under the guarded profile". Executing and Reviewing run their usual profiles:
+person is `agents.permissions`, the same as for every session. The card panel's
+Origin line then says "Planned under the guarded profile". Executing and Reviewing run their usual profiles:
 an investigation never executes until a person converts it, and a bug or story
-executes from a plan that was approved. In Chef mode a person approves it; in
-Prep mode a plan that clears the bar approves itself, so a bug filed from
-outside the team can reach Executing with no one having read it. A service that
-files reports from outside the team should file them as investigations, as Tammy
-does: an investigation always waits for a person. The guarded profile narrows the agent's own
+executes from a plan that was approved. In Chef mode a person approves it. In
+Prep mode it is planned all the same, but by default its plan never approves
+itself: `orchestrator.external_cards` (`wait_for_a_person`) holds it at the gate
+until a person decides, and an approval only the agent reported is set aside.
+`follow_board` gives it the board's autonomy, under which a plan that clears the
+bar approves itself and a bug filed from outside the team can reach Executing
+with no one having read it. The guarded profile narrows the agent's own
 tools; it does not confine the shell the agent runs commands in.
 
 ## Investigations
@@ -226,8 +228,9 @@ they arrive. Cards move themselves: a plan that clears the bar (an RCA at high
 confidence, a spec with no open questions) approves itself and goes to Execute;
 one below the bar is escalated to Slack and waits in Plan for a person, whose
 decision comes from the tracker ticket, the card or the approvals API
-([approvals.md](approvals.md)). A finished, verified fix goes to Review, and an
-approved review goes to Shipped.
+([approvals.md](approvals.md)). So, by default, does a card filed from outside
+the team, whatever its verdict ([Cards from outside the team](#cards-from-outside-the-team)). A
+finished, verified fix goes to Review, and an approved review goes to Shipped.
 
 Either way a person merges. When an engineer takes a ticket over, Prepcook steps
 aside ([working-alongside-people.md](working-alongside-people.md)).

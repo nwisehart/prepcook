@@ -1377,6 +1377,12 @@ max_launches_per_tick: number,
  */
 autonomy: AutonomyMode, 
 /**
+ * Whether a card filed from outside the team follows the board's
+ * autonomy or always waits for a person at the plan gate. Global: every
+ * board reads this one.
+ */
+external_cards: ExternalCards, 
+/**
  * REQUEST CHANGES → fix → re-review cycles autonomy runs before
  * escalating to the notification targets and leaving the ticket for a
  * human.
@@ -1718,6 +1724,8 @@ sources: Array<EvidenceSourceConfig>, };
 export type EvidenceKind = "sentry" | "dataset" | "datadog" | "cloudwatch" | "log_files";
 
 export type AutonomyMode = "off" | "full";
+
+export type ExternalCards = "follow_board" | "wait_for_a_person";
 
 export type AppRunsConfig = { 
 /**

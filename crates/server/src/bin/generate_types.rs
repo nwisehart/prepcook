@@ -238,6 +238,7 @@ fn generate_types_content() -> String {
         services::services::config::ProjectEvidenceOverride::decl(),
         services::services::evidence::EvidenceKind::decl(),
         services::services::config::AutonomyMode::decl(),
+        services::services::config::ExternalCards::decl(),
         services::services::config::AppRunsConfig::decl(),
         services::services::config::ProjectReproductionOverride::decl(),
         services::services::reproduction::ReproductionTarget::decl(),
