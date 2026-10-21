@@ -103,7 +103,33 @@ issue imported from someone outside the repository's team.
 | 401 | No bearer token, or the wrong one. |
 | 404 | No such board. |
 | 409 | The board has no Plan column (`start: true`) or no To Do column. |
+| 429 | `api.cards.daily_limit` cards (50 by default) were filed in the last 24 hours. Nothing was written. |
 | 503 | The board could not be reached. |
+
+The daily limit counts every card this route filed in the 24 hours before the
+request, whichever board it went to; a card made on the board, imported from a
+tracker or converted does not count, and a card deleted from the board still
+does. Past it, the answer is the usual failure envelope with the limit and the
+moment the oldest filing in the window leaves it, and a `Retry-After` header in
+seconds:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 5391
+```
+
+```json
+{
+  "success": false,
+  "data": null,
+  "error_data": { "limit": 50, "retry_at": "2026-10-21T09:14:03.120Z" },
+  "message": "the card API files at most 50 cards in 24 hours; the next can be filed at 2026-10-21T09:14:03Z"
+}
+```
+
+A filer should tell whoever it is acting for that the card was not filed and
+when it can be, not retry in a loop. `0` turns the limit off
+([configuration.md](configuration.md#approvals)).
 
 ### Read a card
 

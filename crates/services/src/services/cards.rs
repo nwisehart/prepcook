@@ -15,7 +15,7 @@ use api_types::{
     DecisionSource, HarnessRecord, Issue, IssueExtMetadata, ProjectStatus, TriageReport, WorkClass,
 };
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -23,11 +23,41 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::services::{
-    approvals::decisions, notifications::Event, stage_orchestrator::public_ui_base,
+    approvals::decisions,
+    integrations::{Descriptor, Field, FieldKind},
+    notifications::Event,
+    stage_orchestrator::public_ui_base,
 };
 
 /// Longest title a card takes; a tracker summary is capped at 255 too.
 pub const MAX_TITLE_CHARS: usize = 255;
+
+/// The window `api.cards.daily_limit` counts filed cards over.
+pub const FILING_WINDOW: Duration = Duration::hours(24);
+
+/// The integration area name the descriptors route keys the API's settings
+/// under.
+pub const AREA: &str = "api";
+
+/// The card route's settings as a descriptor, so Settings and the
+/// configuration reference render `api.cards` from the same data.
+pub fn descriptors() -> Vec<Descriptor> {
+    vec![Descriptor::new(
+        "cards",
+        "Card API",
+        "Cards other services file through POST /api/cards with the API token.",
+        vec![Field::new(
+            "daily_limit",
+            "Cards filed per day",
+            FieldKind::Number,
+            false,
+            "Most cards POST /api/cards files in any 24 hours; past it the route answers 429 \
+             with when a slot frees up. 0 files without a limit. Cards made on the board or \
+             imported from a tracker do not count.",
+        )],
+        "https://github.com/nwisehart/prepcook/blob/main/docs/api.md#file-a-card",
+    )]
+}
 
 /// `POST /api/cards`.
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -120,7 +150,7 @@ pub struct CardView {
     pub origin: Option<CardOrigin>,
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum CardError {
     /// The request itself is wrong; nothing was changed.
     #[error("{0}")]
@@ -136,6 +166,23 @@ pub enum CardError {
     Unavailable(String),
     #[error("{0}")]
     Failed(String),
+    /// `api.cards.daily_limit` cards were filed in the last 24 hours.
+    #[error(
+        "the card API files at most {limit} cards in 24 hours; the next can be filed at {}",
+        retry_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    )]
+    RateLimited {
+        limit: u32,
+        /// When the oldest filing in the window leaves it.
+        retry_at: DateTime<Utc>,
+    },
+}
+
+/// What a `429` from `POST /api/cards` carries as `error_data`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DailyLimitReached {
+    pub limit: u32,
+    pub retry_at: DateTime<Utc>,
 }
 
 /// What the card API needs from the system it runs in. The orchestrator
@@ -182,6 +229,16 @@ pub trait CardHost: Send + Sync {
 
     /// Sends an event to the board's notification targets.
     async fn notify(&self, project_id: Uuid, event: Event);
+
+    /// `api.cards.daily_limit`; `0` for no limit.
+    async fn daily_limit(&self) -> u32;
+
+    /// When each card the route filed after `since` was filed.
+    async fn filed_since(&self, since: DateTime<Utc>) -> Result<Vec<DateTime<Utc>>, CardError>;
+
+    /// Records a card the route filed, for the daily limit. Best effort: a
+    /// card that is on the board is reported as filed whatever this does.
+    async fn record_filing(&self, issue_id: Uuid, at: DateTime<Utc>);
 }
 
 /// The card's page on the board.
@@ -233,6 +290,37 @@ pub fn column_for<'a>(statuses: &'a [ProjectStatus], word: &str) -> Option<&'a P
         .collect();
     matching.sort_by_key(|status| status.sort_order);
     matching.into_iter().next()
+}
+
+/// Whether another card may be filed at `now`, given when the route filed
+/// the cards before it: at most `limit` in any [`FILING_WINDOW`], none
+/// counted with a `limit` of `0`. Refused, it says when the oldest filing in
+/// the window leaves it.
+pub fn check_daily_limit(
+    limit: u32,
+    filed: &[DateTime<Utc>],
+    now: DateTime<Utc>,
+) -> Result<(), CardError> {
+    if limit == 0 {
+        return Ok(());
+    }
+    let window_start = now - FILING_WINDOW;
+    let mut in_window: Vec<DateTime<Utc>> = filed
+        .iter()
+        .copied()
+        .filter(|at| *at > window_start && *at <= now)
+        .collect();
+    if in_window.len() < limit as usize {
+        return Ok(());
+    }
+    in_window.sort();
+    // The slot that frees first is the one that lets the count drop below
+    // the limit: the oldest of the newest `limit` filings.
+    let freeing = in_window[in_window.len() - limit as usize];
+    Err(CardError::RateLimited {
+        limit,
+        retry_at: freeing + FILING_WINDOW,
+    })
 }
 
 /// Checks a `POST /api/cards` body before anything is written.
@@ -365,12 +453,19 @@ pub fn initial_metadata(request: &CreateCardRequest) -> Value {
     serde_json::to_value(&metadata).unwrap_or_else(|_| serde_json::json!({}))
 }
 
-/// Files a card: validates, picks the board and column, creates it.
+/// Files a card: validates, checks the daily limit, picks the board and
+/// column, creates it and records the filing.
 pub async fn create_card(
     host: &dyn CardHost,
     request: CreateCardRequest,
 ) -> Result<CreatedCard, CardError> {
     validate(&request)?;
+    let now = Utc::now();
+    let limit = host.daily_limit().await;
+    if limit > 0 {
+        let filed = host.filed_since(now - FILING_WINDOW).await?;
+        check_daily_limit(limit, &filed, now)?;
+    }
     let project_id = match request.project_id {
         Some(project_id) => project_id,
         None => host.default_board().await.ok_or_else(|| {
@@ -408,6 +503,7 @@ pub async fn create_card(
             request.work_class,
         )
         .await?;
+    host.record_filing(issue.id, now).await;
     Ok(CreatedCard {
         id: issue.id,
         url: card_url(project_id, issue.id),
@@ -675,14 +771,21 @@ pub async fn convert_card(
 #[derive(Clone)]
 pub struct Cards {
     host: Arc<dyn CardHost>,
+    /// Held from the daily-limit check to the recorded filing, so two
+    /// requests arriving together cannot both take the last slot.
+    filing: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Cards {
     pub fn new(host: Arc<dyn CardHost>) -> Self {
-        Self { host }
+        Self {
+            host,
+            filing: Arc::new(tokio::sync::Mutex::new(())),
+        }
     }
 
     pub async fn create(&self, request: CreateCardRequest) -> Result<CreatedCard, CardError> {
+        let _filing = self.filing.lock().await;
         create_card(self.host.as_ref(), request).await
     }
 
@@ -787,6 +890,9 @@ mod tests {
         moves: Mutex<Vec<Uuid>>,
         comments: Mutex<Vec<String>>,
         events: Mutex<Vec<Event>>,
+        /// `api.cards.daily_limit`; the default `0` files without one.
+        daily_limit: u32,
+        filings: Mutex<Vec<(Uuid, DateTime<Utc>)>>,
     }
 
     impl FakeBoard {
@@ -893,6 +999,25 @@ mod tests {
         async fn notify(&self, _project_id: Uuid, event: Event) {
             self.events.lock().unwrap().push(event);
         }
+
+        async fn daily_limit(&self) -> u32 {
+            self.daily_limit
+        }
+
+        async fn filed_since(&self, since: DateTime<Utc>) -> Result<Vec<DateTime<Utc>>, CardError> {
+            Ok(self
+                .filings
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(_, at)| *at)
+                .filter(|at| *at > since)
+                .collect())
+        }
+
+        async fn record_filing(&self, issue_id: Uuid, at: DateTime<Utc>) {
+            self.filings.lock().unwrap().push((issue_id, at));
+        }
     }
 
     fn request() -> CreateCardRequest {
@@ -948,6 +1073,120 @@ mod tests {
         assert_eq!(metadata.external, Some(json!({ "customer": "acme" })));
         // The filer's metadata can never stand in for a workflow key.
         assert!(sent.extension_metadata.get("customer").is_none());
+    }
+
+    /// A board with `limit` and cards filed `hours_ago`.
+    fn limited(limit: u32, hours_ago: &[i64]) -> FakeBoard {
+        let now = Utc::now();
+        FakeBoard {
+            default_board: Some(BOARD),
+            daily_limit: limit,
+            filings: Mutex::new(
+                hours_ago
+                    .iter()
+                    .map(|hours| (Uuid::new_v4(), now - Duration::hours(*hours)))
+                    .collect(),
+            ),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn the_daily_limit_files_under_it_and_refuses_at_it() {
+        // Under the limit: filed, and the filing recorded.
+        let board = limited(3, &[1, 2]);
+        create_card(&board, request()).await.unwrap();
+        assert_eq!(board.created.lock().unwrap().len(), 1);
+        assert_eq!(board.filings.lock().unwrap().len(), 3);
+
+        // At it: refused before anything is written, with when it frees up.
+        let error = create_card(&board, request()).await.unwrap_err();
+        let CardError::RateLimited { limit, retry_at } = error.clone() else {
+            panic!("{error:?}");
+        };
+        assert_eq!(limit, 3);
+        let oldest = board.filings.lock().unwrap()[1].1;
+        assert_eq!(retry_at, oldest + FILING_WINDOW);
+        assert!(error.to_string().contains("at most 3 cards in 24 hours"));
+        assert_eq!(board.created.lock().unwrap().len(), 1);
+        assert_eq!(board.filings.lock().unwrap().len(), 3);
+
+        // Over it (a limit lowered under the day's count): still refused,
+        // until enough of the day has passed to drop below the new limit.
+        let board = limited(1, &[1, 5, 9]);
+        let Err(CardError::RateLimited { retry_at, .. }) = create_card(&board, request()).await
+        else {
+            panic!("over the limit files nothing");
+        };
+        let newest = board.filings.lock().unwrap()[0].1;
+        assert_eq!(retry_at, newest + FILING_WINDOW);
+        assert!(board.created.lock().unwrap().is_empty());
+    }
+
+    /// The limit is 50 in a new config and in one saved before the setting
+    /// existed; the descriptor names the key the config holds it under.
+    #[test]
+    fn the_limit_defaults_to_fifty_and_round_trips() {
+        use crate::services::config::{CardApiConfig, Config};
+        assert_eq!(Config::default().api.cards.daily_limit, 50);
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        raw.as_object_mut().unwrap().remove("api");
+        assert_eq!(Config::from(raw.to_string()).api.cards.daily_limit, 50);
+        raw["api"] = json!({ "cards": {} });
+        assert_eq!(Config::from(raw.to_string()).api.cards.daily_limit, 50);
+        raw["api"] = json!({ "cards": { "daily_limit": 0 } });
+        assert_eq!(Config::from(raw.to_string()).api.cards.daily_limit, 0);
+
+        let field = &descriptors()[0].fields[0];
+        let written = serde_json::to_value(CardApiConfig::default()).unwrap();
+        assert_eq!(written[&field.key], 50);
+        assert_eq!(field.kind, FieldKind::Number);
+    }
+
+    #[test]
+    fn the_window_rolls() {
+        let now = Utc::now();
+        let at = |hours: i64| now - Duration::hours(hours);
+        // Two in the window and one that left it: one slot under a limit of 3.
+        assert!(check_daily_limit(3, &[at(25), at(10), at(1)], now).is_ok());
+        assert_eq!(
+            check_daily_limit(2, &[at(25), at(10), at(1)], now),
+            Err(CardError::RateLimited {
+                limit: 2,
+                retry_at: at(10) + FILING_WINDOW,
+            })
+        );
+        // Fourteen hours on, the one filed ten hours ago has left too.
+        let later = now + Duration::hours(14);
+        assert!(check_daily_limit(2, &[at(25), at(10), at(1)], later).is_ok());
+        // Exactly 24 hours old has left the window.
+        assert!(check_daily_limit(1, &[at(24)], now).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_limit_of_zero_files_without_counting() {
+        let hours: Vec<i64> = (0..500).map(|n| n % 20).collect();
+        let board = limited(0, &hours);
+        create_card(&board, request()).await.unwrap();
+        assert!(check_daily_limit(0, &[Utc::now(); 3], Utc::now()).is_ok());
+    }
+
+    /// Only the route counts: a card the owner makes on the board, or one
+    /// converted through the API, never takes a slot.
+    #[tokio::test]
+    async fn the_owners_own_cards_never_count() {
+        let board = FakeBoard {
+            daily_limit: 1,
+            ..FakeBoard::with_card(triaged(ConfidenceLevel::Low, None), "Plan")
+        };
+        convert_card(&board, Uuid::from_u128(7), WorkClass::Story, "Ada")
+            .await
+            .unwrap();
+        assert!(board.filings.lock().unwrap().is_empty());
+        let mut request = request();
+        request.project_id = Some(BOARD);
+        create_card(&board, request).await.unwrap();
+        assert_eq!(board.filings.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

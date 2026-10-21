@@ -1150,7 +1150,11 @@ app_runs: AppRunsConfig,
 /**
  * How plans reach a person for approval.
  */
-approvals: ApprovalsConfig, };
+approvals: ApprovalsConfig, 
+/**
+ * The stable HTTP API: the card route's daily limit.
+ */
+api: ApiConfig, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, 
 /**
@@ -1727,6 +1731,17 @@ target: ReproductionTarget | null, };
 export type ReproductionTarget = "local" | "remote";
 
 export type ApprovalsConfig = { in_app_gate: InAppGate, };
+
+export type ApiConfig = { cards: CardApiConfig, };
+
+export type CardApiConfig = { 
+/**
+ * Cards it files in any 24 hours before it answers `429`; `0` files
+ * without a limit. Every card it files is planned by an agent running as
+ * the board owner, so the limit bounds what a leaked token, or a filer
+ * stuck in a loop, can start.
+ */
+daily_limit: number, };
 
 export type InAppGate = "lavish" | "none";
 

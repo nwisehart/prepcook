@@ -55,10 +55,11 @@ use api_types::{
     SortDirection, SpecRef, StampKbNodeInvestigationRequest, UpdateIssueRequest,
     UpsertPullRequestRequest, VerifyState, WorkClass, Workspace as RemoteWorkspace, pr_state,
 };
-use chrono::{NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use db::{
     DBService,
     models::{
+        card_filing::CardFiling,
         coding_agent_turn::CodingAgentTurn,
         execution_process::{ExecutionProcess, ExecutionProcessRunReason, ExecutionProcessStatus},
         execution_process_seat_stall::ExecutionProcessSeatStall,
@@ -12858,6 +12859,22 @@ impl<C: ContainerService + Send + Sync + 'static> CardHost for StageOrchestrator
 
     async fn notify(&self, project_id: Uuid, event: Event) {
         self.notifications.send(Some(project_id), event).await;
+    }
+
+    async fn daily_limit(&self) -> u32 {
+        self.config.read().await.api.cards.daily_limit
+    }
+
+    async fn filed_since(&self, since: DateTime<Utc>) -> Result<Vec<DateTime<Utc>>, CardError> {
+        CardFiling::filed_since(&self.db.pool, since)
+            .await
+            .map_err(|e| CardError::Failed(format!("reading the day's filings failed: {e}")))
+    }
+
+    async fn record_filing(&self, issue_id: Uuid, at: DateTime<Utc>) {
+        if let Err(e) = CardFiling::record(&self.db.pool, issue_id, at).await {
+            warn!("Stage orchestrator: could not record the filing of card {issue_id}: {e}");
+        }
     }
 }
 

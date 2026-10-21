@@ -4,6 +4,7 @@ import { cloneDeep, isEqual, pick } from 'lodash';
 import { CaretRightIcon, TrashIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import type {
+  ApiConfig,
   DeployWatch,
   InAppGate,
   NotificationTarget,
@@ -33,6 +34,7 @@ import {
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import {
+  FieldInput,
   IntegrationSection,
   useIntegrationDescriptors,
 } from './IntegrationSection';
@@ -87,6 +89,11 @@ const GLOBAL_FIELD_KEYS = [
 const pickGlobalFields = (
   config: OrchestratorConfig = DEFAULT_ORCHESTRATOR_CONFIG
 ) => pick(config, GLOBAL_FIELD_KEYS);
+
+/** The stable HTTP API's settings area, and its card route's descriptor. */
+const API_AREA = 'api';
+const CARD_API_KIND = 'cards';
+const DEFAULT_API_CONFIG: ApiConfig = { cards: { daily_limit: 50 } };
 
 const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   repo_ids: [],
@@ -222,6 +229,10 @@ export function OrchestratorSettingsSection() {
   const descriptorsQuery = useIntegrationDescriptors();
   const notificationDescriptors =
     descriptorsQuery.data?.[NOTIFICATIONS_AREA] ?? [];
+  const cardApiFields =
+    descriptorsQuery.data?.[API_AREA]?.find(
+      (descriptor) => descriptor.kind === CARD_API_KIND
+    )?.fields ?? [];
   const agentDescriptors = useAgentDescriptors();
   const profileOptions = useProfileOptions(profiles);
 
@@ -232,6 +243,9 @@ export function OrchestratorSettingsSection() {
   );
   const [inAppGateDraft, setInAppGateDraft] = useState<InAppGate>(
     () => config?.approvals?.in_app_gate ?? 'lavish'
+  );
+  const [apiDraft, setApiDraft] = useState<ApiConfig>(() =>
+    cloneDeep(config?.api ?? DEFAULT_API_CONFIG)
   );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -247,6 +261,7 @@ export function OrchestratorSettingsSection() {
           : cloneDeep(DEFAULT_ORCHESTRATOR_CONFIG)
       );
       setInAppGateDraft(config.approvals?.in_app_gate ?? 'lavish');
+      setApiDraft(cloneDeep(config.api ?? DEFAULT_API_CONFIG));
     }
   }, [config, dirty]);
 
@@ -254,9 +269,10 @@ export function OrchestratorSettingsSection() {
     if (!config) return false;
     return (
       !isEqual(draft, config.orchestrator ?? DEFAULT_ORCHESTRATOR_CONFIG) ||
-      inAppGateDraft !== (config.approvals?.in_app_gate ?? 'lavish')
+      inAppGateDraft !== (config.approvals?.in_app_gate ?? 'lavish') ||
+      !isEqual(apiDraft, config.api ?? DEFAULT_API_CONFIG)
     );
-  }, [draft, inAppGateDraft, config]);
+  }, [draft, inAppGateDraft, apiDraft, config]);
 
   useEffect(() => {
     setContextDirty('orchestrator', hasUnsavedChanges);
@@ -382,6 +398,7 @@ export function OrchestratorSettingsSection() {
       await updateAndSaveConfig({
         orchestrator: draft,
         approvals: { ...config?.approvals, in_app_gate: inAppGateDraft },
+        api: apiDraft,
       });
       setDirty(false);
       setSuccess(true);
@@ -402,6 +419,7 @@ export function OrchestratorSettingsSection() {
         : cloneDeep(DEFAULT_ORCHESTRATOR_CONFIG)
     );
     setInAppGateDraft(config.approvals?.in_app_gate ?? 'lavish');
+    setApiDraft(cloneDeep(config.api ?? DEFAULT_API_CONFIG));
     setDirty(false);
   };
 
@@ -411,9 +429,11 @@ export function OrchestratorSettingsSection() {
     markDirty();
     setDraft((prev) => ({ ...prev, ...pickGlobalFields() }));
     setInAppGateDraft('lavish');
+    setApiDraft(cloneDeep(DEFAULT_API_CONFIG));
   };
   const globalsAtDefaults =
     inAppGateDraft === 'lavish' &&
+    isEqual(apiDraft, DEFAULT_API_CONFIG) &&
     isEqual(pickGlobalFields(draft), pickGlobalFields());
 
   if (loading) {
@@ -560,6 +580,23 @@ export function OrchestratorSettingsSection() {
             />
           </SettingsField>
         </div>
+
+        {cardApiFields.map((field) => (
+          <FieldInput
+            key={field.key}
+            id={`${API_AREA}-${CARD_API_KIND}-${field.key}`}
+            field={field}
+            value={apiDraft.cards[field.key as keyof ApiConfig['cards']]}
+            onChange={(value) => {
+              if (typeof value !== 'number' || value < 0) return;
+              markDirty();
+              setApiDraft((prev) => ({
+                ...prev,
+                cards: { ...prev.cards, [field.key]: Math.floor(value) },
+              }));
+            }}
+          />
+        ))}
       </SettingsCard>
 
       <SettingsCard

@@ -240,6 +240,8 @@ fn generate_types_content() -> String {
         services::services::config::ProjectReproductionOverride::decl(),
         services::services::reproduction::ReproductionTarget::decl(),
         services::services::config::ApprovalsConfig::decl(),
+        services::services::config::ApiConfig::decl(),
+        services::services::config::CardApiConfig::decl(),
         services::services::config::InAppGate::decl(),
         services::services::scripts::manifest::Manifest::decl(),
         services::services::scripts::manifest::AppScripts::decl(),

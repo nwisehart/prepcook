@@ -354,6 +354,36 @@ pub struct ApprovalsConfig {
     pub in_app_gate: InAppGate,
 }
 
+/// The stable HTTP API's settings (see `docs/api.md`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct ApiConfig {
+    #[serde(default)]
+    pub cards: CardApiConfig,
+}
+
+/// `POST /api/cards`, the route other services file cards through.
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct CardApiConfig {
+    /// Cards it files in any 24 hours before it answers `429`; `0` files
+    /// without a limit. Every card it files is planned by an agent running as
+    /// the board owner, so the limit bounds what a leaked token, or a filer
+    /// stuck in a loop, can start.
+    #[serde(default = "default_card_daily_limit")]
+    pub daily_limit: u32,
+}
+
+fn default_card_daily_limit() -> u32 {
+    50
+}
+
+impl Default for CardApiConfig {
+    fn default() -> Self {
+        Self {
+            daily_limit: default_card_daily_limit(),
+        }
+    }
+}
+
 /// Where cards come from: a ticket tracker, or an incident tool whose open
 /// incidents become investigation cards (see `docs/incidents.md`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -1302,6 +1332,9 @@ pub struct Config {
     /// How plans reach a person for approval.
     #[serde(default)]
     pub approvals: ApprovalsConfig,
+    /// The stable HTTP API: the card route's daily limit.
+    #[serde(default)]
+    pub api: ApiConfig,
 }
 
 impl Config {
@@ -1353,6 +1386,7 @@ impl Config {
             integrations: old_config.integrations.into(),
             app_runs: AppRunsConfig::default(),
             approvals: ApprovalsConfig::default(),
+            api: ApiConfig::default(),
         }
     }
 
@@ -1453,6 +1487,7 @@ impl Default for Config {
             evidence: EvidenceConfig::default(),
             app_runs: AppRunsConfig::default(),
             approvals: ApprovalsConfig::default(),
+            api: ApiConfig::default(),
         }
     }
 }

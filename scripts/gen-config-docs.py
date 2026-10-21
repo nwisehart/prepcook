@@ -27,6 +27,7 @@ END = "<!-- END GENERATED: integrations -->"
 # Section titles for areas whose name does not read well capitalised.
 AREA_TITLES = {
     "agents": "Coding agents",
+    "api": "Card API",
     "evidence": "Evidence sources",
     "notifications": "Notification providers",
     "reproduction": "Reproduction targets",
@@ -39,6 +40,10 @@ SECRET_NOTE = (
     "from the config, then from the environment variable of that name"
 )
 AREA_NOTES = {
+    "api": (
+        "Each field is a key of `api.<kind>` (`api.cards.daily_limit`), shown under "
+        "**Settings → Orchestrator**."
+    ),
     "evidence": (
         f"{SECRET_NOTE}; a board's own source reads its config value first. Every source also "
         "takes `label`, `areas` and `notes` ([evidence.md](evidence.md#configuring-sources)), "

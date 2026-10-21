@@ -179,6 +179,15 @@ The `agents` section's other settings, from the same descriptors; each is also a
 | --- | --- |
 | `agents.external` | **Externally filed cards**. Planning profile for cards filed from outside the team (API, public issues). Unset, the planning profile's agent with its guarded variant, which narrows the agent's own tools and does not confine its shell: Claude Code (`GUARDED`). Amp, Gemini CLI, Codex, OpenCode, Cursor Agent, Qwen Code, GitHub Copilot CLI and Droid can express nothing comparable and plan these cards under the planning profile unchanged. |
 
+### Card API
+
+Generated from the providers' descriptors. Each field is a key of `api.<kind>` (`api.cards.daily_limit`), shown under **Settings → Orchestrator**.
+
+| `kind` | Field | Required | Secret name | What it is |
+| --- | --- | --- | --- | --- |
+| `cards` (Card API) | | | | Cards other services file through POST /api/cards with the API token. |
+| | `daily_limit` | no |  | **Cards filed per day**. Most cards POST /api/cards files in any 24 hours; past it the route answers 429 with when a slot frees up. 0 files without a limit. Cards made on the board or imported from a tracker do not count. |
+
 ### Evidence sources
 
 Generated from the providers' descriptors. A secret field is read from the secrets store under the name shown, then from the config, then from the environment variable of that name; a board's own source reads its config value first. Every source also takes `label`, `areas` and `notes` ([evidence.md](evidence.md#configuring-sources)), left out of the table.
@@ -334,6 +343,7 @@ The board reads no sign-in or OAuth settings: `SELF_HOST_LOCAL_AUTH_EMAIL`,
 | `approvals.in_app_gate` | `lavish` | **Settings → Orchestrator → Plan approvals**. `lavish` puts Approve and Request changes buttons in the plan document; `none` leaves them out and the decision comes from the card, the ticket or the API ([approvals.md](approvals.md)). |
 | `ticketing.approvers` | empty | See [Ticketing](#ticketing). |
 | `PREPCOOK_API_TOKEN` (secret) | unset (bearer access off) | The bearer token the approvals and card APIs accept from scripts and other services ([api.md](api.md)). Filing a card needs it. |
+| `api.cards.daily_limit` | `50` | **Settings → Orchestrator → Cards filed per day**: the most cards `POST /api/cards` files in any 24 hours; past it the route answers `429` with `Retry-After` ([api.md](api.md#file-a-card)). `0` files without a limit. Cards made on the board or imported from a tracker do not count. |
 
 ## Secrets
 
