@@ -51,6 +51,7 @@ shipped variants are listed under [Coding agents](#coding-agents), and
 | `agents.stages.comment_reply` | unset (`executor_profile` with the economy variant) | **Comment replies**: answers to comments on shipped tickets (the `comment_reply` playbook). |
 | `agents.stages.pattern` | unset (`executor_profile` with the economy variant) | **Pattern reviews**: the `pattern:planning` session and the `rca_analysis` runs that link RCAs into the graph. |
 | `agents.external` | unset (the planning profile's agent with its guarded variant: Claude Code `GUARDED`; the planning profile itself for an agent with none) | **Externally filed cards**: the profile Planning runs for a card filed from outside the team — any card with an `origin` (the card API, Tammy, an incident) and a GitHub issue whose author is not an owner, member or collaborator. Executing and Reviewing are unaffected ([method.md](method.md#cards-from-outside-the-team)). |
+| `agents.permissions` | `auto` | **Permissions**: whether the agents the orchestrator launches ask before they use a tool. `supervised` sends each tool permission request to the board owner through the approvals service, for Claude Code, Codex, Gemini CLI, Qwen Code and OpenCode; the other agents run as their profile says. A variant that sets its own policy (Claude Code's `approvals` or `plan`, for example) keeps it. One setting for every board ([working-alongside-people.md](working-alongside-people.md#plans-and-tool-calls)). |
 
 A stage resolves, most specific first: the board's `agents.stages.<stage>`, the
 global `agents.stages.<stage>`, then the stage's default built from the
@@ -173,10 +174,11 @@ Generated from the agents' descriptors. `executor_profile` and every `agents.sta
 | `COPILOT` (GitHub Copilot CLI) | `npx -y @github/copilot@0.0.403` | Run `copilot` once and use `/login`, or set `GH_TOKEN` to a token with Copilot access. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 | `DROID` (Droid) | `droid` | Run `droid` once and sign in, or set `FACTORY_API_KEY`. | Only from its own config (**Settings → MCP Servers**) | `DEFAULT` |
 
-The `agents` section's other settings, from the same descriptors; each is also a key of a board's `agents`, which wins over the global one.
+The `agents` section's other settings, from the same descriptors. Each is also a key of a board's `agents`, which wins over the global one, unless its text says it applies on every board.
 
 | Key | What it is |
 | --- | --- |
+| `agents.permissions` | **Permissions**. Whether the agents the orchestrator runs ask before they use a tool, on every board. Supervised sends each tool permission request to you as an approval on the card's session; one nobody answers within 10 hours is refused. A profile whose variant sets its own policy keeps it. Honoured by Claude Code, Gemini CLI, Codex, OpenCode and Qwen Code. Amp, Cursor Agent, GitHub Copilot CLI and Droid cannot route a request to you and run as their profile says under either. One of `auto` (Auto — agents run without asking) or `supervised` (Supervised — tool permission requests come to you). |
 | `agents.external` | **Externally filed cards**. Planning profile for cards filed from outside the team (API, public issues). Unset, the planning profile's agent with its guarded variant, which narrows the agent's own tools and does not confine its shell: Claude Code (`GUARDED`). Amp, Gemini CLI, Codex, OpenCode, Cursor Agent, Qwen Code, GitHub Copilot CLI and Droid can express nothing comparable and plan these cards under the planning profile unchanged. |
 
 ### Card API

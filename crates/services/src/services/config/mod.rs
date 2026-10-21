@@ -107,6 +107,7 @@ pub type ApiConfig = versions::v10::ApiConfig;
 pub type CardApiConfig = versions::v10::CardApiConfig;
 pub type InAppGate = versions::v10::InAppGate;
 pub type AgentsConfig = versions::v10::AgentsConfig;
+pub type AgentPermissions = versions::v10::AgentPermissions;
 pub type StageProfiles = versions::v10::StageProfiles;
 pub use versions::v10::{
     COMMENT_REPLY_PLAYBOOK_KEY, CURRENT_PLAYBOOK_KEYS, INVESTIGATION_PLAYBOOK_KEY,

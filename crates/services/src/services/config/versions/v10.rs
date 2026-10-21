@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use anyhow::Error;
 use api_types::issue_ext::WorkClass;
-use executors::{executors::BaseCodingAgent, profile::ExecutorProfileId};
+use executors::{
+    executors::BaseCodingAgent, model_selector::PermissionPolicy, profile::ExecutorProfileId,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
@@ -982,6 +984,29 @@ pub struct StageProfiles {
     pub pattern: Option<ExecutorProfileId>,
 }
 
+/// Whether the agents the orchestrator launches ask before they use a tool
+/// (`agents.permissions`). Who approves a plan is the board's mode; this is
+/// who approves a tool call, and the two are independent.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentPermissions {
+    /// Agents run without asking.
+    #[default]
+    Auto,
+    /// Tool permission requests go to the board owner through the approvals
+    /// service, for the agents that can route them there.
+    Supervised,
+}
+
+impl From<AgentPermissions> for PermissionPolicy {
+    fn from(permissions: AgentPermissions) -> Self {
+        match permissions {
+            AgentPermissions::Auto => PermissionPolicy::Auto,
+            AgentPermissions::Supervised => PermissionPolicy::Supervised,
+        }
+    }
+}
+
 /// Which coding agent runs which stage: `agents` globally, and per board
 /// under `orchestrator.project_defaults.*.agents`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
@@ -994,6 +1019,12 @@ pub struct AgentsConfig {
     /// agent that has none (see `services::agents`).
     #[serde(default)]
     pub external: Option<ExecutorProfileId>,
+    /// The permission policy of every session the orchestrator launches or
+    /// resumes, unless the profile's own variant sets one. Unset reads as
+    /// [`AgentPermissions::Auto`]. Global only: a resumed turn does not know
+    /// its board, so a board's value is not read.
+    #[serde(default)]
+    pub permissions: Option<AgentPermissions>,
 }
 
 /// Per-project defaults the orchestrator uses when auto-launching playbook

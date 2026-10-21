@@ -48,7 +48,6 @@ say the same. A card filed from outside the team, which is any card with an
 origin and any GitHub issue whose author is not an owner, member or
 collaborator, plans under `agents.external`, by default the planning agent's
 guarded variant: for Claude Code, `GUARDED`, without `WebFetch` and `WebSearch`
-and without skipped permissions
 ([method.md](method.md#cards-from-outside-the-team)). And the card API files at
 most `api.cards.daily_limit` cards in a day ([api.md](api.md#file-a-card)).
 
@@ -57,7 +56,11 @@ argued with. The guarded profile narrows the agent's own tools; the shell it
 keeps can still run `curl`, read any file its user can read and push with its
 user's `gh` login. The other agents ship no guarded variant and plan such cards
 unchanged. The cap bounds how many sessions a leaked token can start, not what
-any one of them does.
+any one of them does. What gives the guarded profile teeth is **Settings →
+Agents → Permissions** set to `supervised`, under which a tool call that is not a
+read waits for the board owner
+([working-alongside-people.md](working-alongside-people.md#plans-and-tool-calls));
+only Claude Code, Codex, Gemini CLI, Qwen Code and OpenCode honour it.
 
 The confinement that holds is the operating system's. Run the server as a
 dedicated user that has none of your keys. Create the user; give it a `gh` login

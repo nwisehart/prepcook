@@ -98,7 +98,7 @@ const DEFAULT_API_CONFIG: ApiConfig = { cards: { daily_limit: 50 } };
 const EMPTY_DEFAULTS: ProjectAutomationDefaults = {
   repo_ids: [],
   executor_profile: null,
-  agents: { stages: EMPTY_STAGE_PROFILES, external: null },
+  agents: { stages: EMPTY_STAGE_PROFILES, external: null, permissions: null },
   label: null,
   ticketing: {
     watcher_enabled: null,

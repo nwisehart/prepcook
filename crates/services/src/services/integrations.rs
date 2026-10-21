@@ -29,13 +29,30 @@ pub enum FieldKind {
     Secret,
     Url,
     Select {
-        options: Vec<String>,
+        options: Vec<SelectOption>,
     },
     Bool,
     Number,
     /// A coding agent profile (`{ "executor": …, "variant": … }`), rendered
     /// as the profile picker Settings → Agents uses for the stages.
     Profile,
+}
+
+/// One choice of a [`FieldKind::Select`]: the value the config holds, and
+/// what Settings shows for it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct SelectOption {
+    pub value: String,
+    pub label: String,
+}
+
+impl SelectOption {
+    pub fn new(value: &str, label: &str) -> Self {
+        Self {
+            value: value.to_string(),
+            label: label.to_string(),
+        }
+    }
 }
 
 /// One setting a provider reads.

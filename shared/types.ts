@@ -1561,7 +1561,9 @@ export type Field = {
  */
 key: string, label: string, kind: FieldKind, required: boolean, help: string, };
 
-export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<string>, } | { "type": "bool" } | { "type": "number" } | { "type": "profile" };
+export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<SelectOption>, } | { "type": "bool" } | { "type": "number" } | { "type": "profile" };
+
+export type SelectOption = { value: string, label: string, };
 
 export type TestOutcome = { ok: boolean, message: string, };
 
@@ -1601,7 +1603,15 @@ economy_variant: string | null,
  * express nothing comparable; such a card then plans under the planning
  * profile unchanged.
  */
-guarded_variant: string | null, docs_url: string, };
+guarded_variant: string | null, 
+/**
+ * Whether the `supervised` permission policy puts this agent's tool
+ * permission requests in front of the board owner, through the approvals
+ * service. False for an agent whose requests cannot be routed there: it
+ * runs as its profile says under either policy (see
+ * [`BaseCodingAgent::supervises_tool_calls`]).
+ */
+supervised: boolean, docs_url: string, };
 
 export type McpWiring = "per_session" | "agent_config" | "unsupported";
 
@@ -1612,7 +1622,16 @@ export type AgentsConfig = { stages: StageProfiles,
  * agent with its guarded variant, or the planning profile itself for an
  * agent that has none (see `services::agents`).
  */
-external: ExecutorProfileId | null, };
+external: ExecutorProfileId | null, 
+/**
+ * The permission policy of every session the orchestrator launches or
+ * resumes, unless the profile's own variant sets one. Unset reads as
+ * [`AgentPermissions::Auto`]. Global only: a resumed turn does not know
+ * its board, so a board's value is not read.
+ */
+permissions: AgentPermissions | null, };
+
+export type AgentPermissions = "auto" | "supervised";
 
 export type StageProfiles = { 
 /**

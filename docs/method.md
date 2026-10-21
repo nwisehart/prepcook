@@ -109,9 +109,10 @@ from outside the team; a ticket from the team's own Jira, and a card made on the
 board, do not. Such a card plans under `agents.external` instead of the planning
 profile ([configuration.md](configuration.md#agents)). Unset, that is the
 planning profile's agent with its guarded variant: for Claude Code, `GUARDED`,
-which takes away the `WebFetch` and `WebSearch` tools and never skips
-permissions; an agent that ships no guarded variant plans the card under the
-planning profile unchanged. The card panel's Origin line then says "Planned
+which takes away the `WebFetch` and `WebSearch` tools and does not carry the
+skip-permissions flag; an agent that ships no guarded variant plans the card
+under the planning profile unchanged. Whether its other tool calls wait for a
+person is `agents.permissions`, the same as for every session. The card panel's Origin line then says "Planned
 under the guarded profile". Executing and Reviewing run their usual profiles:
 an investigation never executes until a person converts it, and a bug or story
 executes from a plan that was approved. In Chef mode a person approves it; in

@@ -92,7 +92,7 @@ use uuid::Uuid;
 use workspace_manager::{WorkspaceError as ManagedWorkspaceError, WorkspaceManager};
 
 use crate::services::{
-    agents::AgentStage,
+    agents::{self, AgentStage},
     approvals::decisions::{
         self, CardStage, Decision, DecisionCard, DecisionError, DecisionHost, DecisionRequest,
         DecisionSource,
@@ -670,9 +670,13 @@ fn dispatch_rank(stage: Option<Stage>, priority: Option<IssuePriority>) -> (u8, 
 }
 
 /// The executor a launch's first session runs: the board's profile for that
-/// stage (see [`crate::services::agents`]).
+/// stage, under the owner's permission setting (see
+/// [`crate::services::agents`]).
 fn stage_executor_config(settings: &EffectiveProjectSettings, stage: AgentStage) -> ExecutorConfig {
-    settings.agents.get(stage).clone().into()
+    agents::executor_config(
+        settings.agents.get(stage).clone(),
+        settings.agents.permissions,
+    )
 }
 
 /// The executor a board-column launch's first session runs: its stage
@@ -683,11 +687,13 @@ fn launch_executor_config(
     stage: Stage,
     metadata: &IssueExtMetadata,
 ) -> ExecutorConfig {
-    settings
-        .agents
-        .for_launch(launch_agent_stage(stage, metadata), metadata)
-        .clone()
-        .into()
+    agents::executor_config(
+        settings
+            .agents
+            .for_launch(launch_agent_stage(stage, metadata), metadata)
+            .clone(),
+        settings.agents.permissions,
+    )
 }
 
 /// The agent a board-column launch runs as. A pattern review plans in the
@@ -8414,18 +8420,28 @@ impl<C: ContainerService + Send + Sync + 'static> StageOrchestratorService<C> {
             .filter(|dir| !dir.is_empty())
             .cloned();
 
+        // The permission setting is read now, not taken from the session's
+        // last turn, so a change reaches conversations already under way.
+        let permissions = self
+            .config
+            .read()
+            .await
+            .agents
+            .permissions
+            .unwrap_or_default();
+        let executor_config = agents::executor_config(executor_profile_id, permissions);
         let action_type = if let Some(info) = latest_session_info {
             ExecutorActionType::CodingAgentFollowUpRequest(CodingAgentFollowUpRequest {
                 prompt: prompt.to_string(),
                 session_id: info.session_id,
                 reset_to_message_id: None,
-                executor_config: ExecutorConfig::from(executor_profile_id.clone()),
+                executor_config,
                 working_dir: working_dir.clone(),
             })
         } else {
             ExecutorActionType::CodingAgentInitialRequest(CodingAgentInitialRequest {
                 prompt: prompt.to_string(),
-                executor_config: ExecutorConfig::from(executor_profile_id),
+                executor_config,
                 working_dir,
             })
         };
@@ -14523,6 +14539,70 @@ mod tests {
             launch_executor_config(&settings, Stage::Planning, &own).variant,
             None
         );
+    }
+
+    /// The owner's permission setting reaches the executor config of a new
+    /// launch, of a planning launch under the external profile, and of a
+    /// resumed turn; unset, every session runs auto as before.
+    #[test]
+    fn the_permission_setting_reaches_launches_and_resumes() {
+        use executors::{executors::BaseCodingAgent, model_selector::PermissionPolicy};
+
+        use crate::services::config::AgentPermissions;
+
+        let filed = IssueExtMetadata::from_value(&json!({
+            "work_class": "bug",
+            "origin": { "kind": "api", "ref": "support-123" }
+        }));
+        let own = IssueExtMetadata::from_value(&json!({ "work_class": "bug" }));
+        let session = ExecutorProfileId::new(BaseCodingAgent::ClaudeCode);
+        let sonnet =
+            ExecutorProfileId::with_variant(BaseCodingAgent::ClaudeCode, "SONNET".to_string());
+
+        for (setting, policy) in [
+            (None, PermissionPolicy::Auto),
+            (Some(AgentPermissions::Auto), PermissionPolicy::Auto),
+            (
+                Some(AgentPermissions::Supervised),
+                PermissionPolicy::Supervised,
+            ),
+        ] {
+            let mut config = Config::default();
+            config.agents.permissions = setting;
+            let settings = config.project_settings(Uuid::new_v4());
+            for stage in AgentStage::ALL {
+                assert_eq!(
+                    stage_executor_config(&settings, stage).permission_policy,
+                    Some(policy.clone()),
+                    "{stage:?}"
+                );
+            }
+            for (stage, metadata) in [
+                (Stage::Planning, &filed),
+                (Stage::Planning, &own),
+                (Stage::Executing, &own),
+                (Stage::Reviewing, &own),
+            ] {
+                assert_eq!(
+                    launch_executor_config(&settings, stage, metadata).permission_policy,
+                    Some(policy.clone()),
+                    "{stage:?}"
+                );
+            }
+            // A resumed turn: the profile `start_turn` resolves, under the
+            // setting it reads.
+            let resumed = agents::executor_config(
+                resumed_profile(session.clone(), Some(&sonnet)),
+                settings.agents.permissions,
+            );
+            assert_eq!(resumed.variant.as_deref(), Some("SONNET"));
+            assert_eq!(resumed.permission_policy, Some(policy.clone()));
+            let resumed = agents::executor_config(
+                resumed_profile(session.clone(), None),
+                settings.agents.permissions,
+            );
+            assert_eq!(resumed.permission_policy, Some(policy));
+        }
     }
 
     #[test]

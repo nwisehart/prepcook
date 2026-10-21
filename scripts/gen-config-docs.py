@@ -92,6 +92,21 @@ def cell(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
+def choices(field: dict) -> str:
+    """A select field's values and what Settings calls them, after its help."""
+    if field["kind"]["type"] != "select":
+        return ""
+    options = [
+        f"`{option['value']}` ({cell(option['label'])})"
+        for option in field["kind"]["options"]
+    ]
+    if len(options) > 1:
+        listed = ", ".join(options[:-1]) + " or " + options[-1]
+    else:
+        listed = "".join(options)
+    return f" One of {listed}."
+
+
 # How each agent's sessions get MCP servers, by the descriptor's `mcp`.
 MCP_WIRING = {
     "per_session": "Per session, on its command line, on top of its own",
@@ -136,15 +151,17 @@ def render_agents(descriptors: list) -> list:
     if fields:
         lines += [
             "",
-            "The `agents` section's other settings, from the same descriptors; each is "
-            "also a key of a board's `agents`, which wins over the global one.",
+            "The `agents` section's other settings, from the same descriptors. Each is "
+            "also a key of a board's `agents`, which wins over the global one, unless its "
+            "text says it applies on every board.",
             "",
             "| Key | What it is |",
             "| --- | --- |",
         ]
         for field in fields:
             lines.append(
-                f"| `agents.{field['key']}` | **{cell(field['label'])}**. {cell(field['help'])} |"
+                f"| `agents.{field['key']}` | **{cell(field['label'])}**. "
+                f"{cell(field['help'])}{choices(field)} |"
             )
     return lines
 
@@ -182,7 +199,7 @@ def render(descriptors: dict) -> str:
                 required = "yes" if field["required"] else "no"
                 lines.append(
                     f"| | `{field['key']}` | {required} | {secret} | "
-                    f"**{cell(field['label'])}**. {cell(field['help'])} |"
+                    f"**{cell(field['label'])}**. {cell(field['help'])}{choices(field)} |"
                 )
     lines += ["", END]
     return "\n".join(lines)

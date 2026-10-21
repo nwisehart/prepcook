@@ -73,6 +73,12 @@ pub struct AgentDescriptor {
     /// express nothing comparable; such a card then plans under the planning
     /// profile unchanged.
     pub guarded_variant: Option<String>,
+    /// Whether the `supervised` permission policy puts this agent's tool
+    /// permission requests in front of the board owner, through the approvals
+    /// service. False for an agent whose requests cannot be routed there: it
+    /// runs as its profile says under either policy (see
+    /// [`BaseCodingAgent::supervises_tool_calls`]).
+    pub supervised: bool,
     pub docs_url: String,
 }
 
@@ -100,6 +106,7 @@ impl AgentDescriptor {
             variants: shipped_variants(executor),
             economy_variant: None,
             guarded_variant: None,
+            supervised: executor.supervises_tool_calls(),
             docs_url: docs_url.to_string(),
         }
     }
@@ -148,6 +155,25 @@ impl BaseCodingAgent {
             Self::Droid => Droid::descriptor(),
             #[cfg(feature = "qa-mode")]
             Self::QaMock => QaMockExecutor::descriptor(),
+        }
+    }
+
+    /// Whether a session of this agent under the `supervised` permission
+    /// policy asks the board owner before it uses a tool: its executor routes
+    /// permission requests to the approvals service that the session is given.
+    ///
+    /// Copilot's requests reach only a service that approves everything,
+    /// Cursor Agent and Droid have no way to hand a request back to Prepcook,
+    /// and Amp has no permission setting at all, so none of the four can be
+    /// supervised.
+    /// The session container gives the approvals service to exactly the
+    /// agents this names.
+    pub fn supervises_tool_calls(self) -> bool {
+        match self {
+            Self::ClaudeCode | Self::Codex | Self::Gemini | Self::QwenCode | Self::Opencode => true,
+            Self::Amp | Self::CursorAgent | Self::Copilot | Self::Droid => false,
+            #[cfg(feature = "qa-mode")]
+            Self::QaMock => false,
         }
     }
 

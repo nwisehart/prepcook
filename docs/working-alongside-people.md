@@ -79,6 +79,21 @@ waiting on. It is skipped when:
 When the ticket waits on a question for its reporter, the update addresses the
 reporter by mention.
 
+## Plans and tool calls
+
+Two settings decide when a person is asked, and neither depends on the other.
+The board's mode decides who approves a plan: in Chef mode a person decides
+every plan, and in Prep mode a plan that clears the bar approves itself.
+**Settings → Agents → Permissions** (`agents.permissions`) decides who approves a
+tool call while an agent works, in either mode. With `auto`, the default, agents
+run without asking. With `supervised`, each tool permission request (a shell
+command, a file edit, a fetch) comes to the board owner as an approval in the
+card's session; the card reads "Waiting for your approval" and a notification
+says which workspace is asking. A request nobody answers is refused when the
+approvals service gives up on it, after ten hours, so a session never waits for
+ever. Claude Code, Codex, Gemini CLI, Qwen Code and OpenCode can be supervised;
+the other agents run as their profile says.
+
 ## Approvals through comments
 
 A plan is decided from a comment as well as from Lavish or the API

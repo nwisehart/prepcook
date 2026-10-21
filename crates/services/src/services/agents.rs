@@ -13,17 +13,23 @@
 //! profile's agent with its guarded variant ([`guarded_variant_of`]): the
 //! agent's own tools narrowed, never the shell confined. Executing and
 //! Reviewing are unaffected.
+//!
+//! Every session the orchestrator launches or resumes runs under
+//! `agents.permissions` ([`executor_config`]): the owner's choice of whether
+//! agents ask before they use a tool, unless the profile's own variant sets a
+//! policy of its own.
 
 use api_types::IssueExtMetadata;
 use executors::{
     descriptor::{self as agent_descriptor, economy_variant_of, guarded_variant_of},
     executors::BaseCodingAgent,
-    profile::ExecutorProfileId,
+    profile::{ExecutorConfig, ExecutorConfigs, ExecutorProfileId},
 };
+use utils::approvals::APPROVAL_TIMEOUT_SECONDS;
 
 use crate::services::{
-    config::{AgentsConfig, StageProfiles},
-    integrations::{Descriptor, Field, FieldKind},
+    config::{AgentPermissions, AgentsConfig, StageProfiles},
+    integrations::{Descriptor, Field, FieldKind, SelectOption},
 };
 
 /// The integration area name the descriptors route keys the agents under.
@@ -106,6 +112,9 @@ pub struct StageAgents {
     pub pattern: ExecutorProfileId,
     /// Planning for a card filed from outside the team.
     pub external: ExecutorProfileId,
+    /// The permission policy every session runs under (global only; see
+    /// [`AgentsConfig::permissions`]).
+    pub permissions: AgentPermissions,
 }
 
 impl StageAgents {
@@ -140,6 +149,7 @@ impl StageAgents {
             comment_reply: resolve(AgentStage::CommentReply),
             pattern: resolve(AgentStage::Pattern),
             external,
+            permissions: global.permissions.unwrap_or_default(),
         }
     }
 
@@ -168,6 +178,30 @@ impl StageAgents {
             AgentStage::CommentReply => &self.comment_reply,
             AgentStage::Pattern => &self.pattern,
         }
+    }
+}
+
+/// The executor config a session of `profile` launches or resumes with: the
+/// profile, under the owner's permission setting wherever the agent can be
+/// supervised and the variant sets no policy of its own (see
+/// [`ExecutorConfigs::launch_permission_policy`]).
+pub fn executor_config(
+    profile: ExecutorProfileId,
+    permissions: AgentPermissions,
+) -> ExecutorConfig {
+    executor_config_with(&ExecutorConfigs::get_cached(), profile, permissions)
+}
+
+/// [`executor_config`] against an explicit set of profiles.
+pub fn executor_config_with(
+    profiles: &ExecutorConfigs,
+    profile: ExecutorProfileId,
+    permissions: AgentPermissions,
+) -> ExecutorConfig {
+    let permission_policy = profiles.launch_permission_policy(&profile, permissions.into());
+    ExecutorConfig {
+        permission_policy,
+        ..profile.into()
     }
 }
 
@@ -203,15 +237,64 @@ pub fn settings_descriptor() -> Descriptor {
         SETTINGS_KIND,
         "Agent settings",
         "How the orchestrator picks a profile beyond the per-stage ones.",
-        vec![Field::new(
-            "external",
-            "Externally filed cards",
-            FieldKind::Profile,
-            false,
-            &external_help(&agent_descriptor::descriptors()),
-        )],
+        vec![
+            Field::new(
+                "permissions",
+                "Permissions",
+                FieldKind::Select {
+                    options: vec![
+                        SelectOption::new("auto", "Auto — agents run without asking"),
+                        SelectOption::new(
+                            "supervised",
+                            "Supervised — tool permission requests come to you",
+                        ),
+                    ],
+                },
+                false,
+                &permissions_help(&agent_descriptor::descriptors()),
+            ),
+            Field::new(
+                "external",
+                "Externally filed cards",
+                FieldKind::Profile,
+                false,
+                &external_help(&agent_descriptor::descriptors()),
+            ),
+        ],
         "https://github.com/nwisehart/prepcook/blob/main/docs/configuration.md#agents",
     )
+}
+
+/// The `permissions` field's help: what each policy does, which agents honour
+/// it, and what the others do instead.
+fn permissions_help(agents: &[agent_descriptor::AgentDescriptor]) -> String {
+    let supervised: Vec<&str> = agents
+        .iter()
+        .filter(|agent| agent.supervised)
+        .map(|agent| agent.display_name.as_str())
+        .collect();
+    let unsupervised: Vec<&str> = agents
+        .iter()
+        .filter(|agent| !agent.supervised)
+        .map(|agent| agent.display_name.as_str())
+        .collect();
+    let hours = APPROVAL_TIMEOUT_SECONDS / 3600;
+    let mut help = format!(
+        "Whether the agents the orchestrator runs ask before they use a tool, on every board. \
+         Supervised sends each tool permission request to you as an approval on the card's \
+         session; one nobody answers within {hours} hours is refused. \
+         A profile whose variant sets its own policy keeps it."
+    );
+    if !supervised.is_empty() {
+        help.push_str(&format!(" Honoured by {}.", names(&supervised)));
+    }
+    if !unsupervised.is_empty() {
+        help.push_str(&format!(
+            " {} cannot route a request to you and run as their profile says under either.",
+            names(&unsupervised)
+        ));
+    }
+    help
 }
 
 /// The `external` field's help: what it is for, and what each agent falls
@@ -280,6 +363,8 @@ pub async fn test_agent(kind: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    use executors::model_selector::PermissionPolicy;
+
     use super::*;
     use crate::services::config::{Config, ProjectAutomationDefaults};
 
@@ -551,9 +636,13 @@ mod tests {
                 "{} is not an agents key",
                 field.key
             );
-            assert_eq!(field.kind, FieldKind::Profile);
         }
-        let external = &descriptor.fields[0];
+        let external = descriptor
+            .fields
+            .iter()
+            .find(|field| field.key == "external")
+            .unwrap();
+        assert_eq!(external.kind, FieldKind::Profile);
         assert!(external.help.starts_with(
             "Planning profile for cards filed from outside the team (API, public issues)."
         ));
@@ -595,6 +684,136 @@ mod tests {
                 .external,
             claude(Some("GUARDED"))
         );
+    }
+
+    fn permissions_field() -> Field {
+        settings_descriptor()
+            .fields
+            .into_iter()
+            .find(|field| field.key == "permissions")
+            .expect("a permissions field")
+    }
+
+    /// The field offers exactly the two policies, by the values the config
+    /// holds; a saved value reads back and writes out the same; its help
+    /// names which agents honour it and which do not.
+    #[test]
+    fn the_permissions_field_round_trips_through_its_descriptor_and_the_config() {
+        let field = permissions_field();
+        assert_eq!(field.label, "Permissions");
+        let FieldKind::Select { options } = &field.kind else {
+            panic!("permissions is a select");
+        };
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["auto", "supervised"]);
+        assert_eq!(options[0].label, "Auto — agents run without asking");
+        assert_eq!(
+            options[1].label,
+            "Supervised — tool permission requests come to you"
+        );
+        for value in values {
+            let parsed: AgentsConfig =
+                serde_json::from_value(serde_json::json!({ "permissions": value })).unwrap();
+            assert_eq!(
+                serde_json::to_value(&parsed).unwrap()["permissions"],
+                serde_json::json!(value)
+            );
+        }
+        // `plan` is the executors' own mode, not a setting.
+        assert!(
+            serde_json::from_value::<AgentsConfig>(serde_json::json!({ "permissions": "plan" }))
+                .is_err()
+        );
+
+        let help = &field.help;
+        assert!(
+            help.contains("Honoured by Claude Code, Gemini CLI, Codex, OpenCode and Qwen Code.")
+        );
+        assert!(help.contains(
+            "Amp, Cursor Agent, GitHub Copilot CLI and Droid cannot route a request to you"
+        ));
+        assert!(help.contains("10 hours"));
+    }
+
+    /// A config saved before the field existed runs every session as before:
+    /// auto.
+    #[test]
+    fn a_config_without_permissions_loads_as_auto() {
+        let mut raw = serde_json::to_value(Config::default()).unwrap();
+        raw["agents"] = serde_json::json!({ "stages": {}, "external": null });
+        let config = Config::from(raw.to_string());
+        assert_eq!(config.agents.permissions, None);
+        let agents = config.project_settings(uuid::Uuid::new_v4()).agents;
+        assert_eq!(agents.permissions, AgentPermissions::Auto);
+        assert_eq!(
+            executor_config(agents.planning.clone(), agents.permissions).permission_policy,
+            Some(PermissionPolicy::Auto)
+        );
+    }
+
+    /// The setting is global: every board's sessions run under it, and a
+    /// board's own value is not read.
+    #[test]
+    fn the_permission_setting_is_the_same_on_every_board() {
+        let mut config = Config::default();
+        config.agents.permissions = Some(AgentPermissions::Supervised);
+        let board_id = uuid::Uuid::new_v4();
+        config.orchestrator.project_defaults.insert(
+            board_id.to_string(),
+            ProjectAutomationDefaults {
+                agents: AgentsConfig {
+                    permissions: Some(AgentPermissions::Auto),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        for board in [board_id, uuid::Uuid::new_v4()] {
+            assert_eq!(
+                config.project_settings(board).agents.permissions,
+                AgentPermissions::Supervised
+            );
+        }
+    }
+
+    /// The setting reaches the executor config of every shipped profile an
+    /// agent that can be supervised runs; a variant with a policy of its own
+    /// keeps it; an agent that cannot be supervised gets none.
+    #[test]
+    fn a_profiles_own_policy_wins_over_the_setting() {
+        let mut profiles = ExecutorConfigs::from_defaults();
+        profiles
+            .executors
+            .get_mut(&BaseCodingAgent::ClaudeCode)
+            .unwrap()
+            .set_variant(
+                "ASKS".to_string(),
+                serde_json::from_value(serde_json::json!({ "CLAUDE_CODE": { "approvals": true } }))
+                    .unwrap(),
+            )
+            .unwrap();
+        let supervised = AgentPermissions::Supervised;
+        for profile in [
+            claude(None),
+            claude(Some("SONNET")),
+            claude(Some("GUARDED")),
+        ] {
+            let config = executor_config_with(&profiles, profile.clone(), supervised);
+            assert_eq!(config.profile_id(), profile);
+            assert_eq!(config.permission_policy, Some(PermissionPolicy::Supervised));
+        }
+        // Its own approvals stand under either setting.
+        for setting in [AgentPermissions::Auto, AgentPermissions::Supervised] {
+            let config = executor_config_with(&profiles, claude(Some("ASKS")), setting);
+            assert_eq!(config.permission_policy, None);
+            assert_eq!(config.variant.as_deref(), Some("ASKS"));
+        }
+        let cursor = executor_config_with(
+            &profiles,
+            profile(BaseCodingAgent::CursorAgent, None),
+            supervised,
+        );
+        assert_eq!(cursor.permission_policy, None);
     }
 
     #[test]

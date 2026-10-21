@@ -236,9 +236,29 @@ impl ClaudeCode {
         if plan && approvals {
             tracing::warn!("Both plan and approvals are enabled. Plan will take precedence.");
         }
-        if plan || approvals {
-            // Enable bypass at startup, otherwise we cannot change to it after exiting plan mode
+        // The CLI refuses a switch into bypassPermissions over the control
+        // protocol unless the session was launched able to bypass, so the
+        // command line has to allow whatever `permission_mode` will ask for.
+        if plan {
+            // Plan mode starts bypass-capable so that approving the plan can
+            // switch the session to bypass for the work that follows.
             builder = builder.extend_params(["--permission-prompt-tool=stdio"]);
+            builder = builder.extend_params([format!(
+                "--permission-mode={}",
+                PermissionMode::BypassPermissions
+            )]);
+        } else if approvals {
+            // Supervised: never bypass-capable. Every tool call outside the
+            // read-only set is asked through the prompt tool, which the
+            // client answers from the approvals service.
+            builder = builder.extend_params(["--permission-prompt-tool=stdio"]);
+            builder =
+                builder.extend_params([format!("--permission-mode={}", PermissionMode::Default)]);
+        } else if !self.skips_permissions() {
+            // Auto without the skip flag: launched in bypass, which is what
+            // `permission_mode` asks for, rather than left in the default
+            // mode with no prompt tool, where every tool that needs
+            // permission is refused with nobody asked.
             builder = builder.extend_params([format!(
                 "--permission-mode={}",
                 PermissionMode::BypassPermissions
@@ -247,7 +267,7 @@ impl ClaudeCode {
         if let Some(disallowed) = self.disallowed_tools_arg(plan || approvals) {
             builder = builder.extend_params([disallowed]);
         }
-        if self.dangerously_skip_permissions.unwrap_or(false) {
+        if self.skips_permissions() {
             builder = builder.extend_params(["--dangerously-skip-permissions"]);
         }
         if let Some(model) = &self.model {
@@ -285,6 +305,14 @@ impl ClaudeCode {
             }
         }
         (!tools.is_empty()).then(|| format!("--disallowedTools={}", tools.join(",")))
+    }
+
+    /// Whether the session is launched with `--dangerously-skip-permissions`.
+    /// Never with approvals on: a supervised session must not be able to
+    /// skip the asking.
+    fn skips_permissions(&self) -> bool {
+        self.dangerously_skip_permissions.unwrap_or(false)
+            && (self.plan.unwrap_or(false) || !self.approvals.unwrap_or(false))
     }
 
     pub fn permission_mode(&self) -> PermissionMode {
@@ -423,6 +451,7 @@ impl StandardCodingAgentExecutor for ClaudeCode {
                 PermissionPolicy::Supervised => {
                     self.plan = Some(false);
                     self.approvals = Some(true);
+                    self.dangerously_skip_permissions = Some(false);
                 }
                 PermissionPolicy::Auto => {
                     self.plan = Some(false);
@@ -660,8 +689,6 @@ impl StandardCodingAgentExecutor for ClaudeCode {
 
         let permission_policy = if self.plan.unwrap_or(false) {
             PermissionPolicy::Plan
-        } else if self.dangerously_skip_permissions.unwrap_or(false) {
-            PermissionPolicy::Auto
         } else if self.approvals.unwrap_or(false) {
             PermissionPolicy::Supervised
         } else {
@@ -3723,6 +3750,146 @@ mod tests {
             ["--disallowedTools=WebFetch"]
         );
         assert!(disallowed_tools_args(serde_json::json!({ "plan": true })).is_empty());
+    }
+
+    /// A shipped Claude Code variant with the orchestrator's permission
+    /// policy applied, and its command line.
+    fn shipped_under(variant: &str, policy: PermissionPolicy) -> (ClaudeCode, Vec<String>) {
+        let profiles = crate::profile::ExecutorConfigs::from_defaults();
+        let agent = profiles
+            .get_coding_agent(&crate::profile::ExecutorProfileId::with_variant(
+                BaseCodingAgent::ClaudeCode,
+                variant.to_string(),
+            ))
+            .expect("a shipped Claude Code variant");
+        let crate::executors::CodingAgent::ClaudeCode(mut claude) = agent else {
+            panic!("{variant} is a Claude Code profile");
+        };
+        let mut config = ExecutorConfig::new(BaseCodingAgent::ClaudeCode);
+        config.permission_policy = Some(policy);
+        claude.apply_overrides(&config);
+        let args = claude
+            .build_command_builder_with(None, None)
+            .unwrap()
+            .build_initial()
+            .unwrap()
+            .args()
+            .to_vec();
+        (claude, args)
+    }
+
+    /// `supervised`: never bypass-capable, the prompt tool on, the skip flag
+    /// gone even from a variant that sets it, and every tool outside the
+    /// read-only set routed to the approvals service by the hook.
+    #[test]
+    fn supervised_sessions_ask_through_the_prompt_tool_and_never_bypass() {
+        for variant in ["DEFAULT", "SONNET", "GUARDED"] {
+            let (claude, args) = shipped_under(variant, PermissionPolicy::Supervised);
+            assert!(
+                args.contains(&"--permission-prompt-tool=stdio".to_string()),
+                "{variant}: {args:?}"
+            );
+            assert!(
+                args.contains(&"--permission-mode=default".to_string()),
+                "{variant}: {args:?}"
+            );
+            assert!(
+                !args.iter().any(|arg| arg.contains("bypassPermissions")),
+                "{variant}: {args:?}"
+            );
+            assert!(
+                !args.contains(&"--dangerously-skip-permissions".to_string()),
+                "{variant}: {args:?}"
+            );
+            assert_eq!(
+                claude.permission_mode(),
+                PermissionMode::Default,
+                "{variant}"
+            );
+            let hooks = claude.get_hooks(false).unwrap();
+            assert_eq!(
+                hooks["PreToolUse"][0]["hookCallbackIds"][0],
+                serde_json::json!("tool_approval"),
+                "{variant}"
+            );
+            // A person can answer a question in a supervised session.
+            assert!(
+                !args
+                    .iter()
+                    .any(|arg| arg.starts_with("--disallowedTools")
+                        && arg.contains("AskUserQuestion")),
+                "{variant}: {args:?}"
+            );
+        }
+        let (_, guarded) = shipped_under("GUARDED", PermissionPolicy::Supervised);
+        assert!(guarded.contains(&"--disallowedTools=WebFetch,WebSearch".to_string()));
+    }
+
+    /// `auto`: the shipped default runs exactly as it always has (the skip
+    /// flag, no prompt tool, questions disallowed); a variant without the
+    /// skip flag is launched in bypass, the mode the session then asks for,
+    /// so the switch is not refused.
+    #[test]
+    fn auto_sessions_run_without_asking() {
+        let (claude, args) = shipped_under("DEFAULT", PermissionPolicy::Auto);
+        assert!(args.contains(&"--dangerously-skip-permissions".to_string()));
+        assert!(args.contains(&"--disallowedTools=AskUserQuestion".to_string()));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("--permission-prompt-tool"))
+        );
+        assert!(!args.iter().any(|arg| arg.starts_with("--permission-mode")));
+        assert_eq!(claude.permission_mode(), PermissionMode::BypassPermissions);
+
+        let (claude, args) = shipped_under("GUARDED", PermissionPolicy::Auto);
+        assert!(args.contains(&"--permission-mode=bypassPermissions".to_string()));
+        assert!(!args.contains(&"--dangerously-skip-permissions".to_string()));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("--permission-prompt-tool"))
+        );
+        assert!(args.contains(&"--disallowedTools=AskUserQuestion,WebFetch,WebSearch".to_string()));
+        assert_eq!(claude.permission_mode(), PermissionMode::BypassPermissions);
+    }
+
+    /// A variant's own preset: approvals win over a skip flag set beside
+    /// them, so the preset and the command line agree.
+    #[test]
+    fn the_preset_policy_follows_what_the_command_line_does() {
+        let preset = |config: serde_json::Value| {
+            serde_json::from_value::<ClaudeCode>(config)
+                .unwrap()
+                .get_preset_options()
+                .permission_policy
+        };
+        assert_eq!(
+            preset(serde_json::json!({ "dangerously_skip_permissions": true })),
+            Some(PermissionPolicy::Auto)
+        );
+        assert_eq!(preset(serde_json::json!({})), Some(PermissionPolicy::Auto));
+        assert_eq!(
+            preset(serde_json::json!({ "approvals": true, "dangerously_skip_permissions": true })),
+            Some(PermissionPolicy::Supervised)
+        );
+        assert_eq!(
+            preset(serde_json::json!({ "plan": true })),
+            Some(PermissionPolicy::Plan)
+        );
+        let skip_and_approvals: ClaudeCode = serde_json::from_value(serde_json::json!({
+            "approvals": true,
+            "dangerously_skip_permissions": true
+        }))
+        .unwrap();
+        let args = skip_and_approvals
+            .build_command_builder_with(None, None)
+            .unwrap()
+            .build_initial()
+            .unwrap()
+            .args()
+            .to_vec();
+        assert!(!args.contains(&"--dangerously-skip-permissions".to_string()));
     }
 
     /// The shipped `GUARDED` variant: web tools off, permissions not skipped,
