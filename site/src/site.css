@@ -781,7 +781,7 @@ kbd {
 }
 
 .pitch-lead {
-  margin: 0 auto 8px;
+  margin: 0 auto 16px;
   max-width: 640px;
   color: var(--text-high);
   font-size: 24px;
@@ -790,10 +790,16 @@ kbd {
   letter-spacing: -0.3px;
 }
 
+/* The problem statement runs to two paragraphs, too long to read centred. */
 .pitch {
-  margin: 0 auto 24px;
+  margin: 0 auto 14px;
   max-width: 640px;
   font-size: 17px;
+  text-align: left;
+}
+
+.pitch + .actions {
+  margin-top: 28px;
 }
 
 .actions {
@@ -862,6 +868,18 @@ kbd {
 .section-lead {
   margin: 0 0 24px;
   max-width: 640px;
+}
+
+.name-note {
+  margin: 24px 0 0;
+  max-width: 680px;
+  color: var(--text-low);
+  font-size: 15px;
+}
+
+.name-note strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .stages {

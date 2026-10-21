@@ -398,6 +398,22 @@ function firstParagraph(src) {
     : '';
 }
 
+// Where the README's problem paragraph turns from the problem to the method;
+// the home page shows the two halves as separate paragraphs.
+const PROBLEM_TURN = 'Prepcook puts those three steps';
+
+// The README's tagline: its first paragraph, entirely in bold. It is the
+// home page's lead and the start of its meta description.
+function readmeTagline() {
+  const first = new Marked({ gfm: true })
+    .lexer(read('README.md'))
+    .find((t) => t.type === 'paragraph' && !t.text.startsWith('<'));
+  const m = first && first.text.match(/^\*\*([^*]+)\*\*$/);
+  if (!m)
+    throw new Error('README.md: the first paragraph must be the bold tagline');
+  return m[1].replace(/\s+/g, ' ').trim();
+}
+
 // Pieces of README.md and docs/images/README.md the home page shows, read at
 // build time so the home page cannot drift from them.
 function homeValues() {
@@ -406,10 +422,24 @@ function homeValues() {
   const inline = (md, src = 'README.md') =>
     rewriteHtml(new Marked({ gfm: true }).parseInline(md), src, 'index.html');
 
-  const pitch = tokens.find(
+  // The opening: the one-line tagline in bold, the problem paragraph (split
+  // in two on the home page where it turns from the problem to the method),
+  // and the paragraph that explains the name.
+  const paragraphs = tokens.filter(
     (t) => t.type === 'paragraph' && !t.text.startsWith('<')
   );
-  const sentences = pitch.text.replace(/\s+/g, ' ').split(/(?<=\.) (?=[A-Z])/);
+  const problem = paragraphs[1].text.replace(/\s+/g, ' ');
+  const turn = problem.indexOf(PROBLEM_TURN);
+  if (turn === -1)
+    throw new Error(
+      `README.md: the second paragraph must contain "${PROBLEM_TURN}"`
+    );
+  const kitchen = paragraphs.find((t) => t.text.startsWith('A prep cook '));
+  if (!kitchen)
+    throw new Error('README.md: no paragraph starting "A prep cook"');
+  const kitchenSentences = kitchen.text
+    .replace(/\s+/g, ' ')
+    .split(/(?<=\.) (?=[A-Z])/);
 
   const alt = boardAlt();
 
@@ -468,8 +498,10 @@ function homeValues() {
     if (m) shots[m[1]] = m[2].split(/(?<=\.) (?=[A-Z])/)[0];
   }
   const values = {
-    pitchLead: inline(sentences[0]),
-    pitchRest: inline(sentences.slice(1).join(' ')),
+    pitchLead: escapeHtml(readmeTagline()),
+    pitchProblem: inline(problem.slice(0, turn).trim()),
+    pitchMethod: inline(problem.slice(turn)),
+    whyTheName: inline(kitchenSentences.slice(0, 2).join(' ')),
     boardAlt: escapeHtml(alt),
     boardCaption: escapeHtml(alt),
     stages: stageHtml,
@@ -490,6 +522,18 @@ function homeValues() {
     values[`alt:${name}`] = escapeHtml(stripTags(html));
   }
   return values;
+}
+
+// Search engines cut a description at about 160 characters.
+const DESCRIPTION_MAX = 160;
+
+function homeDescription() {
+  const description = `${readmeTagline()} Open-source, Apache-2.0, Rust and TypeScript.`;
+  if (description.length >= DESCRIPTION_MAX)
+    problems.push(
+      `the home page's description is ${description.length} characters; keep it under ${DESCRIPTION_MAX}`
+    );
+  return description;
 }
 
 function build() {
@@ -525,7 +569,7 @@ function build() {
     page({
       out: 'index.html',
       title: 'Prepcook',
-      description: firstParagraph('README.md'),
+      description: homeDescription(),
       main: home,
       section: 'home',
     })
