@@ -1,6 +1,6 @@
 // Generates the Prepcook website into site/dist from the repository's own
-// documentation (README.md, CONTRIBUTING.md, docs/*.md) plus two hand-written
-// pages (src/home.html, src/tammy.html). The site is served at
+// documentation (README.md, CONTRIBUTING.md, docs/*.md) plus three
+// hand-written pages (src/home.html, src/tammy.html, src/vibe-kanban.html). The site is served at
 // https://prepcook.dev/ (SITE_URL). Every link and asset reference it writes
 // is relative, so dist works the same from any host or a local preview; the
 // only absolute self-URLs are the canonical and Open Graph URLs in each page's
@@ -20,9 +20,10 @@ const DIST = path.join(SITE, 'dist');
 const GITHUB = 'https://github.com/nwisehart/prepcook';
 const SITE_URL = 'https://prepcook.dev/';
 
-// The sidebar, in reading order. `src` is the markdown file in the repository,
-// `out` the page it becomes in dist, `label` its sidebar entry. Every
-// docs/*.md must appear here: the build fails on one that does not.
+// The sidebar, in reading order. `src` is the markdown file in the repository
+// (or a hand-written HTML article under site/src), `out` the page it becomes in
+// dist, `label` its sidebar entry. Every docs/*.md must appear here: the build
+// fails on one that does not.
 const GROUPS = [
   {
     title: 'Get started',
@@ -71,6 +72,11 @@ const GROUPS = [
         out: 'contributing.html',
         label: 'Contributing',
       },
+      {
+        src: 'site/src/vibe-kanban.html',
+        out: 'vibe-kanban.html',
+        label: 'Prepcook and vibe-kanban',
+      },
     ],
   },
 ];
@@ -83,6 +89,57 @@ for (const group of GROUPS) {
 }
 const PAGES = GROUPS.flatMap((g) => g.pages);
 const PAGE_BY_SRC = new Map(PAGES.map((p) => [p.src, p]));
+
+const HOME_TITLE =
+  'Prepcook: an orchestrator that reproduces, explains and fixes bugs with coding agents';
+
+// Each page's meta description, written for the search-result snippet: what
+// the page tells you, in the words people search for, between
+// DESCRIPTION_MIN and DESCRIPTION_MAX characters (the build checks). Keyed by
+// source path; a page missing here falls back to its first paragraph. The home
+// page's is the README's tagline (homeDescription).
+const DESCRIPTION_MIN = 120;
+const DESCRIPTION_MAX = 160;
+const DESCRIPTIONS = {
+  'README.md':
+    'Install Prepcook with npx or a release, then take a demo bug from report to pull request with Claude Code: reproduce it, explain it, fix it and review it.',
+  'docs/method.md':
+    'How Prepcook works a bug with coding agents on a kanban board: Plan, Execute, Review and Shipped, investigation cards, and the Chef and Prep modes.',
+  'docs/reproduce-first.md':
+    'Why a Prepcook planning agent must reproduce a bug with a failing harness before it writes a root-cause analysis, and what that harness has to assert.',
+  'docs/approvals.md':
+    'How a person approves a plan, asks for changes or sends it back in Prepcook: in the review page, a Jira or GitHub issue comment, a card comment or the API.',
+  'docs/review.md':
+    'How Prepcook reviews a fix with a second coding agent that never saw the plan: what it reads, its verdicts, the fix rounds and the check before merging.',
+  'docs/working-alongside-people.md':
+    'How Prepcook shares tracker tickets with engineers: taking a ticket over by assigning it, when it comments, the daily update and reopened tickets.',
+  'docs/rca-graph.md':
+    'Prepcook keeps every approved root-cause analysis in a knowledge store and a graph of root-cause classes, and opens a pattern review when a cause recurs.',
+  'docs/notifications.md':
+    'Send Prepcook events to Slack, a signed webhook, Discord or Microsoft Teams: a plan waiting for a person, a failing pipeline, the daily digest and more.',
+  'docs/evidence.md':
+    'Give coding agents evidence from Sentry, Datadog, DataSet, CloudWatch Logs and log files while they reproduce a bug, through evidence_search and MCP.',
+  'docs/incidents.md':
+    'Incidents mode: each open PagerDuty incident becomes a Prepcook investigation, reproduced and explained, and the triage report goes back as a note.',
+  'docs/configuration.md':
+    'Every Prepcook setting and its default: the orchestrator, the coding agent per stage, Jira and GitHub Issues ticketing, notifications, evidence and secrets.',
+  'docs/scripts.md':
+    'How a repository tells Prepcook to install, start, seed and test its app in .prepcook/scripts.toml, so a coding agent can reproduce bugs locally or remotely.',
+  'docs/api.md':
+    "Prepcook's stable HTTP API for scripts and services: file cards with a bearer token, decide on plans, search evidence, and run the app's scripts.",
+  'docs/developing.md':
+    'How Prepcook is built in Rust and TypeScript: the architecture, the repository layout, the build and test commands, and adding a provider or coding agent.',
+  'docs/playbooks.md':
+    "The prompts Prepcook's coding agents start from, one per stage and work class: their placeholders, the review gate, and how to change a playbook.",
+  'docs/manual-testing.md':
+    'The end-to-end check run by hand before each Prepcook release: a demo bug to a merged pull request, investigations, notifications, GitHub Issues and Tammy.',
+  'CONTRIBUTING.md':
+    'How to contribute to Prepcook, an Apache-2.0 orchestrator for coding agents: opening an issue, pull requests, adding a provider or agent, and playbooks.',
+  'site/src/tammy.html':
+    'Tammy is a Slack agent that answers customers from your docs, files what looks broken as a Prepcook investigation and explains the root-cause analysis plainly.',
+  'site/src/vibe-kanban.html':
+    'Prepcook is a fork of vibe-kanban by BloopAI: what it keeps from that kanban board for coding agents, and what it adds to reproduce, explain and fix bugs.',
+};
 
 // Files copied into dist at the same relative path they have in the
 // repository, so a reference that resolves in the repository resolves on the
@@ -257,7 +314,11 @@ function renderMarkdown(markdown, srcFile, outFile) {
         const inner = this.parser.parseInline(tokens);
         const text = stripTags(inner).trim();
         const id = slug(text);
-        if (depth === 1 && title === null) title = text;
+        if (depth === 1) {
+          if (title !== null)
+            problems.push(`${srcFile}: a second # heading, "${text}"`);
+          else title = text;
+        }
         if (depth === 2) toc.push({ id, html: inner });
         return (
           `<h${depth} id="${id}">${inner}` +
@@ -352,9 +413,31 @@ function tocHtml(toc) {
   };
 }
 
+// A hand-written HTML article in the docs layout: its <h1> is the title and
+// its <h2 id>s the table of contents. Its links are written relative to its
+// place in dist, so they are used as they are.
+function renderArticle(src) {
+  const html = read(src);
+  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/);
+  const toc = [...html.matchAll(/<h2 id="([^"]+)">([\s\S]*?)<\/h2>/g)].map(
+    (m) => ({ id: m[1], html: m[2] })
+  );
+  return { html, title: h1 ? stripTags(h1[1]).trim() : null, toc };
+}
+
 function docPage(p, index) {
-  const { html, title, toc } = renderMarkdown(read(p.src), p.src, p.out);
-  const pageTitle = p.src === 'README.md' ? 'Get started' : title;
+  const rendered = p.src.endsWith('.html')
+    ? renderArticle(p.src)
+    : renderMarkdown(read(p.src), p.src, p.out);
+  const { toc } = rendered;
+  let { html, title } = rendered;
+  // The README opens with the wordmark rather than a # heading; the page is
+  // named for where it sits in the docs.
+  if (p.src === 'README.md') {
+    title = 'Get started';
+    html = `<h1 class="visually-hidden">${title}</h1>\n${html}`;
+  }
+  const pageTitle = title;
   if (!pageTitle) problems.push(`${p.src}: no # heading for the page title`);
   const prev = PAGES[index - 1];
   const next = PAGES[index + 1];
@@ -378,7 +461,7 @@ function docPage(p, index) {
     page({
       out: p.out,
       title: `${pageTitle} · Prepcook`,
-      description: firstParagraph(p.src),
+      description: description(p.src),
       main,
       section: 'docs',
       docs: true,
@@ -386,8 +469,18 @@ function docPage(p, index) {
   );
 }
 
+function description(src) {
+  const text = DESCRIPTIONS[src];
+  if (text === undefined) return firstParagraph(src);
+  if (text.length < DESCRIPTION_MIN || text.length > DESCRIPTION_MAX)
+    problems.push(
+      `${src}: its description is ${text.length} characters; keep it within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}`
+    );
+  return text;
+}
+
 // The first prose paragraph of a markdown file, as plain text, for the
-// page's meta description.
+// meta description of a page DESCRIPTIONS does not cover.
 function firstParagraph(src) {
   const tokens = new Marked({ gfm: true }).lexer(read(src));
   const para = tokens.find(
@@ -524,16 +617,24 @@ function homeValues() {
   return values;
 }
 
-// Search engines cut a description at about 160 characters.
-const DESCRIPTION_MAX = 160;
-
 function homeDescription() {
-  const description = `${readmeTagline()} Open-source, Apache-2.0, Rust and TypeScript.`;
-  if (description.length >= DESCRIPTION_MAX)
+  const text = `${readmeTagline()} Open-source, Apache-2.0, Rust and TypeScript.`;
+  if (text.length < DESCRIPTION_MIN || text.length > DESCRIPTION_MAX)
     problems.push(
-      `the home page's description is ${description.length} characters; keep it under ${DESCRIPTION_MAX}`
+      `the home page's description is ${text.length} characters; keep it within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}`
     );
-  return description;
+  return text;
+}
+
+// Every HTML page in dist, as a dist-relative path with / separators.
+function distPages(dir = DIST) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return distPages(full);
+    return entry.name.endsWith('.html')
+      ? [path.relative(DIST, full).split(path.sep).join('/')]
+      : [];
+  });
 }
 
 function build() {
@@ -568,7 +669,7 @@ function build() {
     'index.html',
     page({
       out: 'index.html',
-      title: 'Prepcook',
+      title: HOME_TITLE,
       description: homeDescription(),
       main: home,
       section: 'home',
@@ -581,12 +682,19 @@ function build() {
     page({
       out: 'tammy.html',
       title: 'Tammy · Prepcook',
-      description:
-        'Tammy is the Slack agent in front of Prepcook: she answers customers from your docs and takes problem reports to the kitchen.',
+      description: description('site/src/tammy.html'),
       main: tammy,
       section: 'tammy',
     })
   );
+
+  for (const file of distPages()) {
+    const count = (
+      fs.readFileSync(path.join(DIST, file), 'utf8').match(/<h1[\s>]/g) || []
+    ).length;
+    if (count !== 1)
+      problems.push(`${file}: ${count} <h1> elements; a page has one`);
+  }
 
   if (problems.length) {
     for (const p of problems) console.error(`build: ${p}`);
@@ -598,7 +706,7 @@ function build() {
     process.exit(1);
   }
   console.log(
-    `Built ${PAGES.length + 2} pages into ${path.relative(REPO, DIST)}/`
+    `Built ${distPages().length} pages into ${path.relative(REPO, DIST)}/`
   );
 }
 
