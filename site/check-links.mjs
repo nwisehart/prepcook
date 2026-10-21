@@ -1,4 +1,5 @@
-// Checks every internal reference in site/dist: each href, src and srcset in
+// Checks every internal reference in site/dist: each href, src and srcset
+// candidate (every one of them, so each WebP size of a screenshot) in
 // an HTML page that is not an absolute URL (http:, https:, mailto:, data:)
 // must be relative, must not point at a .md file, must resolve to a file in
 // dist, and its #anchor must be an id on the target page.
@@ -9,6 +10,9 @@
 // of dist: the path after it must resolve to a file there, and the canonical
 // and og:url must both name the page they sit on (index.html as the bare
 // root). An absolute self-URL anywhere else fails the check.
+//
+// sitemap.xml must list every page in dist, and every <loc> in it must be a
+// page in dist.
 //
 // Run on its own (`node check-links.mjs`) or as the last step of build.mjs.
 
@@ -74,8 +78,42 @@ function references(html) {
   return refs;
 }
 
-export function checkLinks(dist) {
+// The pages sitemap.xml lists that are not in dist, and the pages in dist it
+// does not list.
+function checkSitemap(dist) {
   const failures = [];
+  const file = path.join(dist, 'sitemap.xml');
+  if (!fs.existsSync(file)) return ['sitemap.xml is missing'];
+  const listed = new Set();
+  for (const m of fs
+    .readFileSync(file, 'utf8')
+    .matchAll(/<loc>([^<]*)<\/loc>/g)) {
+    const url = decode(m[1]);
+    if (!url.startsWith(SITE_URL)) {
+      failures.push(`sitemap.xml: <loc> ${url} is not under ${SITE_URL}`);
+      continue;
+    }
+    const page = decodeURI(url.slice(SITE_URL.length)) || 'index.html';
+    const resolved = path.join(dist, page);
+    if (
+      !page.endsWith('.html') ||
+      !fs.existsSync(resolved) ||
+      !fs.statSync(resolved).isFile()
+    ) {
+      failures.push(`sitemap.xml: <loc> ${url} is not a page in the site`);
+      continue;
+    }
+    listed.add(page);
+  }
+  for (const file of htmlFiles(dist)) {
+    const page = path.relative(dist, file).split(path.sep).join('/');
+    if (!listed.has(page)) failures.push(`sitemap.xml does not list ${page}`);
+  }
+  return failures;
+}
+
+export function checkLinks(dist) {
+  const failures = checkSitemap(dist);
   const ids = new Map();
   const idsOf = (file) => {
     if (!ids.has(file)) {

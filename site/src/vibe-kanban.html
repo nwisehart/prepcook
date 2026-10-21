@@ -1,0 +1,53 @@
+<h1 id="prepcook-and-vibe-kanban">Prepcook and vibe-kanban</h1>
+
+<p>
+  Prepcook is a fork of
+  <a href="https://github.com/BloopAI/vibe-kanban">vibe-kanban</a> by BloopAI,
+  licensed under the Apache License, Version 2.0. Its
+  <a href="https://github.com/nwisehart/prepcook/blob/main/NOTICE">NOTICE</a>
+  says so: the product includes software developed by BloopAI as vibe-kanban,
+  and the original copyright notices and license headers are retained in the
+  files that carry them. Prepcook's own changes are under the same license.
+</p>
+<p>
+  This page says what Prepcook took from where it started and what it added. It
+  describes vibe-kanban only as the starting point; for what vibe-kanban is
+  today, see its repository.
+</p>
+
+<h2 id="what-it-keeps">What it keeps</h2>
+<p>
+  The local board: cards in columns, served by a native server on your machine.
+  Sessions that run each attempt in a git worktree of its own. The coding-agent
+  executors, one per agent, that start each agent's session and read back what
+  it did. The remote board service that holds the board in Postgres and streams
+  it to the UI. The single-user model, in which everything that reaches the
+  server on localhost is the board's owner.
+</p>
+
+<h2 id="what-it-adds">What it adds</h2>
+<p>
+  <a href="docs/method.html">The method</a>: a fixed order of Plan, Execute,
+  Review and Shipped, worked by the stage orchestrator from a playbook per
+  stage. Plan
+  <a href="docs/reproduce-first.html">reproduces the bug first</a> and then
+  writes a root-cause analysis that a person approves before any fix is made;
+  <a href="docs/review.html">the review</a> runs in a fresh worktree without the
+  planning context.
+</p>
+<p>
+  <a href="docs/rca-graph.html">The knowledge store and the root-cause graph</a
+  >, which keep every approved analysis and open a pattern review when a cause
+  keeps coming back. The integration areas (ticketing, notifications, evidence,
+  reproduction and agents), each built as a factory of providers and configured
+  from Settings (<a href="docs/developing.html#the-factory-pattern"
+    >the factory pattern</a
+  >), with the per-repository scripts that stand an app up for a reproduction.
+</p>
+<p>
+  <a href="docs/method.html#investigations">Investigation cards</a> and
+  <a href="docs/api.html#cards">the card API</a> that files them, which
+  <a href="tammy.html">Tammy</a>, the Slack agent in front of Prepcook, is built
+  on. A board with nothing to sign in to: the server signs each request to the
+  board with an owner token.
+</p>

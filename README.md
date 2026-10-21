@@ -5,6 +5,26 @@
   </picture>
 </p>
 
+**Prepcook turns a bug report into a reviewed pull request while the engineer
+who owns it keeps the final say.**
+
+Coding agents are good at writing a fix and bad at knowing whether the fix is
+right. Left alone on a bug report, an agent guesses at the cause, changes code,
+and declares victory; the engineer then spends longer checking the guess than
+the fix would have taken. The bottleneck in a bug queue was never the typing.
+It is the reproduction nobody has time to set up, the root-cause analysis
+nobody writes down, and the review that queues behind everything else.
+Prepcook puts those three steps in a fixed order and gives each to a separate
+agent in its own worktree: reproduce the bug first, with a harness that fails
+for the reported reason; explain it in a root-cause analysis a person
+approves; make the smallest fix that turns the harness green; review it with
+fresh eyes that never saw the plan; open the pull request. Each step is a
+column on a local board, so the state of every bug is visible, a person can
+take any card over at any point, and every approved analysis goes into a
+knowledge graph that shows when the same cause keeps coming back. The result
+is a queue of bugs that arrive at review already reproduced, explained and
+tested, instead of a pile of agent-written diffs nobody trusts.
+
 A prep cook does the prep so the chef can cook. Prepcook does the prep on a
 bug — reproduces it, explains it, fixes it, reviews the fix, opens the pull
 request — and the engineer who owns the ticket signs off. Each ticket is a card
@@ -60,9 +80,16 @@ Not every card is a fix. An **investigation** card, filed through
 exactly as a bug does, then posts a triage report (what happens, where, why,
 scope, workaround, confidence) and stops in Plan, triaged, until a person
 converts it to a bug — the RCA and harness become the plan — or closes it.
-[Tammy](https://github.com/nwisehart/tammy) is the Slack agent built on this:
-she answers customers from your product's docs, files an investigation when
-something looks broken, and explains the triage report back in plain English.
+
+Most bug reports do not start in a tracker; they start as a customer saying
+"it doesn't work" in Slack. [Tammy](https://github.com/nwisehart/tammy) sits
+in that channel. She answers questions from your product's documentation, and
+when something looks broken she asks the questions a support engineer would,
+files an investigation card on Prepcook, waits for it to be reproduced and
+explained, and tells the customer what was found in plain English, with no
+stack traces, file paths or promises. The team sees a triaged card with a
+root-cause analysis attached and decides whether it becomes a bug; the
+customer gets an answer in an hour instead of a ticket number.
 
 ## Quickstart
 

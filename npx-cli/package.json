@@ -10,7 +10,17 @@
     "build": "esbuild src/cli.ts --bundle --platform=node --target=node20 --format=cjs --outfile=bin/cli.js --banner:js=\"#!/usr/bin/env node\"",
     "check": "tsc --noEmit -p tsconfig.json"
   },
-  "keywords": [],
+  "keywords": [
+    "coding-agents",
+    "claude-code",
+    "bug-fixing",
+    "root-cause-analysis",
+    "pull-requests",
+    "kanban",
+    "orchestrator",
+    "developer-tools",
+    "vibe-kanban"
+  ],
   "author": "Nick Wisehart",
   "repository": {
     "type": "git",
@@ -21,7 +31,7 @@
     "node": ">=20.19.0"
   },
   "license": "",
-  "description": "NPX wrapper around the prepcook and prepcook-mcp binaries",
+  "description": "Prepcook turns a bug report into a reviewed pull request while the engineer who owns it keeps the final say.",
   "devDependencies": {
     "esbuild": "^0.27.2"
   },
