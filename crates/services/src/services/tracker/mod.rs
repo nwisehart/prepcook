@@ -97,6 +97,11 @@ pub struct FetchedIssue {
     /// (a PagerDuty incident's service). An imported card is tagged with it
     /// when the board has a tag of that name.
     pub area: Option<String>,
+    /// The ticket's author is known to be outside the team (a public issue
+    /// from someone who is not an owner, member or collaborator); recorded on
+    /// the card at intake. False when the tracker cannot say, and for a
+    /// tracker that is the team's own.
+    pub filed_externally: bool,
 }
 
 /// The fields read off one ticket by [`Tracker::get_issue`].

@@ -29,6 +29,17 @@ impl<T, E> ApiResponse<T, E> {
             error_data: None,
         }
     }
+    /// Creates an error response with both a `message` and `error_data`, for
+    /// a failure a caller can act on beyond reading why.
+    pub fn error_with(message: &str, data: E) -> Self {
+        ApiResponse {
+            success: false,
+            data: None,
+            message: Some(message.to_string()),
+            error_data: Some(data),
+        }
+    }
+
     /// Creates an error response, with no `data`, no `message`, but with arbitrary `error_data`.
     pub fn error_with_data(data: E) -> Self {
         ApiResponse {

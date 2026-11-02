@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use executors::{
     actions::{ExecutorAction, ExecutorActionType},
-    profile::ExecutorProfileId,
+    profile::{ExecutorConfig, ExecutorProfileId},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -559,6 +559,18 @@ impl ExecutionProcess {
         pool: &SqlitePool,
         session_id: Uuid,
     ) -> Result<Option<ExecutorProfileId>, ExecutionProcessError> {
+        Ok(Self::latest_executor_config_for_session(pool, session_id)
+            .await?
+            .map(|config| config.profile_id()))
+    }
+
+    /// The executor config the session's latest CodingAgent process ran with:
+    /// its profile and the overrides it carried (model, permission policy, …).
+    /// Returns None if no CodingAgent execution process exists for this session.
+    pub async fn latest_executor_config_for_session(
+        pool: &SqlitePool,
+        session_id: Uuid,
+    ) -> Result<Option<ExecutorConfig>, ExecutionProcessError> {
         // Find the latest CodingAgent execution process for this session
         let latest_execution_process = sqlx::query_as!(
             ExecutionProcess,
@@ -593,14 +605,12 @@ impl ExecutionProcess {
 
         match &action.typ {
             ExecutorActionType::CodingAgentInitialRequest(request) => {
-                Ok(Some(request.executor_config.profile_id()))
+                Ok(Some(request.executor_config.clone()))
             }
             ExecutorActionType::CodingAgentFollowUpRequest(request) => {
-                Ok(Some(request.executor_config.profile_id()))
+                Ok(Some(request.executor_config.clone()))
             }
-            ExecutorActionType::ReviewRequest(request) => {
-                Ok(Some(request.executor_config.profile_id()))
-            }
+            ExecutorActionType::ReviewRequest(request) => Ok(Some(request.executor_config.clone())),
             _ => Err(ExecutionProcessError::ValidationError(
                 "Couldn't find profile from initial request".to_string(),
             )),

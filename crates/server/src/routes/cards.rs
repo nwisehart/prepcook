@@ -5,18 +5,22 @@
 //! token matching the `PREPCOOK_API_TOKEN` secret, or the board owner's own
 //! session. Filing a card takes the token: it is how another service — a
 //! support agent, an incident tool — puts work on the board, and the token is
-//! what names it as one that may.
+//! what names it as one that may. Filing is also capped at
+//! `api.cards.daily_limit` cards in any 24 hours, answered with `429` and
+//! `Retry-After` past it.
 
 use axum::{
     Router,
     extract::{Json, Path, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode, header::RETRY_AFTER},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use chrono::{DateTime, Utc};
 use deployment::Deployment;
 use services::services::cards::{
     CardError, CardView, ConvertCardRequest, ConvertedCard, CreateCardRequest, CreatedCard,
+    DailyLimitReached,
 };
 use utils::response::ApiResponse;
 use uuid::Uuid;
@@ -37,11 +41,35 @@ pub fn status_for(error: &CardError) -> StatusCode {
         CardError::Conflict(_) => StatusCode::CONFLICT,
         CardError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         CardError::Failed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        CardError::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
     }
 }
 
+/// Whole seconds from `now` until `at`, rounded up and at least one, as
+/// `Retry-After` takes them.
+pub fn retry_after_secs(at: DateTime<Utc>, now: DateTime<Utc>) -> i64 {
+    let millis = (at - now).num_milliseconds();
+    ((millis + 999) / 1000).max(1)
+}
+
 fn card_failure(error: CardError) -> Response {
-    failure(status_for(&error), &error.to_string())
+    let status = status_for(&error);
+    let message = error.to_string();
+    match error {
+        CardError::RateLimited { limit, retry_at } => {
+            let body = ApiResponse::<(), DailyLimitReached>::error_with(
+                &message,
+                DailyLimitReached { limit, retry_at },
+            );
+            let mut response = (status, Json(body)).into_response();
+            let wait = retry_after_secs(retry_at, Utc::now());
+            if let Ok(value) = HeaderValue::from_str(&wait.to_string()) {
+                response.headers_mut().insert(RETRY_AFTER, value);
+            }
+            response
+        }
+        _ => failure(status, &message),
+    }
 }
 
 async fn create_card(
@@ -170,6 +198,56 @@ mod tests {
         assert_eq!(
             status_for(&CardError::Conflict("no Plan column".to_string())),
             StatusCode::CONFLICT
+        );
+    }
+
+    /// Past the daily limit: `429`, the usual failure envelope with the
+    /// limit and when a slot frees up, and `Retry-After` in seconds.
+    #[tokio::test]
+    async fn the_daily_limit_answers_429_with_retry_after() {
+        let retry_at = Utc::now() + chrono::Duration::minutes(90);
+        let response = card_failure(CardError::RateLimited {
+            limit: 50,
+            retry_at,
+        });
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        let wait: i64 = response.headers()[RETRY_AFTER]
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((5390..=5400).contains(&wait), "{wait}");
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["success"], false);
+        assert_eq!(body["data"], serde_json::Value::Null);
+        assert_eq!(body["error_data"]["limit"], 50);
+        assert_eq!(
+            body["error_data"]["retry_at"]
+                .as_str()
+                .unwrap()
+                .parse::<DateTime<Utc>>()
+                .unwrap(),
+            retry_at
+        );
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("the card API files at most 50 cards in 24 hours")
+        );
+
+        let now = Utc::now();
+        assert_eq!(
+            retry_after_secs(now + chrono::Duration::milliseconds(1), now),
+            1
+        );
+        assert_eq!(retry_after_secs(now - chrono::Duration::seconds(5), now), 1);
+        assert_eq!(
+            retry_after_secs(now + chrono::Duration::seconds(60), now),
+            60
         );
     }
 }

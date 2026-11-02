@@ -394,8 +394,15 @@ struct RawIssue {
     assignee: Option<String>,
     /// Lower-cased login.
     author: Option<String>,
+    /// The author's association with the repository, as GitHub names it
+    /// (`OWNER`, `MEMBER`, `COLLABORATOR`, `CONTRIBUTOR`, `NONE`, …).
+    author_association: Option<String>,
     node_id: Option<String>,
 }
+
+/// The associations that make an issue's author part of the team: anyone
+/// else can open an issue on a public repository.
+const TEAM_ASSOCIATIONS: [&str; 3] = ["OWNER", "MEMBER", "COLLABORATOR"];
 
 fn rfc3339(value: &Value) -> Option<DateTime<FixedOffset>> {
     value
@@ -441,6 +448,7 @@ impl RawIssue {
                 .and_then(login)
                 .or_else(|| login(&value["assignee"])),
             author: login(&value["user"]),
+            author_association: value["author_association"].as_str().map(str::to_string),
             node_id: value["node_id"].as_str().map(str::to_string),
         })
     }
@@ -475,14 +483,27 @@ impl RawIssue {
             author: value["author"]["login"]
                 .as_str()
                 .map(str::to_ascii_lowercase),
+            author_association: value["authorAssociation"].as_str().map(str::to_string),
             node_id: value["id"].as_str().map(str::to_string),
         })
+    }
+
+    /// Whether the author is known to be outside the team. An issue whose
+    /// association GitHub did not report is not counted as outside.
+    fn filed_externally(&self) -> bool {
+        self.author_association
+            .as_deref()
+            .is_some_and(|association| {
+                !TEAM_ASSOCIATIONS
+                    .iter()
+                    .any(|team| association.eq_ignore_ascii_case(team))
+            })
     }
 }
 
 /// The issue fields a GraphQL lookup reads, matching [`RawIssue::from_graphql`].
 const ISSUE_FIELDS: &str = "id number title body state stateReason createdAt updatedAt \
-     author { login } labels(first: 50) { nodes { name } } \
+     author { login } authorAssociation labels(first: 50) { nodes { name } } \
      assignees(first: 10) { nodes { login } }";
 
 /// Logins @-mentioned in `body`, lower-cased, each once, in order. An `@`
@@ -842,6 +863,7 @@ impl GithubIssuesTracker {
 
     fn to_fetched(&self, raw: RawIssue) -> FetchedIssue {
         let (category, status) = self.status_of(&raw);
+        let filed_externally = raw.filed_externally();
         FetchedIssue {
             key: self.key_for(raw.number),
             issue_type: self.issue_type_of(&raw),
@@ -856,6 +878,7 @@ impl GithubIssuesTracker {
             status_name: Some(status),
             labels: raw.labels.iter().map(|l| l.to_ascii_lowercase()).collect(),
             summary: raw.title,
+            filed_externally,
             area: None,
         }
     }
@@ -1920,6 +1943,71 @@ mod tests {
         assert!(endpoint.contains("state=all"), "{endpoint}");
         assert!(endpoint.contains("labels=bug"), "{endpoint}");
         assert!(endpoint.contains("per_page=100"), "{endpoint}");
+    }
+
+    /// An issue from anyone but an owner, member or collaborator of the
+    /// repository is marked as filed from outside the team, from the REST
+    /// listing and the GraphQL lookup alike; one whose association GitHub
+    /// did not report is not.
+    #[tokio::test]
+    async fn issues_from_outside_the_team_are_marked() {
+        let runner = Arc::new(Recorded::default());
+        let with = |number: u64, association: Option<&str>| {
+            let mut raw = issue(number, &["bug"], "open");
+            if let Some(association) = association {
+                raw["author_association"] = json!(association);
+            }
+            raw
+        };
+        runner.on(
+            "GET",
+            "repos/acme/widgets/issues?",
+            json!([
+                with(1, Some("OWNER")),
+                with(2, Some("MEMBER")),
+                with(3, Some("COLLABORATOR")),
+                with(4, Some("CONTRIBUTOR")),
+                with(5, Some("FIRST_TIME_CONTRIBUTOR")),
+                with(6, Some("NONE")),
+                with(7, None),
+            ]),
+        );
+        let found = tracker(&runner).search("state:open").await.unwrap();
+        let outside: Vec<(&str, bool)> = found
+            .iter()
+            .map(|issue| (issue.key.as_str(), issue.filed_externally))
+            .collect();
+        assert_eq!(
+            outside,
+            [
+                ("WIDGETS-1", false),
+                ("WIDGETS-2", false),
+                ("WIDGETS-3", false),
+                ("WIDGETS-4", true),
+                ("WIDGETS-5", true),
+                ("WIDGETS-6", true),
+                ("WIDGETS-7", false),
+            ]
+        );
+
+        let runner = Arc::new(Recorded::default());
+        let node = |number: u64, association: &str| {
+            json!({"id": format!("I_{number}"), "number": number, "title": "T", "body": "",
+                   "state": "OPEN", "stateReason": null,
+                   "createdAt": "2026-10-01T00:00:00Z", "updatedAt": "2026-10-02T00:00:00Z",
+                   "author": {"login": "someone"}, "authorAssociation": association,
+                   "labels": {"nodes": []}, "assignees": {"nodes": []}})
+        };
+        runner.on_graphql(
+            "authorAssociation",
+            json!({"data": {"repository": {"i20": node(20, "NONE"), "i21": node(21, "MEMBER")}}}),
+        );
+        let found = tracker(&runner)
+            .fetch(&["WIDGETS-20".to_string(), "WIDGETS-21".to_string()])
+            .await
+            .unwrap();
+        assert!(found[0].filed_externally);
+        assert!(!found[1].filed_externally);
     }
 
     #[tokio::test]

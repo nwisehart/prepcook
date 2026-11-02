@@ -290,3 +290,79 @@ impl Approvals {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(timeout: chrono::Duration) -> ApprovalRequest {
+        let mut request = ApprovalRequest::new("Bash".to_string(), Uuid::new_v4());
+        request.timeout_at = Utc::now() + timeout;
+        request
+    }
+
+    /// A tool request the owner answers resolves the session's waiter with
+    /// the answer and leaves the pending list the board reads.
+    #[tokio::test]
+    async fn an_answered_request_reaches_the_waiting_session() {
+        let approvals = Approvals::new();
+        let (request, waiter) = approvals
+            .create_with_waiter(request(chrono::Duration::hours(1)), false)
+            .await
+            .unwrap();
+        let process = request.execution_process_id;
+        assert!(
+            approvals
+                .get_pending_execution_process_ids(&[process])
+                .contains(&process)
+        );
+        approvals
+            .respond(
+                &request.id,
+                ApprovalResponse {
+                    execution_process_id: process,
+                    status: ApprovalOutcome::Approved,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(waiter.await, ApprovalOutcome::Approved));
+        assert!(
+            approvals
+                .get_pending_execution_process_ids(&[process])
+                .is_empty()
+        );
+    }
+
+    /// A request nobody answers times out: the waiting session is told so
+    /// (its executor refuses the tool and carries on or ends its turn), the
+    /// board stops showing it as waiting, and a late answer is refused.
+    #[tokio::test]
+    async fn an_unanswered_request_times_out_instead_of_hanging() {
+        let approvals = Approvals::new();
+        let (request, waiter) = approvals
+            .create_with_waiter(request(chrono::Duration::milliseconds(50)), false)
+            .await
+            .unwrap();
+        let process = request.execution_process_id;
+        let outcome = tokio::time::timeout(StdDuration::from_secs(5), waiter)
+            .await
+            .expect("the timeout watcher resolves the waiter");
+        assert!(matches!(outcome, ApprovalOutcome::TimedOut));
+        assert!(
+            approvals
+                .get_pending_execution_process_ids(&[process])
+                .is_empty()
+        );
+        let late = approvals
+            .respond(
+                &request.id,
+                ApprovalResponse {
+                    execution_process_id: process,
+                    status: ApprovalOutcome::Approved,
+                },
+            )
+            .await;
+        assert!(matches!(late, Err(ApprovalError::AlreadyCompleted)));
+    }
+}

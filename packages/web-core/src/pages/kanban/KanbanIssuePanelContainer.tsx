@@ -39,7 +39,7 @@ import {
   parseIssueExtMetadata,
   resolveStagePlaybook,
 } from '@/shared/lib/stagePlaybooks';
-import { cardWorkClass } from '@/shared/lib/workClass';
+import { cardOrigin, cardWorkClass } from '@/shared/lib/workClass';
 import {
   cardCleanupGate,
   columnDotTone,
@@ -1455,6 +1455,46 @@ export function KanbanIssuePanelContainer({
         value: `${trackerName} · ${trackerRef.key}`,
       });
     }
+    // Where the card's text came from, when that was outside the team, and
+    // whether its plan ran under the guarded profile because of it.
+    const filedFrom = cardOrigin(selectedMeta);
+    const guarded = selectedMeta?.planned_guarded === true;
+    if (filedFrom || selectedMeta?.filed_externally || guarded) {
+      properties.push({
+        key: 'origin',
+        label: t('kanban.panel.origin'),
+        wide: true,
+        value: (
+          <>
+            {filedFrom ? (
+              <>
+                {t('kanban.origin.filedBy', {
+                  filer: t(`kanban.origin.kinds.${filedFrom.kind}`),
+                })}{' '}
+                {filedFrom.url ? (
+                  <a
+                    href={filedFrom.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-brand-secondary hover:underline"
+                  >
+                    {t('kanban.origin.thread')}
+                  </a>
+                ) : (
+                  filedFrom.ref
+                )}
+              </>
+            ) : selectedMeta?.filed_externally ? (
+              t('kanban.origin.publicIssue')
+            ) : null}
+            {guarded &&
+              `${filedFrom || selectedMeta?.filed_externally ? ' · ' : ''}${t(
+                'kanban.origin.plannedGuarded'
+              )}`}
+          </>
+        ),
+      });
+    }
     if (implBranch) {
       properties.push({
         key: 'branch',
@@ -1472,6 +1512,7 @@ export function KanbanIssuePanelContainer({
     trackerRef,
     trackerName,
     implBranch,
+    selectedMeta,
     t,
   ]);
 

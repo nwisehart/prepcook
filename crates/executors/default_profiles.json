@@ -11,6 +11,11 @@
           "dangerously_skip_permissions": true,
           "model": "sonnet"
         }
+      },
+      "GUARDED": {
+        "CLAUDE_CODE": {
+          "disallowed_tools": ["WebFetch", "WebSearch"]
+        }
       }
     },
     "AMP": {

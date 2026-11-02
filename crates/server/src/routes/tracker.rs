@@ -357,6 +357,7 @@ pub async fn import_tracker_issues(
             }),
             epic_key: epic_key.clone(),
             origin: tracker::origin_for(tracker.kind(), &url),
+            filed_externally: issue.filed_externally,
             ..Default::default()
         };
 

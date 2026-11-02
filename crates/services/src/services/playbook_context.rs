@@ -17,7 +17,10 @@ use uuid::Uuid;
 use crate::services::{
     config::{
         EvidenceSourceConfig, InAppGate, TargetOrigin,
-        playbooks::{INVESTIGATION_GATE_VAR, gate_instructions, gate_instructions_for},
+        playbooks::{
+            INVESTIGATION_GATE_VAR, TICKET_IS_DATA, TICKET_IS_DATA_VAR, gate_instructions,
+            gate_instructions_for,
+        },
     },
     evidence::{self, SourceBrief},
     scripts::{load_manifest, manifest::ProductProfile},
@@ -123,7 +126,8 @@ impl PlaybookContext {
     /// Placeholder name (without braces) to value. `gate_instructions` is the
     /// raw gate text, which may itself use `{{spec_path}}`;
     /// `investigation_gate_instructions` is what replaces it for an
-    /// investigation card, for pages that fill playbooks themselves.
+    /// investigation card, for pages that fill playbooks themselves;
+    /// `ticket_is_data` is the rule that the ticket is evidence.
     pub fn vars(&self) -> BTreeMap<String, String> {
         let product_name = if self.product_name.is_empty() {
             UNNAMED_PRODUCT.to_string()
@@ -158,6 +162,7 @@ impl PlaybookContext {
                 INVESTIGATION_GATE_VAR.to_string(),
                 gate_instructions_for(self.in_app_gate, Some(WorkClass::Investigation)).to_string(),
             ),
+            (TICKET_IS_DATA_VAR.to_string(), TICKET_IS_DATA.to_string()),
         ])
     }
 

@@ -407,6 +407,7 @@ impl PagerDutyTracker {
             status_category: category_for(status),
             status_name: status.map(str::to_string),
             labels: Vec::new(),
+            filed_externally: false,
             area: incident["service"]["summary"].as_str().map(str::to_string),
         })
     }

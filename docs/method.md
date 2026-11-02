@@ -99,6 +99,31 @@ and the RCA graph's analysis run often and only read. Together they spend most
 of a subscription seat's session budget. A follow-up continues its own
 session, so it can change variant but never agent.
 
+### Cards from outside the team
+
+A card's text is not always the team's. A card filed through `POST /api/cards`
+(by Tammy, an incident tool or any other service, which is to say any card with
+an `origin`) and a GitHub issue opened by someone who is not an owner, member or
+collaborator of the repository (recorded on the card at intake) count as filed
+from outside the team; a ticket from the team's own Jira, and a card made on the
+board, do not. Such a card plans under `agents.external` instead of the planning
+profile ([configuration.md](configuration.md#agents)). Unset, that is the
+planning profile's agent with its guarded variant: for Claude Code, `GUARDED`,
+which takes away the `WebFetch` and `WebSearch` tools and does not carry the
+skip-permissions flag; an agent that ships no guarded variant plans the card
+under the planning profile unchanged. Whether its other tool calls wait for a
+person is `agents.permissions`, the same as for every session. The card panel's
+Origin line then says "Planned under the guarded profile". Executing and Reviewing run their usual profiles:
+an investigation never executes until a person converts it, and a bug or story
+executes from a plan that was approved. In Chef mode a person approves it. In
+Prep mode it is planned all the same, but by default its plan never approves
+itself: `orchestrator.external_cards` (`wait_for_a_person`) holds it at the gate
+until a person decides, and an approval only the agent reported is set aside.
+`follow_board` gives it the board's autonomy, under which a plan that clears the
+bar approves itself and a bug filed from outside the team can reach Executing
+with no one having read it. The guarded profile narrows the agent's own
+tools; it does not confine the shell the agent runs commands in.
+
 ## Investigations
 
 An investigation is a reported problem Prepcook reproduces and explains but
@@ -203,8 +228,9 @@ they arrive. Cards move themselves: a plan that clears the bar (an RCA at high
 confidence, a spec with no open questions) approves itself and goes to Execute;
 one below the bar is escalated to Slack and waits in Plan for a person, whose
 decision comes from the tracker ticket, the card or the approvals API
-([approvals.md](approvals.md)). A finished, verified fix goes to Review, and an
-approved review goes to Shipped.
+([approvals.md](approvals.md)). So, by default, does a card filed from outside
+the team, whatever its verdict ([Cards from outside the team](#cards-from-outside-the-team)). A
+finished, verified fix goes to Review, and an approved review goes to Shipped.
 
 Either way a person merges. When an engineer takes a ticket over, Prepcook steps
 aside ([working-alongside-people.md](working-alongside-people.md)).

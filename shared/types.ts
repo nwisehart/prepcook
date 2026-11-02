@@ -895,6 +895,17 @@ attachments?: Array<CardAttachment>,
  */
 external?: JsonValue | null, 
 /**
+ * The ticket's author is outside the team: a public issue whose author
+ * is not an owner, member or collaborator of the repository. Recorded at
+ * intake when the tracker says; see [`Self::is_filed_externally`].
+ */
+filed_externally?: boolean, 
+/**
+ * Planning ran under `agents.external`, a profile other than the board's
+ * planning profile, because the card was filed from outside the team.
+ */
+planned_guarded?: boolean, 
+/**
  * An investigation's finished triage; see [`TriageRecord`].
  */
 triage?: TriageRecord | null, 
@@ -1139,7 +1150,11 @@ app_runs: AppRunsConfig,
 /**
  * How plans reach a person for approval.
  */
-approvals: ApprovalsConfig, };
+approvals: ApprovalsConfig, 
+/**
+ * The stable HTTP API: the card route's daily limit.
+ */
+api: ApiConfig, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, 
 /**
@@ -1362,6 +1377,12 @@ max_launches_per_tick: number,
  */
 autonomy: AutonomyMode, 
 /**
+ * Whether a card filed from outside the team follows the board's
+ * autonomy or always waits for a person at the plan gate. Global: every
+ * board reads this one.
+ */
+external_cards: ExternalCards, 
+/**
  * REQUEST CHANGES → fix → re-review cycles autonomy runs before
  * escalating to the notification targets and leaving the ticket for a
  * human.
@@ -1546,7 +1567,9 @@ export type Field = {
  */
 key: string, label: string, kind: FieldKind, required: boolean, help: string, };
 
-export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<string>, } | { "type": "bool" } | { "type": "number" };
+export type FieldKind = { "type": "text" } | { "type": "secret" } | { "type": "url" } | { "type": "select", options: Array<SelectOption>, } | { "type": "bool" } | { "type": "number" } | { "type": "profile" };
+
+export type SelectOption = { value: string, label: string, };
 
 export type TestOutcome = { ok: boolean, message: string, };
 
@@ -1578,11 +1601,43 @@ variants: Array<string>,
  * to when the configured profile names no variant. `None` when the
  * agent ships no such variant.
  */
-economy_variant: string | null, docs_url: string, };
+economy_variant: string | null, 
+/**
+ * The variant that plans a card filed from outside the team when
+ * `agents.external` names no profile: the agent's own tools narrowed to
+ * what reproducing a report needs. `None` when the agent's config can
+ * express nothing comparable; such a card then plans under the planning
+ * profile unchanged.
+ */
+guarded_variant: string | null, 
+/**
+ * Whether the `supervised` permission policy puts this agent's tool
+ * permission requests in front of the board owner, through the approvals
+ * service. False for an agent whose requests cannot be routed there: it
+ * runs as its profile says under either policy (see
+ * [`BaseCodingAgent::supervises_tool_calls`]).
+ */
+supervised: boolean, docs_url: string, };
 
 export type McpWiring = "per_session" | "agent_config" | "unsupported";
 
-export type AgentsConfig = { stages: StageProfiles, };
+export type AgentsConfig = { stages: StageProfiles, 
+/**
+ * The profile Planning runs for a card filed from outside the team (see
+ * `IssueExtMetadata::is_filed_externally`). Unset, the planning profile's
+ * agent with its guarded variant, or the planning profile itself for an
+ * agent that has none (see `services::agents`).
+ */
+external: ExecutorProfileId | null, 
+/**
+ * The permission policy of every session the orchestrator launches or
+ * resumes, unless the profile's own variant sets one. Unset reads as
+ * [`AgentPermissions::Auto`]. Global only: a resumed turn does not know
+ * its board, so a board's value is not read.
+ */
+permissions: AgentPermissions | null, };
+
+export type AgentPermissions = "auto" | "supervised";
 
 export type StageProfiles = { 
 /**
@@ -1670,6 +1725,8 @@ export type EvidenceKind = "sentry" | "dataset" | "datadog" | "cloudwatch" | "lo
 
 export type AutonomyMode = "off" | "full";
 
+export type ExternalCards = "follow_board" | "wait_for_a_person";
+
 export type AppRunsConfig = { 
 /**
  * Ports handed to local app runs, `<first>-<last>` inclusive. Each run
@@ -1701,6 +1758,17 @@ target: ReproductionTarget | null, };
 export type ReproductionTarget = "local" | "remote";
 
 export type ApprovalsConfig = { in_app_gate: InAppGate, };
+
+export type ApiConfig = { cards: CardApiConfig, };
+
+export type CardApiConfig = { 
+/**
+ * Cards it files in any 24 hours before it answers `429`; `0` files
+ * without a limit. Every card it files is planned by an agent running as
+ * the board owner, so the limit bounds what a leaked token, or a filer
+ * stuck in a loop, can start.
+ */
+daily_limit: number, };
 
 export type InAppGate = "lavish" | "none";
 
@@ -2037,7 +2105,13 @@ export enum BaseAgentCapability { SESSION_FORK = "SESSION_FORK", SETUP_HELPER = 
 
 export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
-export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, effort?: ClaudeEffort | null, agent?: string | null, dangerously_skip_permissions?: boolean | null, disable_api_key?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
+export type ClaudeCode = { append_prompt: AppendPrompt, claude_code_router?: boolean | null, plan?: boolean | null, approvals?: boolean | null, model?: string | null, effort?: ClaudeEffort | null, agent?: string | null, dangerously_skip_permissions?: boolean | null, disable_api_key?: boolean | null, 
+/**
+ * Tools the session may not use, by Claude Code's tool names (`WebFetch`,
+ * `WebSearch`, `Bash(curl:*)`, …). Passed as `--disallowedTools`, merged
+ * with the `AskUserQuestion` entry an unattended session always carries.
+ */
+disallowed_tools?: Array<string>, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
 export type Gemini = { append_prompt: AppendPrompt, model?: string | null, yolo?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 

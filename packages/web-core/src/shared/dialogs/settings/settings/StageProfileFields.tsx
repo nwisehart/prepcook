@@ -61,6 +61,21 @@ export const stageDefault = (
   return economy ? { ...defaultProfile, variant: economy } : defaultProfile;
 };
 
+/**
+ * What `agents.external` resolves to when unset: the planning profile's agent
+ * with its guarded variant, or the planning profile itself for an agent that
+ * ships none. Mirrors `guarded_variant_of` on the server.
+ */
+export const externalDefault = (
+  planning: ExecutorProfileId,
+  agents: AgentDescriptor[]
+): ExecutorProfileId => {
+  const guarded = agents.find(
+    (agent) => agent.executor === planning.executor
+  )?.guarded_variant;
+  return guarded ? { executor: planning.executor, variant: guarded } : planning;
+};
+
 /** Every discovered profile: each agent, then each of its variants. */
 export function useProfileOptions(
   profiles: Record<string, ExecutorProfile> | null

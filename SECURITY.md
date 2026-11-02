@@ -1,7 +1,9 @@
 # Security
 
 Prepcook runs coding agents against your own repositories with the credentials
-you give it. Treat it like any other tool that holds tokens.
+you give it. Treat it like any other tool that holds tokens. The trust model,
+what the server trusts, what an agent can do and how to confine it, is in
+[docs/security.md](docs/security.md).
 
 ## Reporting a vulnerability
 

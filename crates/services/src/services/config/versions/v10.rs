@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use anyhow::Error;
 use api_types::issue_ext::WorkClass;
-use executors::{executors::BaseCodingAgent, profile::ExecutorProfileId};
+use executors::{
+    executors::BaseCodingAgent, model_selector::PermissionPolicy, profile::ExecutorProfileId,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
@@ -45,6 +47,24 @@ pub(super) const SUPERSEDED_PLAYBOOKS: &[(&str, &str)] = &[
     ),
     ("pattern:planning", superseded_playbooks::PATTERN_PLANNING_1),
     ("rca_analysis", superseded_playbooks::RCA_ANALYSIS_1),
+    ("bug:planning", superseded_playbooks::BUG_PLANNING_3),
+    ("story:planning", superseded_playbooks::STORY_PLANNING_1),
+    ("epic:planning", superseded_playbooks::EPIC_PLANNING_1),
+    ("subtask:planning", superseded_playbooks::SUBTASK_PLANNING_1),
+    (
+        "investigation:planning",
+        superseded_playbooks::INVESTIGATION_PLANNING_2,
+    ),
+    ("pattern:planning", superseded_playbooks::PATTERN_PLANNING_2),
+    ("bug:executing", superseded_playbooks::BUG_EXECUTING_1),
+    ("story:executing", superseded_playbooks::STORY_EXECUTING_1),
+    ("epic:executing", superseded_playbooks::EPIC_EXECUTING_2),
+    (
+        "subtask:executing",
+        superseded_playbooks::SUBTASK_EXECUTING_1,
+    ),
+    ("reviewing", superseded_playbooks::REVIEWING_1),
+    ("comment_reply", superseded_playbooks::COMMENT_REPLY_1),
 ];
 
 /// The playbook key names a config was saved with, in `playbook_keys`. A
@@ -334,6 +354,36 @@ pub enum InAppGate {
 pub struct ApprovalsConfig {
     #[serde(default)]
     pub in_app_gate: InAppGate,
+}
+
+/// The stable HTTP API's settings (see `docs/api.md`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct ApiConfig {
+    #[serde(default)]
+    pub cards: CardApiConfig,
+}
+
+/// `POST /api/cards`, the route other services file cards through.
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, Eq)]
+pub struct CardApiConfig {
+    /// Cards it files in any 24 hours before it answers `429`; `0` files
+    /// without a limit. Every card it files is planned by an agent running as
+    /// the board owner, so the limit bounds what a leaked token, or a filer
+    /// stuck in a loop, can start.
+    #[serde(default = "default_card_daily_limit")]
+    pub daily_limit: u32,
+}
+
+fn default_card_daily_limit() -> u32 {
+    50
+}
+
+impl Default for CardApiConfig {
+    fn default() -> Self {
+        Self {
+            daily_limit: default_card_daily_limit(),
+        }
+    }
 }
 
 /// Where cards come from: a ticket tracker, or an incident tool whose open
@@ -934,12 +984,47 @@ pub struct StageProfiles {
     pub pattern: Option<ExecutorProfileId>,
 }
 
+/// Whether the agents the orchestrator launches ask before they use a tool
+/// (`agents.permissions`). Who approves a plan is the board's mode; this is
+/// who approves a tool call, and the two are independent.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentPermissions {
+    /// Agents run without asking.
+    #[default]
+    Auto,
+    /// Tool permission requests go to the board owner through the approvals
+    /// service, for the agents that can route them there.
+    Supervised,
+}
+
+impl From<AgentPermissions> for PermissionPolicy {
+    fn from(permissions: AgentPermissions) -> Self {
+        match permissions {
+            AgentPermissions::Auto => PermissionPolicy::Auto,
+            AgentPermissions::Supervised => PermissionPolicy::Supervised,
+        }
+    }
+}
+
 /// Which coding agent runs which stage: `agents` globally, and per board
 /// under `orchestrator.project_defaults.*.agents`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
 pub struct AgentsConfig {
     #[serde(default)]
     pub stages: StageProfiles,
+    /// The profile Planning runs for a card filed from outside the team (see
+    /// `IssueExtMetadata::is_filed_externally`). Unset, the planning profile's
+    /// agent with its guarded variant, or the planning profile itself for an
+    /// agent that has none (see `services::agents`).
+    #[serde(default)]
+    pub external: Option<ExecutorProfileId>,
+    /// The permission policy of every session the orchestrator launches or
+    /// resumes, unless the profile's own variant sets one. Unset reads as
+    /// [`AgentPermissions::Auto`]. Global only: a resumed turn does not know
+    /// its board, so a board's value is not read.
+    #[serde(default)]
+    pub permissions: Option<AgentPermissions>,
 }
 
 /// Per-project defaults the orchestrator uses when auto-launching playbook
@@ -1039,6 +1124,21 @@ impl From<v9::ProjectAutomationDefaults> for ProjectAutomationDefaults {
     }
 }
 
+/// What the board's autonomy means for a card filed from outside the team
+/// (`orchestrator.external_cards`; see `IssueExtMetadata::is_filed_externally`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalCards {
+    /// External cards get the board's autonomy: in Prep mode a plan that
+    /// clears the bar approves itself, whoever filed the card.
+    FollowBoard,
+    /// An external card's plan is never approved by anyone but a person: it
+    /// is planned in either mode, and then waits at the plan gate. An
+    /// approval the agent reported for itself does not count.
+    #[default]
+    WaitForAPerson,
+}
+
 /// Background playbook orchestrator settings. Disabled (`Off`) by default.
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub struct OrchestratorConfig {
@@ -1088,6 +1188,11 @@ pub struct OrchestratorConfig {
     /// See [`AutonomyMode`]. Default `Off`; enable only on the runner.
     #[serde(default)]
     pub autonomy: AutonomyMode,
+    /// Whether a card filed from outside the team follows the board's
+    /// autonomy or always waits for a person at the plan gate. Global: every
+    /// board reads this one.
+    #[serde(default)]
+    pub external_cards: ExternalCards,
     /// REQUEST CHANGES → fix → re-review cycles autonomy runs before
     /// escalating to the notification targets and leaving the ticket for a
     /// human.
@@ -1132,6 +1237,7 @@ impl Default for OrchestratorConfig {
             max_launches_per_tick: default_max_launches_per_tick(),
             workspace_retention_days: default_workspace_retention_days(),
             autonomy: AutonomyMode::Off,
+            external_cards: ExternalCards::default(),
             autonomy_review_iterations: default_autonomy_review_iterations(),
             digest_at_local: None,
             eob_at_local: None,
@@ -1154,6 +1260,7 @@ impl From<v9::OrchestratorConfig> for OrchestratorConfig {
             workspace_retention_days: old.workspace_retention_days,
             max_launches_per_tick: old.max_launches_per_tick,
             autonomy: old.autonomy,
+            external_cards: ExternalCards::default(),
             autonomy_review_iterations: old.autonomy_review_iterations,
             digest_at_local: old.digest_at_local,
             eob_at_local: old.eob_at_local,
@@ -1191,6 +1298,8 @@ pub struct EffectiveProjectSettings {
     pub assigned_jql: Option<String>,
     pub playbooks: BTreeMap<String, String>,
     pub autonomy: AutonomyMode,
+    /// The global `orchestrator.external_cards`.
+    pub external_cards: ExternalCards,
     pub autonomy_review_iterations: u32,
     pub deployed_retention_days: Option<u32>,
     pub cleanup_retention_days: Option<u32>,
@@ -1278,6 +1387,9 @@ pub struct Config {
     /// How plans reach a person for approval.
     #[serde(default)]
     pub approvals: ApprovalsConfig,
+    /// The stable HTTP API: the card route's daily limit.
+    #[serde(default)]
+    pub api: ApiConfig,
 }
 
 impl Config {
@@ -1329,6 +1441,7 @@ impl Config {
             integrations: old_config.integrations.into(),
             app_runs: AppRunsConfig::default(),
             approvals: ApprovalsConfig::default(),
+            api: ApiConfig::default(),
         }
     }
 
@@ -1429,6 +1542,7 @@ impl Default for Config {
             evidence: EvidenceConfig::default(),
             app_runs: AppRunsConfig::default(),
             approvals: ApprovalsConfig::default(),
+            api: ApiConfig::default(),
         }
     }
 }
@@ -1526,8 +1640,7 @@ impl Config {
             .executor_profile
             .clone()
             .unwrap_or_else(|| self.executor_profile.clone());
-        let agents =
-            StageAgents::resolve(&board.agents.stages, &self.agents.stages, &executor_profile);
+        let agents = StageAgents::resolve(&board.agents, &self.agents, &executor_profile);
 
         EffectiveProjectSettings {
             project_id,
@@ -1541,6 +1654,7 @@ impl Config {
             assigned_jql,
             playbooks,
             autonomy: board.autonomy.unwrap_or(self.orchestrator.autonomy),
+            external_cards: self.orchestrator.external_cards,
             autonomy_review_iterations: board
                 .autonomy_review_iterations
                 .unwrap_or(self.orchestrator.autonomy_review_iterations),

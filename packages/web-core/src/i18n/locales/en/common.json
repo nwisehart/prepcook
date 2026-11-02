@@ -452,6 +452,8 @@
     "origin": {
       "filedBy": "Filed by {{filer}} from",
       "thread": "thread",
+      "publicIssue": "A public issue from outside the team",
+      "plannedGuarded": "Planned under the guarded profile",
       "kinds": {
         "tammy": "Tammy",
         "incident": "an incident",
@@ -833,6 +835,7 @@
       "stage": "Stage",
       "owner": "Owner",
       "playbook": "Playbook",
+      "origin": "Origin",
       "playbookValue": "{{workClass}} · {{stage}} stage",
       "tracker": "Tracker",
       "branch": "Branch",

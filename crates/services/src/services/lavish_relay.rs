@@ -672,9 +672,15 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> LavishRelayService<C> 
             }
         };
 
-        let executor_profile_id =
-            match ExecutionProcess::latest_executor_profile_for_session(pool, session.id).await {
-                Ok(Some(profile)) => profile,
+        // The feedback continues the session as it was launched, under the
+        // same permission policy, so a supervised planning session stays
+        // supervised while it revises.
+        let executor_config =
+            match ExecutionProcess::latest_executor_config_for_session(pool, session.id).await {
+                Ok(Some(config)) => executors::profile::ExecutorConfig {
+                    permission_policy: config.permission_policy.clone(),
+                    ..config.profile_id().into()
+                },
                 _ => {
                     warn!(
                         "Lavish relay: no executor profile for session {}; dropping feedback",
@@ -699,15 +705,13 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> LavishRelayService<C> 
                 prompt,
                 session_id: info.session_id,
                 reset_to_message_id: None,
-                executor_config: executors::profile::ExecutorConfig::from(
-                    executor_profile_id.clone(),
-                ),
+                executor_config,
                 working_dir: working_dir.clone(),
             })
         } else {
             ExecutorActionType::CodingAgentInitialRequest(CodingAgentInitialRequest {
                 prompt,
-                executor_config: executors::profile::ExecutorConfig::from(executor_profile_id),
+                executor_config,
                 working_dir,
             })
         };

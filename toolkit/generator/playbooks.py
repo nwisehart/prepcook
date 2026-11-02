@@ -6,7 +6,10 @@ maps each key to a constant (`("bug:planning".to_string(),
 BUG_PLANNING.to_string())`, or a key constant such as
 `REVIEWING_PLAYBOOK_KEY`); this module reads that map, then the `r#"…"#`
 body of each constant it names. Nothing else in the file is read, so the
-gate texts and the tests below them never leak into a playbook.
+gate texts and the tests below them never leak into a playbook. The one
+shared passage every ticket-reading playbook carries, `{{ticket_is_data}}`,
+is filled here from `TICKET_IS_DATA` in the same file, as the orchestrator
+fills it at launch.
 
 `source_sha()` names the commit the inputs were last changed in, for the
 note at the top of every generated file.
@@ -31,6 +34,8 @@ FUNCTION_TAIL = "\n}"
 PAIR = re.compile(r'\(\s*("[a-z:_]+"|[A-Z_]+)\.to_string\(\),\s*([A-Z_]+)\.to_string\(\),?\s*\)')
 KEY_CONST = re.compile(r'pub const ([A-Z_]+): &str = "([^"]+)";')
 RAW_CONST = re.compile(r'const ([A-Z_]+): &str = r#"(.*?)"#;', re.S)
+# `{{ticket_is_data}}` and the constant that fills it.
+SHARED_PASSAGES = {"{{ticket_is_data}}": "TICKET_IS_DATA"}
 
 
 def parse(source: str) -> dict[str, str]:
@@ -42,7 +47,10 @@ def parse(source: str) -> dict[str, str]:
     playbooks = {}
     for key, const in PAIR.findall(source[start:end]):
         name = key.strip('"') if key.startswith('"') else keys[key]
-        playbooks[name] = texts[const]
+        text = texts[const]
+        for placeholder, passage in SHARED_PASSAGES.items():
+            text = text.replace(placeholder, texts[passage])
+        playbooks[name] = text
     if not playbooks:
         raise ValueError(f"no playbooks found under default_playbooks() in {PLAYBOOKS_FILE}")
     return playbooks
