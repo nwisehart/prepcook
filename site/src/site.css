@@ -298,13 +298,14 @@ kbd {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 32px;
-  justify-content: space-between;
+  justify-content: center;
   align-items: baseline;
 }
 
 .footer-links {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 4px 16px;
   margin: 0;
   padding: 0;
