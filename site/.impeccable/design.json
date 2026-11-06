@@ -1,0 +1,634 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T06:20:23.082Z",
+  "title": "Design System: Prepcook website",
+  "extensions": {
+    "colorMeta": {
+      "enamel-blue": {
+        "role": "primary",
+        "displayName": "Enamel Blue",
+        "canonical": "#3f6aa6",
+        "oklch": "oklch(52.2% 0.107 257.0)",
+        "tonalRamp": [
+          "#070b12",
+          "#18273c",
+          "#29456e",
+          "#3c67a2",
+          "#628bc4",
+          "#93b0d8",
+          "#c2d2ea",
+          "#e8eff9"
+        ]
+      },
+      "enamel-blue-deep": {
+        "role": "primary",
+        "displayName": "Deep Enamel",
+        "canonical": "#2f5285",
+        "oklch": "oklch(43.8% 0.094 257.8)",
+        "tonalRamp": [
+          "#080b11",
+          "#1a273a",
+          "#2d4669",
+          "#43679b",
+          "#688bbe",
+          "#97b0d4",
+          "#c4d2e7",
+          "#e9eff8"
+        ]
+      },
+      "enamel-blue-soft": {
+        "role": "primary",
+        "displayName": "Enamel Wash",
+        "canonical": "#e7eef8",
+        "oklch": "oklch(94.7% 0.015 257.2)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#24272a",
+          "#41454b",
+          "#61676f",
+          "#848a92",
+          "#aaaeb4",
+          "#cfd1d4",
+          "#edeef0"
+        ]
+      },
+      "on-enamel": {
+        "role": "primary",
+        "displayName": "On Enamel",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#262626",
+          "#454545",
+          "#666666",
+          "#898989",
+          "#aeaeae",
+          "#d1d1d1",
+          "#eeeeee"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#f7f6f3",
+        "oklch": "oklch(97.3% 0.004 91.4)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#272625",
+          "#454543",
+          "#676663",
+          "#8a8986",
+          "#aeaeac",
+          "#d1d1d0",
+          "#eeeeee"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#262626",
+          "#454545",
+          "#666666",
+          "#898989",
+          "#aeaeae",
+          "#d1d1d1",
+          "#eeeeee"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#efede8",
+        "oklch": "oklch(94.6% 0.007 88.6)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#272625",
+          "#464542",
+          "#686662",
+          "#8b8985",
+          "#afaeab",
+          "#d1d1cf",
+          "#efeeee"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised",
+        "canonical": "#fbfaf8",
+        "oklch": "oklch(98.5% 0.003 84.6)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#272626",
+          "#454544",
+          "#676664",
+          "#8a8987",
+          "#aeaead",
+          "#d1d1d0",
+          "#eeeeee"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "canonical": "#e4e1da",
+        "oklch": "oklch(91.0% 0.010 87.5)",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#272624",
+          "#474541",
+          "#686660",
+          "#8b8983",
+          "#afaeaa",
+          "#d2d1ce",
+          "#efeeed"
+        ]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Divider",
+        "canonical": "#f0eee9",
+        "oklch": "oklch(94.9% 0.007 88.6)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#272625",
+          "#464542",
+          "#686662",
+          "#8b8985",
+          "#afaeab",
+          "#d1d1cf",
+          "#efeeee"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1f2328",
+        "oklch": "oklch(25.4% 0.011 254.0)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252729",
+          "#424549",
+          "#62676c",
+          "#858a8f",
+          "#abaeb2",
+          "#cfd1d3",
+          "#eeeeef"
+        ]
+      },
+      "body-text": {
+        "role": "neutral",
+        "displayName": "Body Text",
+        "canonical": "#4b4f56",
+        "oklch": "oklch(42.7% 0.013 261.8)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252629",
+          "#42454a",
+          "#62666e",
+          "#858990",
+          "#abaeb3",
+          "#cfd1d4",
+          "#eeeef0"
+        ]
+      },
+      "muted-text": {
+        "role": "neutral",
+        "displayName": "Muted Text",
+        "canonical": "#6a6f78",
+        "oklch": "oklch(54.0% 0.015 262.3)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#25262a",
+          "#42454b",
+          "#61666f",
+          "#858992",
+          "#abaeb4",
+          "#cfd1d4",
+          "#edeef0"
+        ]
+      },
+      "enamel-blue-hover-dark": {
+        "role": "primary",
+        "displayName": "Enamel Hover (dark)",
+        "canonical": "#4a7fbf",
+        "oklch": "oklch(58.9% 0.114 254.2)",
+        "tonalRamp": [
+          "#070c12",
+          "#15273e",
+          "#234670",
+          "#3367a6",
+          "#5b8cc8",
+          "#8fb1db",
+          "#c0d3eb",
+          "#e7effa"
+        ]
+      },
+      "enamel-blue-text-dark": {
+        "role": "primary",
+        "displayName": "Enamel Link (dark)",
+        "canonical": "#8fb0de",
+        "oklch": "oklch(74.9% 0.076 256.7)",
+        "tonalRamp": [
+          "#080b10",
+          "#1c2736",
+          "#324662",
+          "#496791",
+          "#6e8bb4",
+          "#9bb0cc",
+          "#c6d2e3",
+          "#eaeff6"
+        ]
+      },
+      "enamel-blue-soft-dark": {
+        "role": "primary",
+        "displayName": "Enamel Wash (dark)",
+        "canonical": "#243246",
+        "oklch": "oklch(31.4% 0.041 257.3)",
+        "tonalRamp": [
+          "#0a0b0e",
+          "#21272f",
+          "#3b4655",
+          "#57677e",
+          "#7b8aa0",
+          "#a4afbe",
+          "#cbd1db",
+          "#eceff3"
+        ]
+      },
+      "enamel-blue-soft-fg-dark": {
+        "role": "primary",
+        "displayName": "Enamel Wash Text (dark)",
+        "canonical": "#9dbce8",
+        "oklch": "oklch(78.8% 0.072 257.1)",
+        "tonalRamp": [
+          "#080b10",
+          "#1d2735",
+          "#334661",
+          "#4b678f",
+          "#708bb1",
+          "#9cafcb",
+          "#c7d2e2",
+          "#eaeff6"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral",
+        "displayName": "Paper (dark)",
+        "canonical": "#1e1e21",
+        "oklch": "oklch(23.6% 0.006 286.0)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#262628",
+          "#454547",
+          "#666669",
+          "#89898c",
+          "#adaeb0",
+          "#d1d1d2",
+          "#eeeeef"
+        ]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Surface (dark)",
+        "canonical": "#27282c",
+        "oklch": "oklch(27.7% 0.007 274.7)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#262628",
+          "#444548",
+          "#65666a",
+          "#88898d",
+          "#adaeb1",
+          "#d0d1d3",
+          "#eeeeef"
+        ]
+      },
+      "panel-dark": {
+        "role": "neutral",
+        "displayName": "Panel (dark)",
+        "canonical": "#2d2e33",
+        "oklch": "oklch(30.2% 0.009 276.8)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#262628",
+          "#444549",
+          "#64666b",
+          "#88898e",
+          "#adaeb2",
+          "#d0d1d3",
+          "#eeeeef"
+        ]
+      },
+      "raised-dark": {
+        "role": "neutral",
+        "displayName": "Raised (dark)",
+        "canonical": "#222225",
+        "oklch": "oklch(25.3% 0.006 286.0)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#262628",
+          "#454547",
+          "#666669",
+          "#89898c",
+          "#adaeb0",
+          "#d1d1d2",
+          "#eeeeef"
+        ]
+      },
+      "border-dark": {
+        "role": "neutral",
+        "displayName": "Border (dark)",
+        "canonical": "#37383e",
+        "oklch": "oklch(34.2% 0.011 278.3)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#262629",
+          "#444549",
+          "#64666c",
+          "#88898f",
+          "#adaeb2",
+          "#d0d1d3",
+          "#eeeeef"
+        ]
+      },
+      "divider-dark": {
+        "role": "neutral",
+        "displayName": "Divider (dark)",
+        "canonical": "#33343a",
+        "oklch": "oklch(32.6% 0.011 278.3)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#262629",
+          "#444549",
+          "#64666c",
+          "#87898f",
+          "#adaeb2",
+          "#d0d1d3",
+          "#eeeeef"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark)",
+        "canonical": "#eceae4",
+        "oklch": "oklch(93.7% 0.008 91.5)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#272624",
+          "#464541",
+          "#686661",
+          "#8b8984",
+          "#afaeaa",
+          "#d1d1cf",
+          "#efeeed"
+        ]
+      },
+      "body-text-dark": {
+        "role": "neutral",
+        "displayName": "Body Text (dark)",
+        "canonical": "#c9cbd0",
+        "oklch": "oklch(84.2% 0.007 268.5)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#262628",
+          "#444548",
+          "#64666a",
+          "#87898d",
+          "#adaeb1",
+          "#d0d1d3",
+          "#eeeeef"
+        ]
+      },
+      "muted-text-dark": {
+        "role": "neutral",
+        "displayName": "Muted Text (dark)",
+        "canonical": "#a0a3aa",
+        "oklch": "oklch(71.5% 0.011 267.3)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252629",
+          "#434549",
+          "#63666c",
+          "#86898f",
+          "#acaeb2",
+          "#d0d1d3",
+          "#eeeeef"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The home-page wordmark only; 38px under 640px."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "The one-sentence pitch under the wordmark; 20px under 640px."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "A docs page's h1; 26px under 640px."
+      },
+      "title-lg": {
+        "displayName": "Title Large",
+        "purpose": "Home-page band headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Docs h2, ruled above; 20px under 640px."
+      },
+      "title-sm": {
+        "displayName": "Title Small",
+        "purpose": "Card, stage and install-card headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text at a 640-780px measure."
+      },
+      "body-sm": {
+        "displayName": "Body Small",
+        "purpose": "Text inside cards and stages."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button labels."
+      },
+      "nav": {
+        "displayName": "Nav",
+        "purpose": "Header and sidebar links."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase eyebrows, sidebar group titles, the breadcrumb."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Code blocks, keys, paths, commands and versions."
+      }
+    },
+    "shadows": [],
+    "elevation": "Flat. No box-shadow anywhere; surfaces separate by 1px borders and tonal steps. The mobile docs drawer sits over a scrim (ink at 45% light, near-black at 60% dark).",
+    "focus": {
+      "value": "2px solid var(--brand); outline-offset: 2px; border-radius: 4px",
+      "purpose": "Every focusable element."
+    },
+    "motion": [
+      {
+        "name": "drawer-slide",
+        "value": "transform 0.18s ease, visibility 0.18s",
+        "purpose": "The mobile docs sidebar sliding in; off under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "toc-folds",
+        "value": "1199px",
+        "purpose": "On-this-page folds inline; sidebar narrows to 232px."
+      },
+      {
+        "name": "two-up",
+        "value": "959px",
+        "purpose": "Feature grids go to two columns; stage rows stack."
+      },
+      {
+        "name": "drawer",
+        "value": "899px",
+        "purpose": "Docs sidebar becomes a slide-in drawer."
+      },
+      {
+        "name": "phone",
+        "value": "639px",
+        "purpose": "Single column, 16px gutters, smaller display sizes."
+      },
+      {
+        "name": "narrow",
+        "value": "479px",
+        "purpose": "The external GitHub header link is hidden."
+      }
+    ],
+    "themes": {
+      "light": ":root",
+      "dark": "@media (prefers-color-scheme: dark) :root:not([data-theme='light']), and :root[data-theme='dark']",
+      "darkTokenSuffix": "-dark"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one call to action per view, such as Get started.",
+      "html": "<a class=\"ds-btn-primary\" href=\"#\">Get started</a>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; font: 600 14px/1 var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); text-decoration: none; cursor: pointer; background: var(--brand, #3f6aa6); border-color: var(--brand, #3f6aa6); color: var(--on-brand, #ffffff); } .ds-btn-primary:hover { background: var(--brand-hover, #2f5285); border-color: var(--brand-hover, #2f5285); } .ds-btn-primary:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Every other action, beside a primary or alone, such as GitHub.",
+      "html": "<a class=\"ds-btn-secondary\" href=\"#\">GitHub</a>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; font: 600 14px/1 var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); text-decoration: none; cursor: pointer; background: var(--surface, #ffffff); color: var(--text-high, #1f2328); } .ds-btn-secondary:hover { background: var(--panel, #efede8); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; }"
+    },
+    {
+      "name": "Header Navigation",
+      "kind": "nav",
+      "refersTo": "header-link",
+      "description": "The sticky header: mark and name, section links, theme toggle.",
+      "html": "<nav class=\"ds-header\"><a class=\"ds-brand\" href=\"#\"><svg viewBox=\"0 0 64 64\" width=\"28\" height=\"28\" fill=\"currentColor\" aria-hidden=\"true\"><path fill-rule=\"evenodd\" d=\"M15.5 42.5 L11.0 9.4 A5.08 5.08 0 0 1 18.00 9.40 A5.08 5.08 0 0 1 25.00 9.40 A5.08 5.08 0 0 1 32.00 9.40 A5.08 5.08 0 0 1 39.00 9.40 A5.08 5.08 0 0 1 46.00 9.40 A5.08 5.08 0 0 1 53.00 9.40 L48.5 42.5 Q48.5 45.0 46.0 45.0 L18.0 45.0 Q15.5 45.0 15.5 42.5 Z M20.30 41.5 L17.30 12.5 L18.70 12.5 L21.70 41.5 Z M25.80 41.5 L24.30 12.5 L25.70 12.5 L27.20 41.5 Z M31.30 41.5 L31.30 12.5 L32.70 12.5 L32.70 41.5 Z M36.80 41.5 L38.30 12.5 L39.70 12.5 L38.20 41.5 Z M42.30 41.5 L45.30 12.5 L46.70 12.5 L43.70 41.5 Z\"/></svg>Prepcook</a><a class=\"ds-nav-link\" aria-current=\"page\" href=\"#\">Docs</a><a class=\"ds-nav-link\" href=\"#\">Tammy</a><a class=\"ds-nav-link\" href=\"#\">GitHub</a></nav>",
+      "css": ".ds-header { display: flex; align-items: center; gap: 2px; height: 56px; padding: 0 24px; background: var(--bg, #f7f6f3); border-bottom: 1px solid var(--border, #e4e1da); font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; color: var(--text-high, #1f2328); font-size: 18px; font-weight: 700; letter-spacing: -0.2px; text-decoration: none; } .ds-brand svg { color: var(--brand, #3f6aa6); } .ds-nav-link { padding: 6px 10px; border-radius: 8px; color: var(--text, #4b4f56); font-size: 14px; font-weight: 500; text-decoration: none; } .ds-nav-link:hover, .ds-nav-link[aria-current='page'] { background: var(--panel, #efede8); color: var(--text-high, #1f2328); } .ds-nav-link:focus-visible, .ds-brand:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
+    },
+    {
+      "name": "Docs Sidebar",
+      "kind": "nav",
+      "refersTo": "sidebar-link-active",
+      "description": "Grouped docs navigation; the current page takes the Enamel Wash.",
+      "html": "<nav class=\"ds-sidebar\"><p class=\"ds-sidebar-title\">Method</p><a href=\"#\" aria-current=\"page\">The method</a><a href=\"#\">Reproduce first</a><a href=\"#\">Plan decisions</a></nav>",
+      "css": ".ds-sidebar { width: 248px; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-sidebar-title { margin: 0 0 6px; padding: 0 10px; color: var(--text-low, #6a6f78); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; } .ds-sidebar a { display: block; padding: 5px 10px; border-radius: 8px; color: var(--text, #4b4f56); font-size: 14px; font-weight: 500; line-height: 1.4; text-decoration: none; } .ds-sidebar a:hover { background: var(--panel, #efede8); color: var(--text-high, #1f2328); } .ds-sidebar a[aria-current='page'] { background: var(--brand-soft, #e7eef8); color: var(--brand-soft-fg, #2f5285); font-weight: 600; } .ds-sidebar a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; }"
+    },
+    {
+      "name": "Feature Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A bordered flat surface holding one idea, with its link pinned to the bottom.",
+      "html": "<article class=\"ds-card\"><h3>Reproduce first</h3><p>A bug card's Plan stage makes the failure happen, and only then explains it.</p><a href=\"#\">Reproduce first</a></article>",
+      "css": ".ds-card { display: flex; flex-direction: column; max-width: 340px; padding: 20px; border: 1px solid var(--border, #e4e1da); border-radius: 10px; background: var(--surface, #ffffff); color: var(--text, #4b4f56); font: 400 15px/1.65 var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-card h3 { margin: 0 0 8px; color: var(--text-high, #1f2328); font-size: 17px; font-weight: 700; } .ds-card p { margin: 0 0 12px; } .ds-card a { margin-top: auto; color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; } .ds-card a:hover { text-decoration-thickness: 2px; } .ds-card a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
+    },
+    {
+      "name": "Stage List",
+      "kind": "custom",
+      "refersTo": "step-badge",
+      "description": "The signature list of the method: numbered stages in one bordered surface.",
+      "html": "<ol class=\"ds-stages\"><li><span class=\"ds-step\">1</span><div><h3>Plan</h3><p class=\"ds-helper\">Reproduce it, then explain it</p></div></li><li><span class=\"ds-step\">2</span><div><h3>Execute</h3><p class=\"ds-helper\">The smallest fix, with tests</p></div></li></ol>",
+      "css": ".ds-stages { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border, #e4e1da); border-radius: 10px; background: var(--surface, #ffffff); font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-stages li { display: flex; gap: 12px; padding: 20px 24px; } .ds-stages li + li { border-top: 1px solid var(--divider, #f0eee9); } .ds-step { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 999px; background: var(--brand-soft, #e7eef8); color: var(--brand-soft-fg, #2f5285); font: 500 12px var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); } .ds-stages h3 { margin: 0; color: var(--text-high, #1f2328); font-size: 17px; font-weight: 700; line-height: 26px; } .ds-helper { margin: 0; color: var(--text-low, #6a6f78); font-size: 13px; }"
+    },
+    {
+      "name": "Code Block",
+      "kind": "custom",
+      "refersTo": "code-block",
+      "description": "Commands and config: a language strip with a copy button over a quiet mono body.",
+      "html": "<div class=\"ds-code\"><div class=\"ds-code-head\"><span>sh</span><button type=\"button\">Copy</button></div><pre>npx prepcook up</pre></div>",
+      "css": ".ds-code { border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--raised, #fbfaf8); overflow: hidden; } .ds-code-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; padding: 0 6px 0 14px; border-bottom: 1px solid var(--divider, #f0eee9); background: var(--surface, #ffffff); color: var(--text-low, #6a6f78); font: 400 12px var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); } .ds-code-head button { padding: 2px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-low, #6a6f78); font: 500 12px var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); cursor: pointer; } .ds-code-head button:hover { border-color: var(--border, #e4e1da); color: var(--text-high, #1f2328); } .ds-code-head button:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; } .ds-code pre { margin: 0; padding: 12px 14px; overflow-x: auto; color: var(--text-high, #1f2328); font: 400 13px/1.6 var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); }"
+    },
+    {
+      "name": "Inline Code",
+      "kind": "chip",
+      "refersTo": "code-inline",
+      "description": "Keys, paths and commands inside running text.",
+      "html": "<p class=\"ds-prose\">Run <code class=\"ds-code-inline\">prepcook status</code> to see what is running.</p>",
+      "css": ".ds-prose { color: var(--text, #4b4f56); font: 400 16px/1.65 var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-code-inline { padding: 1px 5px; border-radius: 5px; background: var(--panel, #efede8); color: var(--text-high, #1f2328); font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); font-size: 0.86em; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The pass",
+    "overview": "The pass is the counter between the kitchen and the dining room, where every plate is checked before it goes out. The site is laid out like one: a clean, lit counter (the warm-paper ground) with the work set down on it to be inspected. The work is the product itself, shown in its own screenshots, its own stage names and its own documentation, and the site's job is to present it plainly enough that a lead can check it and sign off.\n\nThe system is the same one the board app uses, so the site and the product read as one object. It is flat and border-defined: surfaces are white panels with a 1px warm-grey edge, nothing is raised by a shadow, and a single enamel blue marks what can be acted on. Density is that of good documentation: generous line height, a 640–780px reading measure, small uppercase labels that name each section before its heading. Light and dark are both first-class; the dark palette is a chosen set of warm near-blacks, not an inversion.\n\nThe kitchen appears in the words and the mark (a pleated toque) and may appear visually only in sparing, restrained nods that earn their place. The site must never become a dark hacker hero: no black-first terminal aesthetic, no neon, no animated code.",
+    "keyCharacteristics": [
+      "Warm paper ground, white bordered surfaces, no shadows.",
+      "One accent, enamel blue, for actions, links, the mark and the current page.",
+      "Figtree for everything readable, JetBrains Mono for keys, paths and code.",
+      "Product screenshots, in light and dark pairs, carry the visual weight.",
+      "Quiet and exact: thin borders, flat fills, precise spacing."
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "Enamel blue is the only hue on the site's own surfaces. Colour beyond it arrives only inside product screenshots.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reserved Amber Rule",
+        "body": "The stylesheet carries the app's amber \"Needs you\" tokens so the two systems stay in step, but the site does not use them. Amber means a person is needed on a card; it never decorates a page.",
+        "section": "colors"
+      },
+      {
+        "name": "The Label-Then-Heading Rule",
+        "body": "A home-page section opens with an uppercase 11px label naming its category, then its heading. The label orients; the heading says something.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Counter Rule",
+        "body": "Surfaces are separated by borders and tone, never by shadow or blur. If something needs to stand out, give it the accent, not height.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take every colour from the custom properties in `site/src/site.css`, and keep them identical to the board app's tokens.",
+      "Do separate surfaces with a 1px Border and a tonal step; keep everything flat.",
+      "Do show the product with its own screenshots, always as a light and dark pair, framed like a card.",
+      "Do open home-page sections with an 11px uppercase label before the heading.",
+      "Do set keys, paths, commands and versions in JetBrains Mono.",
+      "Do design both themes at once; dark is a warm near-black palette, not an inversion.",
+      "Do keep any kitchen imagery to a sparing, restrained nod that earns its place; the toque mark is the anchor."
+    ],
+    "donts": [
+      "Don't add shadows, glows or blur to lift a surface.",
+      "Don't introduce a second accent hue, and don't use the amber \"Needs you\" colour for decoration.",
+      "Don't turn the site into a dark hacker hero: no black-first terminal aesthetic, no neon green, no animated code.",
+      "Don't use emoji or exclamation marks, in copy or as icons."
+    ]
+  }
+}
