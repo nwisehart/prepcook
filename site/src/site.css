@@ -302,14 +302,6 @@ kbd {
   align-items: baseline;
 }
 
-.footer-inner p {
-  margin: 0;
-}
-
-.footer-inner strong {
-  color: var(--text-high);
-}
-
 .footer-links {
   display: flex;
   flex-wrap: wrap;
