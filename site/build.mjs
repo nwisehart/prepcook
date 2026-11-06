@@ -1,12 +1,14 @@
 // Generates the Prepcook website into site/dist from the repository's own
-// documentation (README.md, CONTRIBUTING.md, docs/*.md) plus three
-// hand-written pages (src/home.html, src/tammy.html, src/vibe-kanban.html). The site is served at
-// https://prepcook.dev/ (SITE_URL). Every link and asset reference it writes
-// is relative, so dist works the same from any host or a local preview; the
-// only absolute self-URLs are the canonical and Open Graph URLs in each page's
-// head, the JSON-LD on the home and Tammy pages, sitemap.xml and robots.txt,
-// which social cards and search engines require. The link check in
-// check-links.mjs runs at the end and fails the build on any broken reference.
+// documentation (README.md, CONTRIBUTING.md, docs/*.md), three hand-written
+// pages (src/home.html, src/tammy.html, src/vibe-kanban.html) and the blog's
+// posts (site/blog/*.md, rendered to blog/<slug>.html with an index and an
+// RSS feed). The site is served at https://prepcook.dev/ (SITE_URL). Every link
+// and asset reference it writes is relative, so dist works the same from any
+// host or a local preview; the only absolute self-URLs are the canonical and
+// Open Graph URLs in each page's head, the JSON-LD on the home, Tammy and post
+// pages, the feed, sitemap.xml and robots.txt, which social cards, feed
+// readers and search engines require. The link check in check-links.mjs runs
+// at the end and fails the build on any broken reference.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -150,6 +152,14 @@ const DESCRIPTIONS = {
 const COPIED = [
   ...listFiles('docs/images', (f) => f.endsWith('.png')),
   ...listFiles('assets/brand', (f) => f.endsWith('.svg')),
+  ...listFiles('site/blog/images', (f) => /\.(?:png|jpe?g|webp|svg)$/.test(f), {
+    optional: true,
+  }),
+  // The board film, once scripts/board-video.mjs has made it: the hero plays
+  // the WebM and MP4, and the README's GIF line resolves here too.
+  ...listFiles('docs/media', (f) => /\.(?:webm|mp4|gif)$/.test(f), {
+    optional: true,
+  }),
 ];
 const COPIED_SET = new Set(COPIED);
 
@@ -164,7 +174,8 @@ const IMAGE_SIZES = '(max-width: 920px) 100vw, 880px';
 
 const problems = [];
 
-function listFiles(dir, keep) {
+function listFiles(dir, keep, { optional = false } = {}) {
+  if (optional && !fs.existsSync(path.join(REPO, dir))) return [];
   return fs
     .readdirSync(path.join(REPO, dir))
     .filter(keep)
@@ -435,6 +446,10 @@ function tammyStructuredData() {
   };
 }
 
+// A page in the site layout. Every page's og:image is the board screenshot
+// unless `image` names another copied image (a repository path) and its alt
+// text; `ogType` is "website" except on a post, whose `headExtra` carries its
+// article metas.
 function page({
   out,
   title,
@@ -443,6 +458,9 @@ function page({
   section,
   docs = false,
   jsonLd = null,
+  ogType = 'website',
+  image = null,
+  headExtra = '',
 }) {
   const root = rootPrefix(out);
   const html = fill(LAYOUT, {
@@ -450,7 +468,10 @@ function page({
     description: escapeHtml(description),
     structuredData: structuredData(jsonLd),
     path: sitePath(out),
-    boardAlt: escapeHtml(boardAlt()),
+    ogType,
+    ogImage: escapeHtml(SITE_URL + (image?.src ?? 'docs/images/board.png')),
+    ogImageAlt: escapeHtml(image?.alt ?? boardAlt()),
+    headExtra,
     root,
     bodyClass: docs ? 'has-sidebar' : 'plain',
     menuButton: docs
@@ -827,6 +848,32 @@ function homeValues() {
   return values;
 }
 
+// The board film (scripts/board-video.mjs writes it into docs/media). When
+// board.webm is there, the home page's hero plays it, with board.mp4 as the
+// second source when that is there too, and the board screenshot as its
+// poster; without it, the hero is the screenshot as home.html has it.
+const BOARD_FILM = 'docs/media/board.webm';
+const BOARD_FILM_MP4 = 'docs/media/board.mp4';
+const HERO_LINK = /<a\s+href="docs\/images\/board\.png"[\s\S]*?<\/a>/;
+
+function heroWithFilm(home, alt) {
+  if (!COPIED_SET.has(BOARD_FILM)) return home;
+  if (!HERO_LINK.test(home))
+    throw new Error(
+      'site/src/home.html: the hero has no <a href="docs/images/board.png"> for the film to replace'
+    );
+  const sources = [
+    `<source src="${BOARD_FILM}" type="video/webm" />`,
+    ...(COPIED_SET.has(BOARD_FILM_MP4)
+      ? [`<source src="${BOARD_FILM_MP4}" type="video/mp4" />`]
+      : []),
+  ];
+  return home.replace(
+    HERO_LINK,
+    `<video class="board-film" autoplay muted loop playsinline poster="docs/images/board.png" width="1440" height="900" aria-label="${escapeHtml(alt)}">${sources.join('')}</video>`
+  );
+}
+
 function homeDescription() {
   const text = `${readmeTagline()} Open-source, Apache-2.0, Rust and TypeScript.`;
   if (text.length < DESCRIPTION_MIN || text.length > DESCRIPTION_MAX)
@@ -836,15 +883,361 @@ function homeDescription() {
   return text;
 }
 
+// --- The blog -----------------------------------------------------------------
+
+// Posts are markdown files named <yyyy-mm-dd>-<slug>.md in site/blog, each
+// opening with front matter; a post is published at blog/<slug>.html.
+const BLOG_SRC = 'site/blog';
+const POST_FILE = /^(\d{4}-\d{2}-\d{2})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/;
+const POST_IMAGE = /^(?:docs\/images|site\/blog\/images)\/[^/]+$/;
+// Search engines show at most this much of a BlogPosting's headline.
+const HEADLINE_MAX = 110;
+const DEFAULT_AUTHOR = AUTHOR.name;
+const BLOG_TITLE = 'The Prepcook blog';
+const BLOG_DESCRIPTION =
+  'Essays on working bugs with coding agents: reproducing a bug before fixing it, root-cause analyses a person approves, and reviews with fresh eyes.';
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+// A post's front matter: the lines between an opening and a closing `---`,
+// each `key: value`, a flat YAML mapping of strings. A value may be wrapped
+// in double quotes (with JSON's escapes) or single quotes ('' for a quote).
+function frontMatter(text, src) {
+  const m = text.match(/^---\n([\s\S]*?)\n---\n/);
+  if (!m) {
+    problems.push(`${src}: no front matter; open the file with --- lines`);
+    return { fields: {}, body: text };
+  }
+  const fields = {};
+  for (const line of m[1].split('\n')) {
+    if (line.trim() === '' || line.trimStart().startsWith('#')) continue;
+    const kv = line.match(/^([a-z_]+):\s*(.*?)\s*$/);
+    if (!kv) {
+      problems.push(`${src}: a front matter line is not "key: value": ${line}`);
+      continue;
+    }
+    let value = kv[2];
+    if (/^".*"$/.test(value)) {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        problems.push(`${src}: a double-quoted value does not parse: ${line}`);
+      }
+    } else if (/^'.*'$/.test(value))
+      value = value.slice(1, -1).replace(/''/g, "'");
+    fields[kv[1]] = value;
+  }
+  return { fields, body: text.slice(m[0].length) };
+}
+
+function formatDate(iso) {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+// The alt text of the post's own <img> of `image`, else its title.
+function imageAlt(body, src, image, title) {
+  for (const m of body.matchAll(/<img\b[^>]*>/g)) {
+    const attrs = tagAttributes(m[0]);
+    const at = attrs.get('src');
+    if (!at || /^[a-z][a-z0-9+.-]*:/i.test(at)) continue;
+    const rel = path.posix.normalize(
+      path.posix.join(path.posix.dirname(src), at)
+    );
+    if (rel === image && attrs.get('alt'))
+      return decodeEntities(attrs.get('alt'));
+  }
+  return title;
+}
+
+// Every post in site/blog, newest first. A malformed one is a build problem.
+function loadPosts() {
+  const posts = [];
+  for (const src of listFiles(BLOG_SRC, (f) => f.endsWith('.md'), {
+    optional: true,
+  })) {
+    const name = path.posix.basename(src);
+    const file = name.match(POST_FILE);
+    if (!file) {
+      problems.push(`${src}: a post is named <yyyy-mm-dd>-<slug>.md`);
+      continue;
+    }
+    const { fields, body } = frontMatter(read(src), src);
+    const known = ['title', 'description', 'date', 'author', 'image'];
+    for (const key of Object.keys(fields)) {
+      if (!known.includes(key))
+        problems.push(`${src}: unknown front matter key "${key}"`);
+    }
+    for (const key of ['title', 'description', 'date']) {
+      if (!fields[key]) problems.push(`${src}: front matter has no ${key}`);
+    }
+    const date = fields.date ?? file[1];
+    if (
+      !/^\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))?$/.test(date) ||
+      Number.isNaN(Date.parse(date))
+    ) {
+      problems.push(`${src}: date "${date}" is not an ISO 8601 date`);
+    } else if (date.slice(0, 10) !== file[1]) {
+      problems.push(`${src}: date ${date} does not match the file name`);
+    }
+    const description = fields.description ?? '';
+    if (
+      description.length < DESCRIPTION_MIN ||
+      description.length > DESCRIPTION_MAX
+    )
+      problems.push(
+        `${src}: its description is ${description.length} characters; keep it within ${DESCRIPTION_MIN}–${DESCRIPTION_MAX}`
+      );
+    const title = fields.title ?? '';
+    if (title.length > HEADLINE_MAX)
+      problems.push(
+        `${src}: its title is ${title.length} characters; search engines show ${HEADLINE_MAX}`
+      );
+    let image = null;
+    if (fields.image) {
+      const rel = path.posix.normalize(fields.image);
+      if (!POST_IMAGE.test(rel) || !COPIED_SET.has(rel)) {
+        problems.push(
+          `${src}: image ${fields.image} is not a file under docs/images/ or site/blog/images/`
+        );
+      } else {
+        image = { src: rel, alt: imageAlt(body, src, rel, title) };
+      }
+    }
+    posts.push({
+      src,
+      out: `blog/${file[2]}.html`,
+      slug: file[2],
+      title,
+      description,
+      date,
+      author: fields.author || DEFAULT_AUTHOR,
+      image,
+      body,
+    });
+  }
+  const outs = new Set();
+  for (const post of posts) {
+    if (outs.has(post.out))
+      problems.push(
+        `${post.src}: another post already has the slug ${post.slug}`
+      );
+    outs.add(post.out);
+  }
+  return posts.sort(
+    (a, b) => b.date.localeCompare(a.date) || a.slug.localeCompare(b.slug)
+  );
+}
+
+function postAuthor(post) {
+  return post.author === AUTHOR.name
+    ? AUTHOR
+    : { '@type': 'Person', name: post.author };
+}
+
+function postStructuredData(post) {
+  const url = SITE_URL + post.out;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.description,
+    datePublished: post.date,
+    author: postAuthor(post),
+    ...(post.image ? { image: SITE_URL + post.image.src } : {}),
+    mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+    url,
+  };
+}
+
+function bylineHtml(post) {
+  return (
+    `<p class="byline">${escapeHtml(post.author)} · ` +
+    `<time datetime="${escapeHtml(post.date)}">${formatDate(post.date)}</time></p>`
+  );
+}
+
+function postListHtml(posts, fromOut) {
+  return `<ol class="post-list">${posts
+    .map(
+      (p) =>
+        `<li><a class="post-title" href="${relativeUrl(fromOut, p.out)}">${escapeHtml(p.title)}</a>` +
+        `<p class="post-meta"><time datetime="${escapeHtml(p.date)}">${formatDate(p.date)}</time></p>` +
+        `<p class="post-description">${escapeHtml(p.description)}</p></li>`
+    )
+    .join('')}</ol>`;
+}
+
+// The newest posts other than `post` the footer offers.
+const MORE_POSTS = 3;
+
+function renderPost(post, posts) {
+  const { html, title } = renderMarkdown(post.body, post.src, post.out);
+  if (title !== null)
+    problems.push(
+      `${post.src}: the body has a # heading; a post's title is its front matter's`
+    );
+  const others = posts.filter((p) => p !== post).slice(0, MORE_POSTS);
+  const more =
+    `<nav class="more-posts" aria-labelledby="more-posts">` +
+    `<h2 id="more-posts">More posts</h2>` +
+    (others.length
+      ? postListHtml(others, post.out)
+      : '<p class="post-meta">This is the first post.</p>') +
+    `<p class="more-links"><a href="index.html">All posts</a> · <a href="feed.xml">RSS feed</a></p></nav>`;
+  const main =
+    `<main class="page post-page" id="main"><p class="crumb"><a href="index.html">Blog</a></p>` +
+    `<article class="prose post"><h1>${escapeHtml(post.title)}</h1>${bylineHtml(post)}\n${html}</article>` +
+    `<p class="edit"><a href="${GITHUB}/edit/main/${post.src}">Edit this post on GitHub</a></p>` +
+    `${more}</main>`;
+  write(
+    post.out,
+    page({
+      out: post.out,
+      title: `${post.title} · Prepcook`,
+      description: post.description,
+      main,
+      section: 'blog',
+      jsonLd: postStructuredData(post),
+      ogType: 'article',
+      image: post.image,
+      headExtra:
+        `<meta property="article:published_time" content="${escapeHtml(post.date)}" />\n` +
+        `    <meta property="article:author" content="${escapeHtml(post.author)}" />`,
+    })
+  );
+  return html;
+}
+
+function renderBlogIndex(posts) {
+  const out = 'blog/index.html';
+  const list = posts.length ? postListHtml(posts, out) : '<p>No posts yet.</p>';
+  const main =
+    `<main class="page" id="main"><article class="prose blog-index">` +
+    `<h1>Blog</h1><p class="lead">${escapeHtml(BLOG_DESCRIPTION)}</p>${list}` +
+    `<p class="more-links"><a href="feed.xml">RSS feed</a></p></article></main>`;
+  write(
+    out,
+    page({
+      out,
+      title: 'Blog · Prepcook',
+      description: BLOG_DESCRIPTION,
+      main,
+      section: 'blog',
+    })
+  );
+}
+
+function cdata(text) {
+  return `<![CDATA[${text.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
+}
+
+// A post's body for the feed: the page's HTML without the heading anchors
+// and the copy buttons, every URL in it absolute, since a feed reader shows
+// it away from the site.
+function feedHtml(html, out) {
+  const base = SITE_URL + out;
+  const absolute = (url) =>
+    url.startsWith('#') ? base + url : new URL(url, base).href;
+  return html
+    .replace(/<a class="anchor"[^>]*>#<\/a>/g, '')
+    .replace(/<div class="code-head">[\s\S]*?<\/div>/g, '')
+    .replace(
+      /(\s(?:href|src))="([^"]*)"/g,
+      (_, attr, url) =>
+        `${attr}="${absolute(decodeEntities(url)).replace(/&/g, '&amp;')}"`
+    )
+    .replace(
+      /(\ssrcset)="([^"]*)"/g,
+      (_, attr, value) =>
+        `${attr}="${value
+          .split(',')
+          .map((candidate) => {
+            const [url, ...descriptor] = candidate.trim().split(/\s+/);
+            return [absolute(url), ...descriptor].join(' ');
+          })
+          .join(', ')}"`
+    );
+}
+
+function rfc822(iso) {
+  return new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso).toUTCString();
+}
+
+// blog/feed.xml: RSS 2.0, one item per post with its full HTML in
+// content:encoded. lastBuildDate is the newest post's date, so the feed only
+// changes when a post does.
+function writeFeed(posts, bodies) {
+  const index = `${SITE_URL}blog/index.html`;
+  const items = posts.map((post) => {
+    const url = SITE_URL + post.out;
+    return (
+      `    <item>\n` +
+      `      <title>${escapeHtml(post.title)}</title>\n` +
+      `      <link>${escapeHtml(url)}</link>\n` +
+      `      <guid isPermaLink="true">${escapeHtml(url)}</guid>\n` +
+      `      <pubDate>${rfc822(post.date)}</pubDate>\n` +
+      `      <dc:creator>${escapeHtml(post.author)}</dc:creator>\n` +
+      `      <description>${escapeHtml(post.description)}</description>\n` +
+      `      <content:encoded>${cdata(feedHtml(bodies.get(post), post.out))}</content:encoded>\n` +
+      `    </item>\n`
+    );
+  });
+  write(
+    'blog/feed.xml',
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">\n' +
+      '  <channel>\n' +
+      `    <title>${escapeHtml(BLOG_TITLE)}</title>\n` +
+      `    <link>${index}</link>\n` +
+      `    <description>${escapeHtml(BLOG_DESCRIPTION)}</description>\n` +
+      `    <language>en</language>\n` +
+      `    <atom:link href="${SITE_URL}blog/feed.xml" rel="self" type="application/rss+xml" />\n` +
+      (posts.length
+        ? `    <lastBuildDate>${rfc822(posts[0].date)}</lastBuildDate>\n`
+        : '') +
+      items.join('') +
+      '  </channel>\n' +
+      '</rss>\n'
+  );
+}
+
+function buildBlog() {
+  const posts = loadPosts();
+  const bodies = new Map(posts.map((post) => [post, renderPost(post, posts)]));
+  renderBlogIndex(posts);
+  writeFeed(posts, bodies);
+  return posts;
+}
+
 // The files each page is built from, for its lastmod in the sitemap.
-function pageSources() {
+function pageSources(posts) {
   return [
     {
       out: 'index.html',
-      sources: ['site/src/home.html', 'README.md', 'docs/images/README.md'],
+      sources: [
+        'site/src/home.html',
+        'README.md',
+        'docs/images/README.md',
+        'docs/media',
+      ],
     },
     ...PAGES.map((p) => ({ out: p.out, sources: [p.src] })),
     { out: 'tammy.html', sources: ['site/src/tammy.html'] },
+    { out: 'blog/index.html', sources: [BLOG_SRC] },
+    ...posts.map((p) => ({ out: p.out, sources: [p.src] })),
   ];
 }
 
@@ -865,9 +1258,9 @@ function lastCommitDate(sources) {
 
 // sitemap.xml: every page's canonical URL, with the date its sources last
 // changed (the build time when git cannot say).
-function writeSitemap() {
+function writeSitemap(posts) {
   const buildTime = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const urls = pageSources().map(({ out, sources }) => {
+  const urls = pageSources(posts).map(({ out, sources }) => {
     const lastmod = lastCommitDate(sources) ?? buildTime;
     return (
       `  <url>\n    <loc>${escapeHtml(SITE_URL + sitePath(out))}</loc>\n` +
@@ -920,7 +1313,10 @@ async function build() {
   PAGES.forEach(docPage);
 
   const home = fill(
-    fs.readFileSync(path.join(SRC, 'home.html'), 'utf8'),
+    heroWithFilm(
+      fs.readFileSync(path.join(SRC, 'home.html'), 'utf8'),
+      boardAlt()
+    ),
     homeValues()
   );
   write(
@@ -948,18 +1344,21 @@ async function build() {
     })
   );
 
-  writeSitemap();
+  const posts = buildBlog();
+
+  writeSitemap(posts);
   write(
     'robots.txt',
     `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}sitemap.xml\n`
   );
 
   for (const file of distPages()) {
-    const count = (
-      fs.readFileSync(path.join(DIST, file), 'utf8').match(/<h1[\s>]/g) || []
-    ).length;
+    const html = fs.readFileSync(path.join(DIST, file), 'utf8');
+    const count = (html.match(/<h1[\s>]/g) || []).length;
     if (count !== 1)
       problems.push(`${file}: ${count} <h1> elements; a page has one`);
+    if (!html.includes('type="application/rss+xml"'))
+      problems.push(`${file}: no link to the blog's feed`);
   }
 
   if (problems.length) {

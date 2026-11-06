@@ -39,3 +39,26 @@ shots, `--list` prints them, and the script's header lists every option, what
 it can and cannot seed, and what it masks (the home directory and the owner's
 email are covered before each capture). The first run needs Playwright's
 browser: `npx playwright install chromium`.
+
+## Video
+
+[`scripts/board-video.mjs`](../../scripts/board-video.mjs) records the Pantry
+board as a 20 to 30 second film into [`docs/media/`](../media/README.md):
+the board, the Plan bug's `REPRODUCTION:` and RCA comments, **Approve** moving
+it to Execute, a look at the Review card, and **Clean up** taking the merged
+card out of Shipped, ending on the "need you" pill. It runs like the
+screenshot script, with the same server, orchestrator switched off, demo clone
+and `PREPCOOK_API_TOKEN`:
+
+```sh
+pnpm board-video -- --seed
+```
+
+`--seed` puts the sample board on first; the film approves the Plan bug and
+cleans up the merged card, so it files those two again before and after, and
+the board is left as seeded. `--list` prints the storyboard, `--out` picks
+another folder, and the script's header lists the rest. It writes
+`board.webm`, and with a system `ffmpeg` on the `PATH` (`brew install ffmpeg`)
+also `board.mp4` and `board.gif`. Recording needs Playwright's Chromium and
+the ffmpeg it records with: `npx playwright install chromium ffmpeg`.
+

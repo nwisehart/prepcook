@@ -466,7 +466,8 @@ The project site is published at `https://prepcook.dev/` from `site/`
 (`@prepcook/site`). Its pages are generated from `README.md`,
 `CONTRIBUTING.md` and `docs/*.md` by `site/build.mjs`, so a content change goes
 in those files, not in `site/`; only the home page, the Tammy page and the
-vibe-kanban page are written by hand (`site/src/`). Each page's meta
+vibe-kanban page are written by hand (`site/src/`), and the blog's posts are
+in `site/blog/`. Each page's meta
 description is written for search results in the `DESCRIPTIONS` map in
 `build.mjs`. Build and preview it with:
 
@@ -478,14 +479,35 @@ python3 -m http.server -d site/dist    # or: npx serve site/dist
 The build serves each screenshot in `docs/images/` as WebP too, at full size
 and 880 pixels wide (with `sharp`), and turns every screenshot `<img>` into a
 `<picture>` that offers them ahead of the PNG; the PNGs themselves stay as
-they are for GitHub. It writes `sitemap.xml` (each page's `lastmod` is the last commit that
+they are for GitHub. When `docs/media/board.webm` exists (made by
+`scripts/board-video.mjs`; see [docs/images/README.md](images/README.md#video)),
+the home page's hero plays it, with `board.mp4` as a second source and the
+board screenshot as its poster; until then the hero is the screenshot. It writes `sitemap.xml` (each page's `lastmod` is the last commit that
 touched its sources) and `robots.txt`, and ends with a link check
 (`site/check-links.mjs`) that fails on any link, image or `#anchor` that does
 not resolve and on a sitemap that does not match the pages, then with
 `structured-data.test.mjs`, which checks the JSON-LD on the home and Tammy
-pages. Every link it writes is relative, so the site works from any path
+pages and on every blog post. Every link it writes is relative, so the site works from any path
 prefix. A new page in `docs/` needs an entry in the sidebar list at the top of
 `build.mjs`, and a description in `DESCRIPTIONS`.
 `.github/workflows/pages.yml` publishes the site on every push to `main` that
 touches it, once the repository's **Settings → Pages → Source** is set to
 **GitHub Actions**.
+
+A blog post is a markdown file in `site/blog/`, named
+`<yyyy-mm-dd>-<slug>.md` and published at `blog/<slug>.html` (the date stays
+out of the URL). It opens with front matter, one `key: value` per line:
+`title`, `description` (120 to 160 characters, the page's meta description and
+the feed's summary), `date` (ISO 8601, matching the file name), and optionally
+`author` (Nick Wisehart when left out) and `image`, a path under
+`docs/images/` or `site/blog/images/` that becomes the post's `og:image`. The
+title comes from the front matter, so the body has no `#` heading. The body
+goes through the same renderer as the docs: links are relative to the post
+file, as everywhere else in the repository, so `../../docs/method.md` becomes
+the rendered page and works on GitHub too; a screenshot from `docs/images/`
+gets the same `<picture>` and WebP treatment; code blocks get the copy button.
+The build lists the posts newest first on `blog/index.html`, adds them to the
+sitemap, writes `blog/feed.xml` (RSS 2.0, each post's full HTML with absolute
+URLs) and gives each post `BlogPosting` JSON-LD. A malformed name or front
+matter fails the build, and the link check covers the posts and every URL in
+the feed.

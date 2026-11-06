@@ -6,16 +6,14 @@
     <title>{{title}}</title>
     <meta name="description" content="{{description}}" />
     <link rel="canonical" href="https://prepcook.dev/{{path}}" />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content="{{ogType}}" />
     <meta property="og:site_name" content="Prepcook" />
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
     <meta property="og:url" content="https://prepcook.dev/{{path}}" />
-    <meta
-      property="og:image"
-      content="https://prepcook.dev/docs/images/board.png"
-    />
-    <meta property="og:image:alt" content="{{boardAlt}}" />
+    <meta property="og:image" content="{{ogImage}}" />
+    <meta property="og:image:alt" content="{{ogImageAlt}}" />
+    {{headExtra}}
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="theme-color"
@@ -37,6 +35,12 @@
     </script>
     <link rel="icon" type="image/svg+xml" href="{{root}}favicon.svg" />
     <link rel="apple-touch-icon" href="{{root}}apple-touch-icon.png" />
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title="The Prepcook blog"
+      href="{{root}}blog/feed.xml"
+    />
     {{structuredData}}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -71,6 +75,7 @@
         </a>
         <nav class="header-nav" aria-label="Site">
           <a href="{{root}}get-started.html" data-section="docs">Docs</a>
+          <a href="{{root}}blog/index.html" data-section="blog">Blog</a>
           <a href="{{root}}tammy.html" data-section="tammy">Tammy</a>
           <a class="external" href="https://github.com/nwisehart/prepcook"
             >GitHub</a
