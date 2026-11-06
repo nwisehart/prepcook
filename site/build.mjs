@@ -11,6 +11,7 @@
 // at the end and fails the build on any broken reference.
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -446,12 +447,28 @@ function tammyStructuredData() {
   };
 }
 
+// A static/ file's URL with a hash of its content as the query, so a deploy
+// that changes the file changes the URL and no browser pairs a new page with
+// a stylesheet or script it cached before (Pages lets them cache 10 minutes).
+// The file must already be copied into dist.
+const assetHashes = new Map();
+function assetUrl(rel) {
+  if (!assetHashes.has(rel)) {
+    const hash = createHash('sha256')
+      .update(fs.readFileSync(path.join(DIST, rel)))
+      .digest('hex')
+      .slice(0, 10);
+    assetHashes.set(rel, hash);
+  }
+  return `${rel}?v=${assetHashes.get(rel)}`;
+}
+
 // The <head> lines that load a hand-written page's own stylesheet and script,
 // both served from static/ beside site.css.
 function pageAssets(name) {
   return (
-    `<link rel="stylesheet" href="static/${name}.css" />\n` +
-    `    <script src="static/${name}.js" defer></script>`
+    `<link rel="stylesheet" href="${assetUrl(`static/${name}.css`)}" />\n` +
+    `    <script src="${assetUrl(`static/${name}.js`)}" defer></script>`
   );
 }
 
@@ -489,6 +506,8 @@ function page({
       : '',
     main,
     pageHead: head,
+    siteCss: assetUrl('static/site.css'),
+    siteJs: assetUrl('static/site.js'),
   });
   return responsiveImages(
     html.replace(
