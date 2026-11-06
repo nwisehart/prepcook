@@ -155,8 +155,8 @@ const COPIED = [
   ...listFiles('site/blog/images', (f) => /\.(?:png|jpe?g|webp|svg)$/.test(f), {
     optional: true,
   }),
-  // The board film, once scripts/board-video.mjs has made it: the hero plays
-  // the WebM and MP4, and the README's GIF line resolves here too.
+  // The board film, once scripts/board-video.mjs has made it: the home page
+  // plays the WebM and MP4, and the README's GIF line resolves here too.
   ...listFiles('docs/media', (f) => /\.(?:webm|mp4|gif)$/.test(f), {
     optional: true,
   }),
@@ -446,6 +446,15 @@ function tammyStructuredData() {
   };
 }
 
+// The <head> lines that load a hand-written page's own stylesheet and script,
+// both served from static/ beside site.css.
+function pageAssets(name) {
+  return (
+    `<link rel="stylesheet" href="static/${name}.css" />\n` +
+    `    <script src="static/${name}.js" defer></script>`
+  );
+}
+
 // A page in the site layout. Every page's og:image is the board screenshot
 // unless `image` names another copied image (a repository path) and its alt
 // text; `ogType` is "website" except on a post, whose `headExtra` carries its
@@ -458,6 +467,7 @@ function page({
   section,
   docs = false,
   jsonLd = null,
+  head = '',
   ogType = 'website',
   image = null,
   headExtra = '',
@@ -478,6 +488,7 @@ function page({
       ? `<button class="icon-button menu-button" type="button" aria-label="Open the docs menu" aria-expanded="false" aria-controls="sidebar"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`
       : '',
     main,
+    pageHead: head,
   });
   return responsiveImages(
     html.replace(
@@ -722,10 +733,6 @@ function firstParagraph(src) {
     : '';
 }
 
-// Where the README's problem paragraph turns from the problem to the method;
-// the home page shows the two halves as separate paragraphs.
-const PROBLEM_TURN = 'Prepcook puts those three steps';
-
 // The README's tagline: its first paragraph, entirely in bold. It is the
 // home page's lead and the start of its meta description.
 function readmeTagline() {
@@ -738,129 +745,43 @@ function readmeTagline() {
   return m[1].replace(/\s+/g, ' ').trim();
 }
 
-// Pieces of README.md and docs/images/README.md the home page shows, read at
-// build time so the home page cannot drift from them.
+// The install command the home page shows, read from Quickstart step 1 of
+// README.md at build time so the home page cannot drift from it.
 function homeValues() {
-  const readme = read('README.md');
-  const tokens = new Marked({ gfm: true }).lexer(readme);
-  const inline = (md, src = 'README.md') =>
-    rewriteHtml(new Marked({ gfm: true }).parseInline(md), src, 'index.html');
-
-  // The opening: the one-line tagline in bold, the problem paragraph (split
-  // in two on the home page where it turns from the problem to the method),
-  // and the paragraph that explains the name.
-  const paragraphs = tokens.filter(
-    (t) => t.type === 'paragraph' && !t.text.startsWith('<')
-  );
-  const problem = paragraphs[1].text.replace(/\s+/g, ' ');
-  const turn = problem.indexOf(PROBLEM_TURN);
-  if (turn === -1)
-    throw new Error(
-      `README.md: the second paragraph must contain "${PROBLEM_TURN}"`
-    );
-  const kitchen = paragraphs.find((t) => t.text.startsWith('A prep cook '));
-  if (!kitchen)
-    throw new Error('README.md: no paragraph starting "A prep cook"');
-  const kitchenSentences = kitchen.text
-    .replace(/\s+/g, ' ')
-    .split(/(?<=\.) (?=[A-Z])/);
-
-  const alt = boardAlt();
-
-  // "What it does": one paragraph per stage, each opening with **Stage.**
-  const start = tokens.findIndex(
-    (t) => t.type === 'heading' && t.text === 'What it does'
-  );
-  const stages = {};
-  for (const t of tokens.slice(start + 1)) {
-    if (t.type === 'heading') break;
-    const m =
-      t.type === 'paragraph' &&
-      t.text.match(/^\*\*([A-Za-z ]+)\.\*\*\s+([\s\S]*)$/);
-    if (m) stages[m[1]] = inline(m[2].replace(/\s+/g, ' '));
-  }
-  const helpers = {
-    Plan: 'Reproduce it, then explain it',
-    Execute: 'The smallest fix, with tests',
-    Review: 'Fresh eyes on the fix',
-    Shipped: 'PR open or merged; you clean up',
-    'Clean up': 'Worktrees archived',
-  };
-  const stageHtml = Object.entries(helpers)
-    .map(([name, helper], i) => {
-      if (!stages[name])
-        throw new Error(`README.md: no "What it does" paragraph for ${name}`);
-      return (
-        `<li class="stage"><div class="stage-name"><span class="stage-step">${i + 1}</span>` +
-        `<h3>${name}</h3><p class="stage-helper">${helper}</p></div>` +
-        `<p>${stages[name]}</p></li>`
-      );
-    })
-    .join('\n');
-
-  // The install commands from Quickstart step 1: the npx block (it starts
-  // with `npx`) and the release-tarball block (the one that runs `curl`).
+  const tokens = new Marked({ gfm: true }).lexer(read('README.md'));
   const installAt = tokens.findIndex(
     (t) => t.type === 'heading' && t.text.startsWith('1. Install and start')
   );
-  const installCode = [];
-  for (const t of tokens.slice(installAt + 1)) {
+  let npx;
+  for (const t of installAt === -1 ? [] : tokens.slice(installAt + 1)) {
     if (t.type === 'heading') break;
-    if (t.type === 'code') installCode.push(t);
+    if (t.type === 'code' && t.text.startsWith('npx ')) {
+      npx = t;
+      break;
+    }
   }
-  const npx = installCode.find((t) => t.text.startsWith('npx '));
-  const tarball = installCode.find((t) => /^curl /m.test(t.text));
-  if (installAt === -1 || !npx || !tarball)
-    throw new Error(
-      'README.md: Quickstart step 1 needs an npx code block and a curl code block'
-    );
-
-  // Captions: the first sentence of each row's "What it must show".
-  const shots = {};
-  for (const line of read('docs/images/README.md').split('\n')) {
-    const m = line.match(/^\| `([a-z-]+)\.png` \| (.+?) \|/);
-    if (m) shots[m[1]] = m[2].split(/(?<=\.) (?=[A-Z])/)[0];
-  }
-  const values = {
-    pitchLead: escapeHtml(readmeTagline()),
-    pitchProblem: inline(problem.slice(0, turn).trim()),
-    pitchMethod: inline(problem.slice(turn)),
-    whyTheName: inline(kitchenSentences.slice(0, 2).join(' ')),
-    boardAlt: escapeHtml(alt),
-    boardCaption: escapeHtml(alt),
-    stages: stageHtml,
-    installTarball: codeBlockHtml(tarball.text, tarball.lang),
-    installNpx: codeBlockHtml(npx.text, npx.lang),
-  };
-  for (const name of [
-    'card-rca',
-    'card-triaged',
-    'settings-integrations',
-    'settings-agents',
-    'quickstart-stand-up',
-  ]) {
-    if (!shots[name])
-      throw new Error(`docs/images/README.md: no row for ${name}.png`);
-    const html = inline(shots[name], 'docs/images/README.md');
-    values[`caption:${name}`] = html;
-    values[`alt:${name}`] = escapeHtml(stripTags(html));
-  }
-  return values;
+  if (!npx)
+    throw new Error('README.md: Quickstart step 1 needs an npx code block');
+  return { installNpx: codeBlockHtml(npx.text, npx.lang) };
 }
 
 // The board film (scripts/board-video.mjs writes it into docs/media). When
-// board.webm is there, the home page's hero plays it, with board.mp4 as the
-// second source when that is there too, and the board screenshot as its
-// poster; without it, the hero is the screenshot as home.html has it.
+// board.webm is there, the home page's figure marked data-board-film plays it,
+// with board.mp4 as the second source when that is there too and the board
+// screenshot as its poster; without it, the figure keeps the screenshot
+// home.html gives it.
 const BOARD_FILM = 'docs/media/board.webm';
+const FILM_ALT =
+  'The Pantry board in motion: a bug approved out of Plan into Execute, and a merged card cleaned up out of Shipped';
 const BOARD_FILM_MP4 = 'docs/media/board.mp4';
-const HERO_LINK = /<a\s+href="docs\/images\/board\.png"[\s\S]*?<\/a>/;
+const FILM_SLOT =
+  /(<figure\b[^>]*\bdata-board-film\b[^>]*>\s*)<picture>[\s\S]*?<\/picture>/;
 
-function heroWithFilm(home, alt) {
+function withBoardFilm(home, alt) {
   if (!COPIED_SET.has(BOARD_FILM)) return home;
-  if (!HERO_LINK.test(home))
+  if (!FILM_SLOT.test(home))
     throw new Error(
-      'site/src/home.html: the hero has no <a href="docs/images/board.png"> for the film to replace'
+      'site/src/home.html: no <figure data-board-film> with a <picture> for the film to replace'
     );
   const sources = [
     `<source src="${BOARD_FILM}" type="video/webm" />`,
@@ -869,8 +790,9 @@ function heroWithFilm(home, alt) {
       : []),
   ];
   return home.replace(
-    HERO_LINK,
-    `<video class="board-film" autoplay muted loop playsinline poster="docs/images/board.png" width="1440" height="900" aria-label="${escapeHtml(alt)}">${sources.join('')}</video>`
+    FILM_SLOT,
+    (_, open) =>
+      `${open}<video class="board-film" autoplay muted loop playsinline poster="docs/images/board.png" width="1440" height="900" aria-label="${escapeHtml(alt)}">${sources.join('')}</video>`
   );
 }
 
@@ -1073,12 +995,41 @@ function postListHtml(posts, fromOut) {
   return `<ol class="post-list">${posts
     .map(
       (p) =>
-        `<li><a class="post-title" href="${relativeUrl(fromOut, p.out)}">${escapeHtml(p.title)}</a>` +
-        `<p class="post-meta"><time datetime="${escapeHtml(p.date)}">${formatDate(p.date)}</time></p>` +
-        `<p class="post-description">${escapeHtml(p.description)}</p></li>`
+        `<li><p class="post-meta"><time datetime="${escapeHtml(p.date)}">${formatDate(p.date)}</time></p>` +
+        `<div><a class="post-title" href="${relativeUrl(fromOut, p.out)}">${escapeHtml(p.title)}</a>` +
+        `<p class="post-description">${escapeHtml(p.description)}</p></div></li>`
     )
     .join('')}</ol>`;
 }
+
+// The newest post at the head of the blog index: its date, title and
+// description beside its image (the -dark twin too, for a screenshot that has
+// one), or on its own when it has none.
+function postFeatureHtml(post, fromOut) {
+  const href = relativeUrl(fromOut, post.out);
+  let figure = '';
+  if (post.image) {
+    const dark = post.image.src.replace(/\.png$/, '-dark.png');
+    const source =
+      dark !== post.image.src && COPIED_SET.has(dark)
+        ? `<source media="(prefers-color-scheme: dark)" srcset="${relativeUrl(fromOut, dark)}" />`
+        : '';
+    figure =
+      `<a class="post-feature-image" href="${href}" tabindex="-1" aria-hidden="true">` +
+      `<picture>${source}<img src="${relativeUrl(fromOut, post.image.src)}" alt="" sizes="(max-width: 1099px) 100vw, 680px" fetchpriority="high" /></picture></a>`;
+  }
+  return (
+    `<article class="post-feature${post.image ? '' : ' no-image'}">` +
+    `<div class="post-feature-text"><p class="post-meta"><time datetime="${escapeHtml(post.date)}">${formatDate(post.date)}</time> · ${escapeHtml(post.author)}</p>` +
+    `<h2><a href="${href}">${escapeHtml(post.title)}</a></h2>` +
+    `<p class="post-description">${escapeHtml(post.description)}</p>` +
+    `<a class="read-link" href="${href}">Read the post</a></div>` +
+    `${figure}</article>`
+  );
+}
+
+const RSS_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 3.5a9.5 9.5 0 0 1 9.5 9.5M3 7.5A5.5 5.5 0 0 1 8.5 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="3.75" cy="12.25" r="1.25" fill="currentColor" /></svg>';
 
 // The newest posts other than `post` the footer offers.
 const MORE_POSTS = 3;
@@ -1096,12 +1047,15 @@ function renderPost(post, posts) {
     (others.length
       ? postListHtml(others, post.out)
       : '<p class="post-meta">This is the first post.</p>') +
-    `<p class="more-links"><a href="index.html">All posts</a> · <a href="feed.xml">RSS feed</a></p></nav>`;
+    `<p class="more-links"><a href="index.html">All posts</a><a href="feed.xml">${RSS_ICON}RSS feed</a></p></nav>`;
   const main =
-    `<main class="page post-page" id="main"><p class="crumb"><a href="index.html">Blog</a></p>` +
-    `<article class="prose post"><h1>${escapeHtml(post.title)}</h1>${bylineHtml(post)}\n${html}</article>` +
-    `<p class="edit"><a href="${GITHUB}/edit/main/${post.src}">Edit this post on GitHub</a></p>` +
-    `${more}</main>`;
+    `<main class="blog post-page" id="main"><article class="post">` +
+    `<header class="post-head"><p class="crumb"><a href="index.html">Blog</a></p>` +
+    `<h1>${escapeHtml(post.title)}</h1>` +
+    `<p class="post-standfirst">${escapeHtml(post.description)}</p>${bylineHtml(post)}</header>` +
+    `<div class="prose post-body">\n${html}</div></article>` +
+    `<footer class="post-foot"><p class="edit"><a href="${GITHUB}/edit/main/${post.src}">Edit this post on GitHub</a></p>` +
+    `${more}</footer></main>`;
   write(
     post.out,
     page({
@@ -1123,11 +1077,16 @@ function renderPost(post, posts) {
 
 function renderBlogIndex(posts) {
   const out = 'blog/index.html';
-  const list = posts.length ? postListHtml(posts, out) : '<p>No posts yet.</p>';
+  const [newest, ...older] = posts;
+  const list = newest
+    ? postFeatureHtml(newest, out) +
+      (older.length ? postListHtml(older, out) : '')
+    : '<p class="post-meta">No posts yet.</p>';
   const main =
-    `<main class="page" id="main"><article class="prose blog-index">` +
-    `<h1>Blog</h1><p class="lead">${escapeHtml(BLOG_DESCRIPTION)}</p>${list}` +
-    `<p class="more-links"><a href="feed.xml">RSS feed</a></p></article></main>`;
+    `<main class="blog blog-index" id="main"><header class="blog-head">` +
+    `<div><h1>Blog</h1><p class="blog-lede">${escapeHtml(BLOG_DESCRIPTION)}</p></div>` +
+    `<a class="button" href="feed.xml">${RSS_ICON}RSS feed</a></header>` +
+    `${list}</main>`;
   write(
     out,
     page({
@@ -1229,13 +1188,21 @@ function pageSources(posts) {
       out: 'index.html',
       sources: [
         'site/src/home.html',
+        'site/src/home.css',
+        'site/src/home.js',
         'README.md',
-        'docs/images/README.md',
         'docs/media',
       ],
     },
     ...PAGES.map((p) => ({ out: p.out, sources: [p.src] })),
-    { out: 'tammy.html', sources: ['site/src/tammy.html'] },
+    {
+      out: 'tammy.html',
+      sources: [
+        'site/src/tammy.html',
+        'site/src/tammy.css',
+        'site/src/tammy.js',
+      ],
+    },
     { out: 'blog/index.html', sources: [BLOG_SRC] },
     ...posts.map((p) => ({ out: p.out, sources: [p.src] })),
   ];
@@ -1309,13 +1276,18 @@ async function build() {
   }
   copy(path.join(SRC, 'site.css'), 'static/site.css');
   copy(path.join(SRC, 'site.js'), 'static/site.js');
+  // The home and Tammy pages each carry their own stylesheet and the script
+  // that runs their simulation.
+  for (const f of ['home.css', 'home.js', 'tammy.css', 'tammy.js']) {
+    copy(path.join(SRC, f), `static/${f}`);
+  }
 
   PAGES.forEach(docPage);
 
   const home = fill(
-    heroWithFilm(
+    withBoardFilm(
       fs.readFileSync(path.join(SRC, 'home.html'), 'utf8'),
-      boardAlt()
+      FILM_ALT
     ),
     homeValues()
   );
@@ -1328,6 +1300,7 @@ async function build() {
       main: home,
       section: 'home',
       jsonLd: homeStructuredData(),
+      head: pageAssets('home'),
     })
   );
 
@@ -1341,6 +1314,7 @@ async function build() {
       main: tammy,
       section: 'tammy',
       jsonLd: tammyStructuredData(),
+      head: pageAssets('tammy'),
     })
   );
 

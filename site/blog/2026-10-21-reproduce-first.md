@@ -156,5 +156,4 @@ agent that never saw the plan. The engineer's job becomes judging that work, not
 re-deriving it from a diff and a hunch.
 
 Prepcook is open source, under the Apache License 2.0, at
-[github.com/nwisehart/prepcook](https://github.com/nwisehart/prepcook). It is a
-fork of [vibe-kanban](https://github.com/BloopAI/vibe-kanban) by BloopAI.
+[github.com/nwisehart/prepcook](https://github.com/nwisehart/prepcook).

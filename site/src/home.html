@@ -1,337 +1,444 @@
-<main class="home" id="main">
-  <section class="hero">
-    <h1 class="wordmark">
-      <svg
-        class="wordmark-mark"
-        viewBox="0 0 64 64"
-        width="64"
-        height="64"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path
-          fill-rule="evenodd"
-          d="M15.5 42.5 L11.0 9.4 A5.08 5.08 0 0 1 18.00 9.40 A5.08 5.08 0 0 1 25.00 9.40 A5.08 5.08 0 0 1 32.00 9.40 A5.08 5.08 0 0 1 39.00 9.40 A5.08 5.08 0 0 1 46.00 9.40 A5.08 5.08 0 0 1 53.00 9.40 L48.5 42.5 Q48.5 45.0 46.0 45.0 L18.0 45.0 Q15.5 45.0 15.5 42.5 Z M20.30 41.5 L17.30 12.5 L18.70 12.5 L21.70 41.5 Z M25.80 41.5 L24.30 12.5 L25.70 12.5 L27.20 41.5 Z M31.30 41.5 L31.30 12.5 L32.70 12.5 L32.70 41.5 Z M36.80 41.5 L38.30 12.5 L39.70 12.5 L38.20 41.5 Z M42.30 41.5 L45.30 12.5 L46.70 12.5 L43.70 41.5 Z"
-        />
-        <rect x="16.5" y="47.5" width="31" height="9.5" rx="3" />
-      </svg>
-      <span>Prepcook</span>
-    </h1>
-    <p class="pitch-lead">{{pitchLead}}</p>
-    <p class="pitch">{{pitchProblem}}</p>
-    <p class="pitch">{{pitchMethod}}</p>
-    <div class="actions">
-      <a class="button primary" href="get-started.html">Get started</a>
-      <a class="button" href="https://github.com/nwisehart/prepcook">GitHub</a>
+<main id="main">
+  <section class="open" aria-labelledby="pitch">
+    <div>
+      <h1 id="pitch">
+        Bug report in. Reviewed pull request out. You sign off.
+      </h1>
+    </div>
+    <div class="open-action">
+      {{installNpx}}
+      <div class="row">
+        <a class="button primary" href="get-started.html">Get started</a>
+        <a class="button" href="docs/method.html">How it works</a>
+      </div>
+      <p class="note">
+        About 20 minutes of your time on the Pantry demo.
+        <a href="#try">The four steps</a>
+      </p>
     </div>
   </section>
 
-  <figure class="shot shot-board">
-    <a
-      href="docs/images/board.png"
-      data-dark-href="docs/images/board-dark.png"
-      aria-label="Open the board screenshot at full size"
-    >
-      <picture>
-        <source
-          media="(prefers-color-scheme: dark)"
-          srcset="docs/images/board-dark.png"
-        />
-        <img
-          src="docs/images/board.png"
-          alt="{{boardAlt}}"
-          width="2880"
-          height="1800"
-          sizes="(max-width: 1120px) 100vw, 1072px"
-          fetchpriority="high"
-        />
-      </picture>
-    </a>
-    <figcaption>{{boardCaption}}</figcaption>
-  </figure>
+  <section class="sim" aria-labelledby="sim-title">
+    <h2 id="sim-title" class="visually-hidden">The board at work</h2>
+    <div class="sim-bar">
+      <p class="sim-tag">Simulated run on the Pantry demo</p>
+      <div class="tally" role="group" aria-label="Open bugs">
+        <span>Open bugs</span><strong class="num" id="t-open">8</strong
+        ><span class="bar" id="t-bar" aria-hidden="true"></span>
+      </div>
+      <div class="tally merged" role="group" aria-label="Merged">
+        <span>Merged</span><strong class="num" id="t-merged">0</strong>
+      </div>
+      <div class="seg" role="group" aria-label="Autonomy mode">
+        <button type="button" data-mode="chef" aria-pressed="true">
+          Chef mode
+        </button>
+        <button type="button" data-mode="prep" aria-pressed="false">
+          Prep mode
+        </button>
+      </div>
+      <button class="ctl" type="button" id="play" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect
+            x="3.5"
+            y="3"
+            width="3"
+            height="10"
+            rx="1"
+            fill="currentColor"
+          />
+          <rect
+            x="9.5"
+            y="3"
+            width="3"
+            height="10"
+            rx="1"
+            fill="currentColor"
+          />
+        </svg>
+        <span>Pause</span>
+      </button>
+    </div>
 
-  <section class="band" aria-labelledby="how">
-    <p class="eyebrow">The board</p>
-    <h2 id="how">How a card moves</h2>
-    <p class="section-lead">
-      A card moves through five stages, left to right across the board.
+    <div class="app" id="app">
+      <aside class="app-side" aria-label="Board sidebar">
+        <div class="app-brand">
+          <svg
+            viewBox="0 0 64 64"
+            width="22"
+            height="22"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M15.5 42.5 L11.0 9.4 A5.08 5.08 0 0 1 18.00 9.40 A5.08 5.08 0 0 1 25.00 9.40 A5.08 5.08 0 0 1 32.00 9.40 A5.08 5.08 0 0 1 39.00 9.40 A5.08 5.08 0 0 1 46.00 9.40 A5.08 5.08 0 0 1 53.00 9.40 L48.5 42.5 Q48.5 45.0 46.0 45.0 L18.0 45.0 Q15.5 45.0 15.5 42.5 Z M20.30 41.5 L17.30 12.5 L18.70 12.5 L21.70 41.5 Z M25.80 41.5 L24.30 12.5 L25.70 12.5 L27.20 41.5 Z M31.30 41.5 L31.30 12.5 L32.70 12.5 L32.70 41.5 Z M36.80 41.5 L38.30 12.5 L39.70 12.5 L38.20 41.5 Z M42.30 41.5 L45.30 12.5 L46.70 12.5 L43.70 41.5 Z"
+            />
+            <rect x="16.5" y="47.5" width="31" height="9.5" rx="3" />
+          </svg>
+          Prepcook
+        </div>
+        <div class="app-project"><span class="tile">P</span>Pantry</div>
+        <div class="app-nav on">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            aria-hidden="true"
+          >
+            <rect x="2" y="2.5" width="12" height="11" rx="2" />
+            <path d="M6 2.5v11M10 2.5v11" /></svg
+          >Board
+        </div>
+        <div class="app-nav">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            aria-hidden="true"
+          >
+            <rect x="2" y="3" width="12" height="10" rx="2" />
+            <path d="M5 7l2 1.5L5 10M8.5 10.5H11" /></svg
+          >Sessions
+        </div>
+        <div class="app-nav">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            aria-hidden="true"
+          >
+            <circle cx="4" cy="4.5" r="1.8" />
+            <circle cx="12" cy="4.5" r="1.8" />
+            <circle cx="8" cy="11.5" r="1.8" />
+            <path d="M5.5 5.5 7 10M10.5 5.5 9 10M5.8 4.5h4.4" /></svg
+          >Knowledge
+        </div>
+        <div class="app-nav">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.4"
+            aria-hidden="true"
+          >
+            <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+            <circle cx="6" cy="4.5" r="1.4" fill="var(--bg)" />
+            <circle cx="10.5" cy="8" r="1.4" fill="var(--bg)" />
+            <circle cx="5" cy="11.5" r="1.4" fill="var(--bg)" /></svg
+          >Settings
+        </div>
+        <div class="mode">
+          <div class="mode-head">
+            <span id="mode-name">Chef mode</span
+            ><button
+              class="switch"
+              type="button"
+              role="switch"
+              aria-checked="false"
+              aria-label="Prep mode"
+              id="mode-switch"
+            ></button>
+          </div>
+          <p id="mode-text">
+            Prepcook does the prep. You approve plans and move the cards.
+          </p>
+        </div>
+        <div class="app-foot">
+          <span class="mono">v0.1.0</span><span>Board up</span>
+        </div>
+      </aside>
+      <div class="app-main">
+        <div class="app-crumb">Pantry</div>
+        <div class="app-head">
+          <h2>Pantry</h2>
+          <span class="pill" id="need"
+            ><span class="dot amber"></span><span id="need-n">2</span>&nbsp;need
+            you</span
+          >
+          <span class="count" id="card-count">8 cards</span>
+        </div>
+        <div class="cols" id="cols" aria-hidden="true"></div>
+      </div>
+      <div class="cursor rest" id="cursor" aria-hidden="true">
+        <svg viewBox="0 0 20 20">
+          <path
+            d="M3 2.5v13.2l3.6-3.3 2.4 5.4 2.3-1-2.4-5.3 4.9-.3z"
+            fill="var(--text-high)"
+            stroke="var(--surface)"
+            stroke-width="1.2"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span>You</span>
+      </div>
+      <div class="clear" id="clear" aria-hidden="true">
+        <div>
+          Queue clear<span>New reports come in; the run starts again.</span>
+        </div>
+      </div>
+    </div>
+    <div class="sim-after">
+      <p class="sim-lede">
+        Prepcook reproduces each bug before it explains it, then fixes it and
+        has the fix reviewed by an agent that never saw the plan, each step a
+        coding agent in its own git worktree. You approve the explanation and
+        merge the result.
+      </p>
+      <p class="sim-caption">
+        The board above is a simulation: the Pantry demo's own bugs and a few
+        more like them, with times compressed.
+      </p>
+    </div>
+    <p class="visually-hidden">
+      The simulation shows Pantry bug cards moving across the Plan, Execute,
+      Review and Shipped columns. In Chef mode a person moves each card and
+      approves each root-cause analysis; in Prep mode cards move themselves and
+      plans at high confidence approve themselves. In both, a person merges and
+      cleans up, and the count of open bugs falls as pull requests merge.
     </p>
-    <ol class="stages">
-      {{stages}}
+  </section>
+
+  <section class="wrap sec" aria-labelledby="columns">
+    <h2 id="columns">Every column has something to prove</h2>
+    <p class="lede">
+      The order is fixed, and each step is a separate agent in its own worktree.
+      A card cannot skip ahead: a fix waits for an approved explanation, and the
+      explanation waits for a reproduction.
+    </p>
+    <ol class="track">
+      <li>
+        <h3>Plan</h3>
+        <p class="proves">The bug happens, for the reported reason.</p>
+        <p>
+          The app is stood up in the card's worktree and a harness makes the
+          failure happen. Only then is the root-cause analysis written, with its
+          confidence.
+        </p>
+      </li>
+      <li>
+        <h3>Execute</h3>
+        <p class="proves">The smallest change turns the harness green.</p>
+        <p>
+          A new session fixes the mechanism the analysis isolated, adds
+          regression tests and commits on a branch rebased onto the target.
+          Nothing is pushed.
+        </p>
+      </li>
+      <li>
+        <h3>Review</h3>
+        <p class="proves">The fix holds up to eyes that never saw the plan.</p>
+        <p>
+          A separate agent reviews the diff and the reproduction in a fresh
+          worktree. Its findings go back to the implementing agent for up to
+          three rounds.
+        </p>
+      </li>
+      <li>
+        <h3>Shipped</h3>
+        <p class="proves">A pull request a person can merge.</p>
+        <p>
+          The branch is pushed and the pull request opened, the reproduction as
+          its first comment. Review comments on it go back to the implementing
+          agent.
+        </p>
+      </li>
+      <li>
+        <h3>Clean up</h3>
+        <p class="proves">Nothing left behind but what was learned.</p>
+        <p>
+          The clean-up script runs and the worktrees are archived. The approved
+          analysis stays in the knowledge store.
+        </p>
+      </li>
     </ol>
-    <p class="name-note"><strong>Why the name.</strong> {{whyTheName}}</p>
   </section>
 
-  <section class="band" aria-labelledby="different">
-    <p class="eyebrow">The method</p>
-    <h2 id="different">What makes it different</h2>
-    <div class="feature-grid">
-      <article class="feature">
-        <h3>Reproduce first</h3>
-        <p>
-          A bug card's Plan stage makes the failure happen, and only then
-          explains it. The planning agent is told not to read code for the cause
-          until it has a script that fails for the reported reason.
+  <section class="wrap sec" aria-labelledby="gate">
+    <div class="gate">
+      <div>
+        <h2 id="gate">Nothing merges without a person</h2>
+        <p class="lede" style="margin-bottom: 0">
+          The root-cause analysis says what happens, why, and how sure it is.
+          You approve it in Lavish, the review page each plan opens in, or by
+          commenting <code>APPROVE</code> on the card.
         </p>
-        <a href="docs/reproduce-first.html">Reproduce first</a>
-      </article>
-      <article class="feature">
-        <h3>The RCA and the knowledge graph</h3>
-        <p>
-          Every bug RCA goes into a knowledge store, linked into a graph of
-          product areas, components and root-cause classes, so a cause that
-          keeps coming back becomes visible and opens a pattern review of its
-          own.
-        </p>
-        <a href="docs/rca-graph.html">The knowledge store and the graph</a>
-      </article>
-      <article class="feature">
-        <h3>Fresh-eyes review</h3>
-        <p>
-          A separate agent reviews the change in a fresh worktree, with the
-          diff, the code around it and the reproduction, and none of the
-          planning context. Its findings go back to the implementing agent for
-          up to three rounds.
-        </p>
-        <a href="docs/review.html">The independent review</a>
-      </article>
-      <article class="feature">
-        <h3>Works alongside people</h3>
-        <p>
-          In <strong>Chef mode</strong> it works your tickets and you move the
-          cards and approve each plan; in <strong>Prep mode</strong> it works on
-          its own. An engineer who assigns a ticket to themselves takes it over,
-          and Prepcook steps aside.
-        </p>
-        <a href="docs/working-alongside-people.html"
-          >Working alongside people</a
-        >
-      </article>
-      <article class="feature">
-        <h3>Investigations and incidents</h3>
-        <p>
-          An investigation card runs Plan exactly as a bug does, then posts a
-          triage report and stops until a person converts it to a bug or closes
-          it. In incidents mode, each open incident becomes one, and the report
-          goes back to the incident as a note.
-        </p>
-        <span class="links">
-          <a href="docs/method.html#investigations">Investigations</a>
-          <a href="docs/incidents.html">Incidents</a>
-        </span>
-      </article>
-      <article class="feature">
-        <h3>Integrations as factories</h3>
-        <p>
-          Notifications, ticketing, reproduction, evidence and agents are each
-          configured under <strong>Settings → Integrations</strong>, rendered
-          from what each provider says about itself, with a
-          <strong>Test connection</strong> button per provider.
-        </p>
-        <span class="links">
-          <a href="docs/configuration.html">Configuration</a>
-          <a href="#screens">The settings screens</a>
-        </span>
-      </article>
-    </div>
-  </section>
-
-  <section class="band" aria-labelledby="screens">
-    <p class="eyebrow">Screens</p>
-    <h2 id="screens">A look around</h2>
-    <div class="gallery">
-      <figure class="shot">
-        <a
-          href="docs/images/card-rca.png"
-          data-dark-href="docs/images/card-rca-dark.png"
-        >
-          <picture>
-            <source
-              media="(prefers-color-scheme: dark)"
-              srcset="docs/images/card-rca-dark.png"
-            />
-            <img
-              src="docs/images/card-rca.png"
-              alt="{{alt:card-rca}}"
-              width="2880"
-              height="1800"
-              loading="lazy"
-            />
-          </picture>
-        </a>
-        <figcaption>{{caption:card-rca}}</figcaption>
-      </figure>
-      <figure class="shot">
-        <a
-          href="docs/images/card-triaged.png"
-          data-dark-href="docs/images/card-triaged-dark.png"
-        >
-          <picture>
-            <source
-              media="(prefers-color-scheme: dark)"
-              srcset="docs/images/card-triaged-dark.png"
-            />
-            <img
-              src="docs/images/card-triaged.png"
-              alt="{{alt:card-triaged}}"
-              width="2880"
-              height="1800"
-              loading="lazy"
-            />
-          </picture>
-        </a>
-        <figcaption>{{caption:card-triaged}}</figcaption>
-      </figure>
-      <figure class="shot">
-        <a
-          href="docs/images/settings-integrations.png"
-          data-dark-href="docs/images/settings-integrations-dark.png"
-        >
-          <picture>
-            <source
-              media="(prefers-color-scheme: dark)"
-              srcset="docs/images/settings-integrations-dark.png"
-            />
-            <img
-              src="docs/images/settings-integrations.png"
-              alt="{{alt:settings-integrations}}"
-              width="2880"
-              height="1800"
-              loading="lazy"
-            />
-          </picture>
-        </a>
-        <figcaption>{{caption:settings-integrations}}</figcaption>
-      </figure>
-      <figure class="shot">
-        <a
-          href="docs/images/settings-agents.png"
-          data-dark-href="docs/images/settings-agents-dark.png"
-        >
-          <picture>
-            <source
-              media="(prefers-color-scheme: dark)"
-              srcset="docs/images/settings-agents-dark.png"
-            />
-            <img
-              src="docs/images/settings-agents.png"
-              alt="{{alt:settings-agents}}"
-              width="2880"
-              height="1800"
-              loading="lazy"
-            />
-          </picture>
-        </a>
-        <figcaption>{{caption:settings-agents}}</figcaption>
-      </figure>
-      <figure class="shot">
-        <a
-          href="docs/images/quickstart-stand-up.png"
-          data-dark-href="docs/images/quickstart-stand-up-dark.png"
-        >
-          <picture>
-            <source
-              media="(prefers-color-scheme: dark)"
-              srcset="docs/images/quickstart-stand-up-dark.png"
-            />
-            <img
-              src="docs/images/quickstart-stand-up.png"
-              alt="{{alt:quickstart-stand-up}}"
-              width="2880"
-              height="1800"
-              loading="lazy"
-            />
-          </picture>
-        </a>
-        <figcaption>{{caption:quickstart-stand-up}}</figcaption>
+        <div class="modes">
+          <div>
+            <b>Chef mode</b>
+            <p>
+              Prepcook works your tickets; you move the cards and approve each
+              plan.
+            </p>
+          </div>
+          <div>
+            <b>Prep mode</b>
+            <p>
+              Cards move themselves. A plan at high confidence approves itself;
+              one below the bar is escalated to Slack and waits for a person.
+            </p>
+          </div>
+          <div>
+            <b>Either way</b>
+            <p>
+              A person merges. An engineer who assigns the ticket to themselves
+              takes it over, and Prepcook steps aside.
+            </p>
+          </div>
+        </div>
+      </div>
+      <figure data-board-film>
+        <picture>
+          <source
+            media="(prefers-color-scheme: dark)"
+            srcset="docs/images/card-rca-dark.png"
+          />
+          <img
+            src="docs/images/card-rca.png"
+            alt="The Pantry sharing bug open in Plan, with its REPRODUCTION comment and the RCA: sharing looks the email up case-sensitively, confidence high"
+            width="2880"
+            height="1800"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption>
+          The real board, recorded from a running Prepcook: the sharing bug's
+          reproduction and RCA, the plan approved into Execute, and a merged
+          card cleaned up.
+        </figcaption>
       </figure>
     </div>
   </section>
 
-  <section class="band" aria-labelledby="tammy">
-    <div class="tammy-teaser">
+  <section class="wrap sec" aria-labelledby="more">
+    <h2 id="more">It remembers, and it knows when to step aside</h2>
+    <div class="remember">
+      <div class="remember-lead">
+        <h3>A graph of root causes</h3>
+        <p>
+          Every approved analysis goes into a knowledge store, linked by product
+          area, component and cause. A cause that keeps coming back stops being
+          a coincidence: it opens a pattern review of its own.
+        </p>
+        <a href="docs/rca-graph.html">The knowledge graph</a>
+      </div>
+      <ul class="more">
+        <li>
+          <h3>Investigations before bugs</h3>
+          <p>
+            An investigation card runs Plan exactly as a bug does, posts a
+            triage report and stops until a person converts it to a bug or
+            closes it. Incidents mode opens one per incident.
+          </p>
+          <a href="docs/incidents.html">Investigations and incidents</a>
+        </li>
+        <li>
+          <h3>Works alongside people</h3>
+          <p>
+            It answers on a ticket only when it is its turn, takes plan
+            decisions only from listed approvers, and files a follow-up rather
+            than reopening a fix that did not hold.
+          </p>
+          <a href="docs/working-alongside-people.html"
+            >Working alongside people</a
+          >
+        </li>
+      </ul>
+    </div>
+    <dl class="wire">
+      <dt>Tickets</dt>
+      <dd>
+        Jira, GitHub Issues, PagerDuty incidents, or none: the card can be the
+        only record.
+      </dd>
+      <dt>Evidence</dt>
+      <dd>Sentry, DataSet, Datadog, CloudWatch Logs, log files.</dd>
+      <dt>Notifications</dt>
+      <dd>Slack, Discord, Microsoft Teams, a signed webhook.</dd>
+      <dt>Agents</dt>
+      <dd>
+        Claude Code, Amp, Gemini CLI, Codex, OpenCode, Cursor Agent, Qwen Code,
+        GitHub Copilot CLI, Droid, chosen per stage.
+      </dd>
+    </dl>
+
+    <div class="tammy-row">
       <picture>
         <source
           media="(prefers-color-scheme: dark)"
           srcset="assets/tammy-mark-dark.svg"
         />
-        <img src="assets/tammy-mark.svg" alt="" width="56" height="56" />
+        <img src="assets/tammy-mark.svg" alt="" width="44" height="44" />
       </picture>
-      <div>
-        <p class="eyebrow">The Slack agent</p>
-        <h2 id="tammy">Tammy</h2>
-        <p>
-          Most bug reports do not start in a tracker; they start as a customer
-          saying "it doesn't work" in Slack. Tammy sits in that channel. She
-          answers questions from your product's documentation, and when
-          something looks broken she asks the questions a support engineer
-          would, files an <strong>investigation card</strong> on Prepcook, waits
-          for it to be reproduced and explained, and tells the customer what was
-          found in plain English, with no stack traces, file paths or promises.
-          The team sees a triaged card with a root-cause analysis attached and
-          decides whether it becomes a bug; the customer gets an answer in an
-          hour instead of a ticket number.
-        </p>
-        <a class="button" href="tammy.html">Meet Tammy</a>
-      </div>
+      <p>
+        <strong>Tammy</strong> sits in your support channel in Slack, answers
+        from your docs, and files an investigation card when something looks
+        broken, then tells the customer what was found in plain English.
+      </p>
+      <a class="button" href="tammy.html">Meet Tammy</a>
     </div>
   </section>
 
-  <section class="band" aria-labelledby="install">
-    <p class="eyebrow">Install</p>
-    <h2 id="install">Three ways in</h2>
-    <div class="install-grid">
-      <div class="install">
-        <h3>With npx</h3>
-        <p>
-          Node is already a prerequisite, so this is the quickest route: the
-          package downloads the release binaries for your platform on first run
-          and keeps them in <code>~/.prepcook/bin</code> (<a
-            href="https://github.com/nwisehart/prepcook/blob/main/npx-cli/README.md"
-            >npx-cli/README.md</a
-          >).
+  <section class="wrap sec" aria-labelledby="try">
+    <div class="close">
+      <div>
+        <h2 id="try">Run one bug through it this afternoon</h2>
+        <p class="lede" style="margin-bottom: 20px">
+          The quickstart takes a real bug in Pantry, a small demo app, from
+          report to pull request with no tracker. About 20 minutes of your time,
+          plus the agents' 30 to 60.
         </p>
+        <ol class="rail">
+          <li>
+            <span>About 10 minutes</span>
+            <p>
+              <b>Install and start</b>The board runs locally in Docker; there is
+              nothing to sign in to.
+            </p>
+          </li>
+          <li>
+            <span>About 5 minutes</span>
+            <p>
+              <b>Add the demo repository</b>Fork prepcook-demo and run Test
+              stand-up until it reads ok.
+            </p>
+          </li>
+          <li>
+            <span>5, then 10 to 20 waiting</span>
+            <p>
+              <b>Plan</b>File the bug, drag it to Plan, read the reproduction
+              and approve the RCA.
+            </p>
+          </li>
+          <li>
+            <span>5, then 15 to 30 waiting</span>
+            <p>
+              <b>Execute to Shipped</b>Review, open the pull request on your
+              fork, merge, clean up.
+            </p>
+          </li>
+        </ol>
+      </div>
+      <div>
         {{installNpx}}
-      </div>
-      <div class="install">
-        <h3>From a release</h3>
-        <p>
-          Fetch the tarball for your platform with <code>curl</code>, check it
-          against <code>SHA256SUMS</code>, and put <code>prepcook</code> and
-          <code>prepcook-mcp</code> in <code>~/.local/bin</code>, which must be
-          on your <code>PATH</code>:
-        </p>
-        {{installTarball}}
-        <p>
-          Downloaded from the
-          <a href="https://github.com/nwisehart/prepcook/releases"
-            >releases page</a
+        <div class="row">
+          <a class="button primary" href="get-started.html"
+            >Start the quickstart</a
           >
-          in a browser instead, the binaries are quarantined and, since they are
-          not notarized, macOS blocks the first run; clear it with
-          <code>xattr -d com.apple.quarantine</code> on both.
-        </p>
-      </div>
-      <div class="install">
-        <h3>The board image</h3>
-        <p>
-          <code>prepcook up</code> runs the board from the published image
-          <code>ghcr.io/nwisehart/prepcook-board:&lt;version&gt;</code>, the
-          version of the <code>prepcook</code> binary that starts it; there is
-          nothing to pull by hand. To run the board elsewhere, see
           <a
-            href="https://github.com/nwisehart/prepcook/blob/main/crates/remote/README.md"
-            >crates/remote/README.md</a
-          >; to build from a checkout, see
-          <a href="docs/developing.html#build-run-and-test"
-            >Build, run and test</a
-          >.
+            class="button"
+            href="https://github.com/nwisehart/prepcook/releases"
+            >Releases</a
+          >
+        </div>
+        <p class="need">
+          Open source under Apache 2.0, and already working a real team's bug
+          queue.
         </p>
       </div>
     </div>
-    <p class="install-next">
-      Then follow the <a href="get-started.html#quickstart">Quickstart</a>: a
-      bug from report to pull request on Pantry, the demo app.
-    </p>
   </section>
 </main>

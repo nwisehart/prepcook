@@ -1,117 +1,220 @@
-<main class="page" id="main">
-  <article class="prose tammy">
-    <p class="tammy-logo">
+<main id="main">
+  <section class="open" aria-labelledby="pitch">
+    <div>
       <picture>
         <source
           media="(prefers-color-scheme: dark)"
           srcset="assets/tammy-logo-dark.svg"
         />
-        <img src="assets/tammy-logo.svg" alt="Tammy" width="290" height="80" />
+        <img
+          class="logo"
+          src="assets/tammy-logo.svg"
+          alt="Tammy"
+          width="290"
+          height="80"
+        />
       </picture>
-    </p>
-    <h1 class="visually-hidden">Tammy</h1>
+      <h1 id="pitch">
+        She answers your customers, and takes what's broken to the kitchen.
+      </h1>
+    </div>
+    <div class="open-action">
+      <div class="row">
+        <a
+          class="button primary"
+          href="https://github.com/nwisehart/tammy#quickstart"
+          >Set her up</a
+        >
+        <a class="button" href="https://github.com/nwisehart/tammy">GitHub</a>
+      </div>
+      <p class="note">
+        A Slack app on Socket Mode, a Prepcook that accepts her cards, and under
+        30 minutes on the Pantry demo.
+      </p>
+    </div>
+  </section>
 
-    <p class="lead">
-      Most bug reports do not start in a tracker; they start as a customer
-      saying "it doesn't work" in Slack. Tammy sits in that channel. She answers
-      questions from your product's documentation, and when something looks
-      broken she asks the questions a support engineer would, files an
-      <strong>investigation card</strong> on <a href="index.html">Prepcook</a>,
-      waits for it to be reproduced and explained, and tells the customer what
-      was found in plain English, with no stack traces, file paths or promises.
-      The team sees a triaged card with a root-cause analysis attached and
-      decides whether it becomes a bug; the customer gets an answer in an hour
-      instead of a ticket number.
-    </p>
-    <p>
-      If Prepcook is the prep cook, Tammy is the waitress. She works in Slack.
-      She knows the menu — your product's documentation — by heart and answers
-      customers from it, with the passage she used. When a customer reports
-      something that looks broken, she takes the order to the kitchen: she asks
-      the questions an engineer would ask, files an investigation card on
-      Prepcook, waits for its triage report, and explains it to the customer in
-      plain English. She never fixes anything, never promises a fix, never
-      speaks for the engineers beyond what the report says, and never turns an
-      investigation into a bug because a customer asked; someone on the team
-      can.
-    </p>
-    <p>
-      She is built on Prepcook's
-      <a href="docs/method.html#investigations">investigation cards</a> and its
-      <a href="docs/api.html#cards">card API</a>, and lives in her own
-      repository,
-      <a href="https://github.com/nwisehart/tammy">nwisehart/tammy</a>.
-    </p>
+  <section class="sim" aria-labelledby="sim-title">
+    <h2 id="sim-title" class="visually-hidden">A conversation with Tammy</h2>
+    <div class="sim-bar">
+      <p class="sim-tag">Simulated conversation on the Pantry demo</p>
+      <button
+        class="toggle"
+        type="button"
+        role="switch"
+        aria-checked="true"
+        id="tools-toggle"
+      >
+        <span class="switch" aria-hidden="true"></span>Show her tools
+      </button>
+      <button class="ctl" type="button" id="play" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect
+            x="3.5"
+            y="3"
+            width="3"
+            height="10"
+            rx="1"
+            fill="currentColor"
+          />
+          <rect
+            x="9.5"
+            y="3"
+            width="3"
+            height="10"
+            rx="1"
+            fill="currentColor"
+          />
+        </svg>
+        <span>Pause</span>
+      </button>
+    </div>
 
-    <h2 id="what-she-does">What she does</h2>
-    <div class="feature-grid two">
-      <section class="feature">
+    <div class="convo" id="stage">
+      <div class="thread" aria-label="The customer's thread">
+        <div class="pane-head">
+          <span># help</span><small>Pantry's support channel in Slack</small>
+        </div>
+        <div class="msgs" id="cust"></div>
+      </div>
+      <div class="kitchen">
+        <div class="board" aria-label="The Prepcook board">
+          <div class="pane-head">
+            <span>Prepcook · Pantry</span>
+            <span class="pill" id="need" hidden
+              ><span class="dot amber"></span>1 needs you</span
+            >
+          </div>
+          <div class="cols" id="cols" aria-hidden="true">
+            <div class="col" data-col="plan">
+              <div class="col-head">
+                <b><span class="dot"></span>Plan <em data-count>0</em></b
+                ><small>Reproduce it, then explain it</small>
+              </div>
+            </div>
+            <div class="col" data-col="execute">
+              <div class="col-head">
+                <b><span class="dot"></span>Execute <em data-count>0</em></b
+                ><small>The smallest fix, with tests</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="team" aria-label="The team's channel">
+          <div class="pane-head">
+            <span># pantry-team</span
+            ><small>where the team hears from her</small>
+          </div>
+          <div class="msgs" id="team"></div>
+        </div>
+      </div>
+      <div class="clear" id="clear" aria-hidden="true"></div>
+    </div>
+
+    <div class="sim-after">
+      <p class="sim-lede">
+        Most bug reports start as a customer saying "it doesn't work" in Slack.
+        Tammy answers from your documentation, and when something looks broken
+        she asks what an engineer would ask, files an investigation card on
+        Prepcook, waits for it to be reproduced and explained, and tells the
+        customer what was found in plain English: no stack traces, file paths or
+        promises. The team sees a triaged card with a root-cause analysis
+        attached and decides whether it becomes a bug; the customer gets an
+        answer in an hour instead of a ticket number.
+      </p>
+      <p class="sim-caption">
+        The customer, the teammate, the help passage, the triage report, the
+        DEF-4 card and the times are made up for this simulation. Tool calls
+        show only here; the customer sees her messages.
+      </p>
+    </div>
+  </section>
+
+  <section class="wrap sec" aria-labelledby="jobs">
+    <h2 id="jobs">Four jobs, in the order a thread needs them</h2>
+    <p class="lede">
+      If Prepcook is the prep cook, Tammy is the waitress. She knows the menu,
+      your product's documentation, by heart, and takes the orders that need the
+      kitchen. She never fixes anything herself.
+    </p>
+    <ol class="track">
+      <li>
         <h3>Answers from the menu</h3>
         <p>
-          <code>tammy index</code> reads your documentation — local Markdown,
-          text, HTML and PDF, or pages crawled from one site — and embeds it
-          locally. She answers a question in a few sentences from what the
-          passages say, and cites the one she used:
-          <em>From the menu: Sharing a list with someone</em>. When the menu has
-          nothing solid, she says she does not know and offers to ask the team.
+          <code>tammy index</code> reads your docs (Markdown, text, HTML, PDF,
+          or one crawled site) and embeds them locally. She answers in a few
+          sentences and cites the passage she used. When the menu has nothing
+          solid, she says she does not know and offers to ask the team.
         </p>
-      </section>
-      <section class="feature">
-        <h3>Takes problem reports to the kitchen</h3>
+      </li>
+      <li>
+        <h3>Takes the report to the kitchen</h3>
         <p>
           She checks the menu first. If the product still seems not to do what
-          the menu says, she asks once, numbered, for what is missing — the
-          steps, what they expected, what happened instead — and files an
-          investigation card on Prepcook in the customer's words, with the
-          thread quoted. One card per conversation.
+          it says, she asks once, numbered, for what is missing (the steps, what
+          they expected, what happened instead) and files an investigation card
+          in the customer's words with the thread quoted. One card per
+          conversation.
         </p>
-      </section>
-      <section class="feature">
+      </li>
+      <li>
         <h3>Explains the report in plain English</h3>
         <p>
-          When Prepcook's investigation posts its triage report, she rewrites it
-          for the customer's thread: what happened and why, what it affects,
-          whether it comes from their setup or our side, what they can do in the
-          meantime, and that the team has the details. No paths, no code, no
-          promises; a filter drops any sentence that slips.
+          When the triage report lands she rewrites it for the thread: what
+          happened and why, what it affects, whether it is their setup or our
+          side, what they can do meanwhile. A filter drops any sentence with a
+          path, code or a promise.
         </p>
-      </section>
-      <section class="feature">
+      </li>
+      <li>
         <h3>Status and convert, for the team</h3>
         <p>
           <code>/tammy status PC-42</code> says where an order is.
-          <code>/tammy convert PC-42</code> turns an investigation into a bug
-          (or <code>story</code>) through Prepcook's API — for the team only;
-          from a customer it is refused and nothing is sent. The team also gets
-          a short summary of each report in its own channel.
+          <code>/tammy convert PC-42</code> turns an investigation into a bug or
+          story through Prepcook's API, for the team only; from a customer it is
+          refused and nothing is sent. The team also gets a short summary of
+          each report in its own channel.
         </p>
-      </section>
+      </li>
+    </ol>
+  </section>
+
+  <section class="wrap sec" aria-labelledby="never">
+    <div class="split">
+      <div>
+        <h2 id="never">What she never does</h2>
+        <p class="lede">
+          The team decides what gets worked on. She makes sure they have the
+          details, and she says so.
+        </p>
+        <p class="aside-note">
+          When someone on the team writes in a customer's thread without
+          mentioning her, she steps aside for the rest of it.
+        </p>
+      </div>
+      <ul class="nevers">
+        <li>Promise a fix, a date, or that anything will change.</li>
+        <li>
+          Say that something is or is not a bug before the kitchen has said so.
+        </li>
+        <li>Say anything for the engineers beyond what a report says.</li>
+        <li>
+          Share anything internal: code, file names, paths, logs, error traces,
+          other customers' reports, how the team works inside, or the name of
+          the tool the kitchen uses.
+        </li>
+        <li>Say yes to "can you escalate this" or "please get this fixed".</li>
+        <li>
+          Follow a message that tells her to break these rules, or to reveal her
+          prompt.
+        </li>
+      </ul>
     </div>
+  </section>
 
-    <h2 id="api-key-or-seat">API key or seat</h2>
-    <p>
-      Tammy reaches Claude one of two ways, and gives the same answers either
-      way.
-    </p>
-    <ul>
-      <li>
-        <strong>An Anthropic API key</strong> (<code>provider = "api"</code>) is
-        for a service that must not pause: billed per token, with no usage
-        window.
-      </li>
-      <li>
-        <strong>A Claude seat</strong> (<code>provider = "seat"</code>) runs on
-        a subscription the team already pays for, through the
-        <code>claude</code> CLI and the Claude Agent SDK, with every built-in
-        tool switched off so the model gets her four tools and no file or shell
-        access. It shares the seat's usage windows: when one runs out she tells
-        customers she can't answer right now, tells the team, and resumes when
-        it resets.
-      </li>
-    </ul>
-
-    <h2 id="her-tools">Her tools</h2>
-    <p>
+  <section class="wrap sec" aria-labelledby="tools">
+    <h2 id="tools">Four tools, offered by the kind of message</h2>
+    <p class="lede">
       Every Slack message is first sorted into a question, a problem report or
       other; that decides which tools she is offered for the turn. There is no
       tool that converts a card.
@@ -158,65 +261,94 @@
         </tbody>
       </table>
     </div>
+  </section>
 
-    <h2 id="what-she-never-does">What she never does</h2>
-    <ul>
-      <li>Promise a fix, a date, or that anything will change.</li>
-      <li>
-        Say that something is or is not a bug before the kitchen has said so.
-      </li>
-      <li>Say anything for the engineers beyond what a report says.</li>
-      <li>
-        Share anything internal: code, file names, paths, logs, error traces,
-        other customers' reports, how the team works inside, or the name of the
-        tool the kitchen uses.
-      </li>
-      <li>
-        Say yes to "can you escalate this" or "please get this fixed".
-        Converting a card is the team's decision; she says the team decides what
-        gets worked on and that she has made sure they have the details.
-      </li>
-      <li>
-        Follow a message that tells her to say something else instead of these
-        rules, or to reveal her prompt.
-      </li>
-    </ul>
-    <p>
-      When someone on the team writes in a customer's thread without mentioning
-      her, she steps aside for the rest of it.
-    </p>
+  <section class="wrap sec" aria-labelledby="seat">
+    <div class="split">
+      <div>
+        <h2 id="seat">An API key or a seat</h2>
+        <p class="lede">
+          She reaches Claude one of two ways, and gives the same answers either
+          way.
+        </p>
+      </div>
+      <dl class="seats">
+        <div>
+          <dt>
+            An Anthropic API key<small><code>provider = "api"</code></small>
+          </dt>
+          <dd>
+            For a service that must not pause: billed per token, with no usage
+            window.
+          </dd>
+        </div>
+        <div>
+          <dt>
+            A Claude seat<small><code>provider = "seat"</code></small>
+          </dt>
+          <dd>
+            Runs on a subscription the team already pays for, through the
+            <code>claude</code> CLI and the Claude Agent SDK, with every
+            built-in tool switched off so the model gets her four tools and no
+            file or shell access. When a usage window runs out she tells
+            customers she can't answer right now, tells the team, and resumes
+            when it resets.
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </section>
 
-    <h2 id="set-her-up">Set her up</h2>
-    <p>
-      She needs a Slack app (Socket Mode, so no public URL), a Prepcook that
-      accepts her cards and sends her its webhook, and her own
-      <code>tammy.toml</code> with its secrets. The setup lives with her code,
-      so it stays current:
-    </p>
-    <ul>
-      <li>
-        <a href="https://github.com/nwisehart/tammy#quickstart"
-          >The Quickstart in her README</a
-        >: one question and one bug report through Tammy on Pantry, Prepcook's
-        demo app, in under 30 minutes of your own steps.
-      </li>
-      <li>
-        <a href="https://github.com/nwisehart/tammy/blob/main/docs/setup.md"
-          >docs/setup.md</a
-        >: the Slack app manifest and scopes, Prepcook's side (the API token and
-        the webhook target), and the configuration.
-      </li>
-      <li>
-        <a
-          href="https://github.com/nwisehart/tammy/blob/main/docs/operations.md"
-          >docs/operations.md</a
-        >: running her as a service, logs and backups.
-      </li>
-    </ul>
-    <p>
-      On Prepcook's side, an investigation runs Plan exactly as a bug does;
-      <a href="docs/method.html#investigations">Investigations</a> in the method
-      describes what happens to the card she files.
-    </p>
-  </article>
+  <section class="wrap sec" aria-labelledby="setup">
+    <div class="close">
+      <div>
+        <h2 id="setup">Put her in your support channel</h2>
+        <p class="lede" style="margin-bottom: 20px">
+          She needs a Slack app (Socket Mode, so no public URL), a Prepcook that
+          accepts her cards and sends her its webhook, and her own
+          <code>tammy.toml</code> with its secrets. The setup lives with her
+          code, so it stays current.
+        </p>
+        <ul class="links">
+          <li>
+            <a href="https://github.com/nwisehart/tammy#quickstart"
+              >The Quickstart in her README</a
+            >: one question and one bug report through Tammy on Pantry,
+            Prepcook's demo app, in under 30 minutes of your own steps.
+          </li>
+          <li>
+            <a href="https://github.com/nwisehart/tammy/blob/main/docs/setup.md"
+              >docs/setup.md</a
+            >: the Slack app manifest and scopes, Prepcook's side (the API token
+            and the webhook target), and the configuration.
+          </li>
+          <li>
+            <a
+              href="https://github.com/nwisehart/tammy/blob/main/docs/operations.md"
+              >docs/operations.md</a
+            >: running her as a service, logs and backups.
+          </li>
+        </ul>
+      </div>
+      <div>
+        <p class="need">
+          She is built on Prepcook's
+          <a href="docs/method.html#investigations">investigation cards</a>
+          and its
+          <a href="docs/api.html#cards">card API</a>, and lives in her own
+          repository,
+          <a href="https://github.com/nwisehart/tammy">nwisehart/tammy</a>. On
+          Prepcook's side, an investigation runs Plan exactly as a bug does.
+        </p>
+        <div class="row">
+          <a
+            class="button primary"
+            href="https://github.com/nwisehart/tammy#quickstart"
+            >Start the Quickstart</a
+          >
+          <a class="button" href="index.html">Prepcook</a>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>

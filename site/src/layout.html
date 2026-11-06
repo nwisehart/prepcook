@@ -50,6 +50,7 @@
     />
     <link rel="stylesheet" href="{{root}}static/site.css" />
     <script src="{{root}}static/site.js" defer></script>
+    {{pageHead}}
   </head>
   <body class="{{bodyClass}}">
     <a class="skip" href="#main">Skip to content</a>
@@ -75,8 +76,8 @@
         </a>
         <nav class="header-nav" aria-label="Site">
           <a href="{{root}}get-started.html" data-section="docs">Docs</a>
-          <a href="{{root}}blog/index.html" data-section="blog">Blog</a>
           <a href="{{root}}tammy.html" data-section="tammy">Tammy</a>
+          <a href="{{root}}blog/index.html" data-section="blog">Blog</a>
           <a class="external" href="https://github.com/nwisehart/prepcook"
             >GitHub</a
           >
@@ -129,16 +130,6 @@
     {{main}}
     <footer class="site-footer">
       <div class="footer-inner">
-        <p>
-          <strong>Prepcook</strong> by Nick Wisehart. Apache License 2.0; a fork
-          of
-          <a href="https://github.com/BloopAI/vibe-kanban"
-            >vibe-kanban by BloopAI</a
-          >
-          (<a href="https://github.com/nwisehart/prepcook/blob/main/NOTICE"
-            >NOTICE</a
-          >; <a href="{{root}}vibe-kanban.html">Prepcook and vibe-kanban</a>).
-        </p>
         <ul class="footer-links">
           <li><a href="https://github.com/nwisehart/prepcook">prepcook</a></li>
           <li>
