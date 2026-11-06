@@ -34,6 +34,12 @@ git worktree, and when a person takes the ticket over, Prepcook steps aside.
 Docs and a tour: [prepcook.dev](https://prepcook.dev/)
 
 <p align="center">
+  <a href="assets/videos/prepcook_brag.mp4"><img src="assets/videos/prepcook_brag.jpg" alt="Play the 24-second video: a bug card on the Prepcook board is reproduced, its root cause approved, fixed, reviewed and merged" width="880"></a>
+  <br>
+  <sub>▶ <a href="assets/videos/prepcook_brag.mp4">Watch a bug go from report to merged pull request</a> (24 seconds)</sub>
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/board-dark.png">
     <img src="docs/images/board.png" alt="The Pantry board in Prepcook: cards in To Do, Plan (a bug waiting at the gate and a triaged investigation), Execute, Review and Shipped (merged)" width="880">
