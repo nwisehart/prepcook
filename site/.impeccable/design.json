@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T20:00:00.000Z",
+  "generatedAt": "2026-11-06T21:00:00.000Z",
   "title": "Design System: Prepcook website",
   "extensions": {
     "colorMeta": {
@@ -697,11 +697,15 @@
     "typographyMeta": {
       "home-headline": {
         "displayName": "Home Headline",
-        "purpose": "The homepage h1, the one-line pitch, balanced and 26ch max; the Tammy page's two-line pitch at 24ch under her wordmark."
+        "purpose": "The homepage h1, the one-line pitch, balanced and 26ch max; the Tammy page's two-line pitch at 24ch under her wordmark. The blog index's h1 at 1.04 line height."
       },
       "home-section": {
         "displayName": "Home Section",
         "purpose": "Section headings on the homepage and the Tammy page; balanced, 22ch max, no label above."
+      },
+      "post-headline": {
+        "displayName": "Post Headline",
+        "purpose": "A blog post's h1, under its crumb, in the 720px reading column."
       },
       "headline": {
         "displayName": "Headline",
@@ -723,6 +727,10 @@
         "displayName": "Body Small",
         "purpose": "Text in the stage track, the ruled lists and the mode notes; chat message bodies at 1.55 line height."
       },
+      "post-body": {
+        "displayName": "Post Body",
+        "purpose": "A blog post's running text in its 720px column; 16px under 640px. Its h2s are 26px with no rule above, 56px below the text before them."
+      },
       "control": {
         "displayName": "Control",
         "purpose": "Button labels."
@@ -733,7 +741,7 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Navigation only: docs-sidebar group titles and the docs breadcrumb. Never an eyebrow above a heading."
+        "purpose": "Navigation only: docs-sidebar group titles, the docs breadcrumb and a blog post's \"Blog\" crumb. Never an eyebrow above a heading."
       },
       "mono": {
         "displayName": "Mono",
@@ -817,6 +825,11 @@
         "name": "conversation-pausing",
         "value": "IntersectionObserver threshold 0.15 + visibilitychange",
         "purpose": "The conversation's simulation clock and every animation in the frame pause off screen or in a hidden tab; reduced motion shows the whole conversation, paused, and Play replays it."
+      },
+      {
+        "name": "board-film",
+        "value": "<video autoplay muted loop playsinline>, poster docs/images/board.png",
+        "purpose": "The homepage gate figure's recording of the real board, when the build finds docs/media/board.webm; under prefers-reduced-motion the script removes autoplay, pauses it on the poster and shows controls."
       }
     ],
     "breakpoints": [
@@ -833,7 +846,7 @@
       {
         "name": "phone",
         "value": "639px",
-        "purpose": "Single column, 16px gutters, smaller display sizes; board columns fix at 244px and scroll sideways. On the Tammy page tables restack into blocks and the seats list stacks."
+        "purpose": "Single column, 16px gutters, smaller display sizes; board columns fix at 244px and scroll sideways. On the Tammy page tables restack into blocks and the seats list stacks. On the blog, 16px gutters, post lists stack date over title, the lede, standfirst and post body drop a step, and post figures run the viewport less 32px."
       },
       {
         "name": "narrow",
@@ -848,7 +861,7 @@
       {
         "name": "board-stack",
         "value": "1099px",
-        "purpose": "Homepage and Tammy page: opening, content splits and close stack; stage track and four-job track two-up."
+        "purpose": "Homepage and Tammy page: opening, content splits and close stack; stage track and four-job track two-up. The blog index's feature stacks, its image first."
       }
     ],
     "themes": {
@@ -878,8 +891,8 @@
       "name": "Header Navigation",
       "kind": "nav",
       "refersTo": "header-link",
-      "description": "The sticky header: mark and name, section links, theme toggle.",
-      "html": "<nav class=\"ds-header\"><a class=\"ds-brand\" href=\"#\"><svg viewBox=\"0 0 64 64\" width=\"28\" height=\"28\" fill=\"currentColor\" aria-hidden=\"true\"><path fill-rule=\"evenodd\" d=\"M15.5 42.5 L11.0 9.4 A5.08 5.08 0 0 1 18.00 9.40 A5.08 5.08 0 0 1 25.00 9.40 A5.08 5.08 0 0 1 32.00 9.40 A5.08 5.08 0 0 1 39.00 9.40 A5.08 5.08 0 0 1 46.00 9.40 A5.08 5.08 0 0 1 53.00 9.40 L48.5 42.5 Q48.5 45.0 46.0 45.0 L18.0 45.0 Q15.5 45.0 15.5 42.5 Z M20.30 41.5 L17.30 12.5 L18.70 12.5 L21.70 41.5 Z M25.80 41.5 L24.30 12.5 L25.70 12.5 L27.20 41.5 Z M31.30 41.5 L31.30 12.5 L32.70 12.5 L32.70 41.5 Z M36.80 41.5 L38.30 12.5 L39.70 12.5 L38.20 41.5 Z M42.30 41.5 L45.30 12.5 L46.70 12.5 L43.70 41.5 Z\"/></svg>Prepcook</a><a class=\"ds-nav-link\" aria-current=\"page\" href=\"#\">Docs</a><a class=\"ds-nav-link\" href=\"#\">Tammy</a><a class=\"ds-nav-link\" href=\"#\">GitHub</a></nav>",
+      "description": "The sticky header: mark and name, the Docs, Tammy, Blog and GitHub links, theme toggle.",
+      "html": "<nav class=\"ds-header\"><a class=\"ds-brand\" href=\"#\"><svg viewBox=\"0 0 64 64\" width=\"28\" height=\"28\" fill=\"currentColor\" aria-hidden=\"true\"><path fill-rule=\"evenodd\" d=\"M15.5 42.5 L11.0 9.4 A5.08 5.08 0 0 1 18.00 9.40 A5.08 5.08 0 0 1 25.00 9.40 A5.08 5.08 0 0 1 32.00 9.40 A5.08 5.08 0 0 1 39.00 9.40 A5.08 5.08 0 0 1 46.00 9.40 A5.08 5.08 0 0 1 53.00 9.40 L48.5 42.5 Q48.5 45.0 46.0 45.0 L18.0 45.0 Q15.5 45.0 15.5 42.5 Z M20.30 41.5 L17.30 12.5 L18.70 12.5 L21.70 41.5 Z M25.80 41.5 L24.30 12.5 L25.70 12.5 L27.20 41.5 Z M31.30 41.5 L31.30 12.5 L32.70 12.5 L32.70 41.5 Z M36.80 41.5 L38.30 12.5 L39.70 12.5 L38.20 41.5 Z M42.30 41.5 L45.30 12.5 L46.70 12.5 L43.70 41.5 Z\"/></svg>Prepcook</a><a class=\"ds-nav-link\" aria-current=\"page\" href=\"#\">Docs</a><a class=\"ds-nav-link\" href=\"#\">Tammy</a><a class=\"ds-nav-link\" href=\"#\">Blog</a><a class=\"ds-nav-link\" href=\"#\">GitHub</a></nav>",
       "css": ".ds-header { display: flex; align-items: center; gap: 2px; height: 56px; padding: 0 24px; background: var(--bg, #f7f6f3); border-bottom: 1px solid var(--border, #e4e1da); font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; color: var(--text-high, #1f2328); font-size: 18px; font-weight: 700; letter-spacing: -0.2px; text-decoration: none; } .ds-brand svg { color: var(--brand, #3f6aa6); } .ds-nav-link { padding: 6px 10px; border-radius: 8px; color: var(--text, #4b4f56); font-size: 14px; font-weight: 500; text-decoration: none; } .ds-nav-link:hover, .ds-nav-link[aria-current='page'] { background: var(--panel, #efede8); color: var(--text-high, #1f2328); } .ds-nav-link:focus-visible, .ds-brand:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
     },
     {
@@ -924,7 +937,7 @@
     {
       "name": "Ruled List",
       "kind": "custom",
-      "description": "Items separated by 1px Border rules instead of boxed in cards; the list form on the homepage and the Tammy page (where the 'never' list marks each item with a short Enamel Blue dash).",
+      "description": "Items separated by 1px Border rules instead of boxed in cards; the list form on the homepage, the Tammy page (where the 'never' list marks each item with a short Enamel Blue dash) and the blog (posts with the date in a column beside the title link).",
       "html": "<ul class=\"ds-ruled\"><li><h3>Investigations before bugs</h3><p>An investigation card runs Plan exactly as a bug does and stops until a person converts it or closes it.</p><a href=\"#\">Investigations and incidents</a></li><li><h3>Works alongside people</h3><p>It answers on a ticket only when it is its turn.</p><a href=\"#\">Working alongside people</a></li></ul>",
       "css": ".ds-ruled { max-width: 460px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-ruled li { padding: 18px 0; border-top: 1px solid var(--border, #e4e1da); } .ds-ruled li:last-child { border-bottom: 1px solid var(--border, #e4e1da); } .ds-ruled h3 { margin: 0 0 8px; color: var(--text-high, #1f2328); font-size: 18px; font-weight: 700; } .ds-ruled p { margin: 0 0 10px; font-size: 15px; line-height: 1.65; } .ds-ruled a { color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; } .ds-ruled a:hover { text-decoration-thickness: 2px; } .ds-ruled a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
     },

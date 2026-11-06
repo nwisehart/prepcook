@@ -995,12 +995,41 @@ function postListHtml(posts, fromOut) {
   return `<ol class="post-list">${posts
     .map(
       (p) =>
-        `<li><a class="post-title" href="${relativeUrl(fromOut, p.out)}">${escapeHtml(p.title)}</a>` +
-        `<p class="post-meta"><time datetime="${escapeHtml(p.date)}">${formatDate(p.date)}</time></p>` +
-        `<p class="post-description">${escapeHtml(p.description)}</p></li>`
+        `<li><p class="post-meta"><time datetime="${escapeHtml(p.date)}">${formatDate(p.date)}</time></p>` +
+        `<div><a class="post-title" href="${relativeUrl(fromOut, p.out)}">${escapeHtml(p.title)}</a>` +
+        `<p class="post-description">${escapeHtml(p.description)}</p></div></li>`
     )
     .join('')}</ol>`;
 }
+
+// The newest post at the head of the blog index: its date, title and
+// description beside its image (the -dark twin too, for a screenshot that has
+// one), or on its own when it has none.
+function postFeatureHtml(post, fromOut) {
+  const href = relativeUrl(fromOut, post.out);
+  let figure = '';
+  if (post.image) {
+    const dark = post.image.src.replace(/\.png$/, '-dark.png');
+    const source =
+      dark !== post.image.src && COPIED_SET.has(dark)
+        ? `<source media="(prefers-color-scheme: dark)" srcset="${relativeUrl(fromOut, dark)}" />`
+        : '';
+    figure =
+      `<a class="post-feature-image" href="${href}" tabindex="-1" aria-hidden="true">` +
+      `<picture>${source}<img src="${relativeUrl(fromOut, post.image.src)}" alt="" sizes="(max-width: 1099px) 100vw, 680px" fetchpriority="high" /></picture></a>`;
+  }
+  return (
+    `<article class="post-feature${post.image ? '' : ' no-image'}">` +
+    `<div class="post-feature-text"><p class="post-meta"><time datetime="${escapeHtml(post.date)}">${formatDate(post.date)}</time> · ${escapeHtml(post.author)}</p>` +
+    `<h2><a href="${href}">${escapeHtml(post.title)}</a></h2>` +
+    `<p class="post-description">${escapeHtml(post.description)}</p>` +
+    `<a class="read-link" href="${href}">Read the post</a></div>` +
+    `${figure}</article>`
+  );
+}
+
+const RSS_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 3.5a9.5 9.5 0 0 1 9.5 9.5M3 7.5A5.5 5.5 0 0 1 8.5 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="3.75" cy="12.25" r="1.25" fill="currentColor" /></svg>';
 
 // The newest posts other than `post` the footer offers.
 const MORE_POSTS = 3;
@@ -1018,12 +1047,15 @@ function renderPost(post, posts) {
     (others.length
       ? postListHtml(others, post.out)
       : '<p class="post-meta">This is the first post.</p>') +
-    `<p class="more-links"><a href="index.html">All posts</a> · <a href="feed.xml">RSS feed</a></p></nav>`;
+    `<p class="more-links"><a href="index.html">All posts</a><a href="feed.xml">${RSS_ICON}RSS feed</a></p></nav>`;
   const main =
-    `<main class="page post-page" id="main"><p class="crumb"><a href="index.html">Blog</a></p>` +
-    `<article class="prose post"><h1>${escapeHtml(post.title)}</h1>${bylineHtml(post)}\n${html}</article>` +
-    `<p class="edit"><a href="${GITHUB}/edit/main/${post.src}">Edit this post on GitHub</a></p>` +
-    `${more}</main>`;
+    `<main class="blog post-page" id="main"><article class="post">` +
+    `<header class="post-head"><p class="crumb"><a href="index.html">Blog</a></p>` +
+    `<h1>${escapeHtml(post.title)}</h1>` +
+    `<p class="post-standfirst">${escapeHtml(post.description)}</p>${bylineHtml(post)}</header>` +
+    `<div class="prose post-body">\n${html}</div></article>` +
+    `<footer class="post-foot"><p class="edit"><a href="${GITHUB}/edit/main/${post.src}">Edit this post on GitHub</a></p>` +
+    `${more}</footer></main>`;
   write(
     post.out,
     page({
@@ -1045,11 +1077,16 @@ function renderPost(post, posts) {
 
 function renderBlogIndex(posts) {
   const out = 'blog/index.html';
-  const list = posts.length ? postListHtml(posts, out) : '<p>No posts yet.</p>';
+  const [newest, ...older] = posts;
+  const list = newest
+    ? postFeatureHtml(newest, out) +
+      (older.length ? postListHtml(older, out) : '')
+    : '<p class="post-meta">No posts yet.</p>';
   const main =
-    `<main class="page" id="main"><article class="prose blog-index">` +
-    `<h1>Blog</h1><p class="lead">${escapeHtml(BLOG_DESCRIPTION)}</p>${list}` +
-    `<p class="more-links"><a href="feed.xml">RSS feed</a></p></article></main>`;
+    `<main class="blog blog-index" id="main"><header class="blog-head">` +
+    `<div><h1>Blog</h1><p class="blog-lede">${escapeHtml(BLOG_DESCRIPTION)}</p></div>` +
+    `<a class="button" href="feed.xml">${RSS_ICON}RSS feed</a></header>` +
+    `${list}</main>`;
   write(
     out,
     page({

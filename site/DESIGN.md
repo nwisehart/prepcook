@@ -57,6 +57,12 @@ typography:
     fontWeight: 700
     lineHeight: 1.1
     letterSpacing: '-0.03em'
+  post-headline:
+    fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
+    fontSize: 'clamp(30px, 3.4vw, 46px)'
+    fontWeight: 700
+    lineHeight: 1.08
+    letterSpacing: '-0.03em'
   headline:
     fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
     fontSize: '32px'
@@ -84,6 +90,11 @@ typography:
     fontSize: '15px'
     fontWeight: 400
     lineHeight: 1.65
+  post-body:
+    fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
+    fontSize: '17px'
+    fontWeight: 400
+    lineHeight: 1.7
   control:
     fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
     fontSize: '14px'
@@ -338,8 +349,9 @@ is a step darker than the app's #4A7FBF so white button text on it clears
 - **Raised** (`raised`): code-block bodies, table header rows and the triage
   report on a board card; a step quieter than Surface.
 - **Border** (`border`): every 1px edge, section rules above doc `h2`s, the
-  blockquote bar, the rules of the ruled lists, and the spent segments of the
-  open-bugs bar.
+  blockquote bar, the rules of the ruled lists (the blog's post lists among
+  them) and under the blog's head, the feature and a post's head, and the
+  spent segments of the open-bugs bar.
 - **Divider** (`divider`): hairlines inside a surface (between table rows,
   under a code-block header) and the edge of the triage report.
 - **Ink** (`ink`): headings, the header name, strong text, board card titles
@@ -347,7 +359,8 @@ is a step darker than the app's #4A7FBF so white button text on it clears
 - **Body Text** (`body-text`): running text, the default.
 - **Muted Text** (`muted-text`): labels, captions, helper lines, the footer,
   table-of-contents links, board column helpers and card keys, message
-  times, citation lines, pane-header notes and the empty-pane line.
+  times, citation lines, pane-header notes and the empty-pane line; on the
+  blog, post dates, the byline and the "Blog" crumb.
 
 ### Status (inside the simulated board only)
 
@@ -392,7 +405,10 @@ for things a reader would copy or type.
 
 - **Home Headline** (700, fluid, 1.02, tight tracking): the homepage's
   one-line pitch, `h1`, balanced and held to 26ch; the Tammy page's two-line
-  pitch at 24ch under her wordmark.
+  pitch at 24ch under her wordmark. The blog index's "Blog" `h1` takes the
+  same size at 1.04 line height.
+- **Post Headline** (700, fluid, 1.08, tight tracking): a blog post's `h1`,
+  under its crumb.
 - **Home Section** (700, fluid, 1.1, tight tracking): section headings on the
   homepage and the Tammy page, balanced and held to 22ch.
 - **Headline** (700, 32px, 1.3): a docs page's `h1`; 26px under 640px.
@@ -409,9 +425,21 @@ for things a reader would copy or type.
   the mode notes. Chat message bodies use it at 1.55 line height, capped at
   60ch (14.5px under 640px; 13.5px in the team-channel pane); the "never"
   list sets its items at 18px Ink (16px under 640px).
+- **Post Body** (400, 17px, 1.7): a blog post's running text in its 720px
+  column (16px under 640px). Its `h2`s are 26px (22px under 640px) with no
+  rule above, 56px below the text before them; its `h3`s sit 36px below.
+  Above it, the standfirst (the post's description) is 20px Body Text at
+  1.5 and the byline 14px Muted Text.
+- **Blog index** sizes: the lede under the `h1` is 18px at 60ch (the
+  standfirst and the lede drop to 17px under 640px); the newest post's title
+  runs fluid 24–32px, 700, 1.15, with its description at 17px and a 15px 600
+  "Read the post" link; older posts' titles are 20px 700 Ink links (17px in
+  a post's More posts list) that turn Deep Enamel with a 2px underline on
+  hover; dates are 14px Muted Text with tabular figures.
 - **Control / Nav** (600 / 500, 14px): buttons, header links, sidebar links.
 - **Label** (700, 11px, 0.08em, uppercase, Muted Text): navigation only, the
-  docs-sidebar group titles and the docs breadcrumb.
+  docs-sidebar group titles, the docs breadcrumb and a blog post's "Blog"
+  crumb (a link back to the index that turns Ink on hover).
 - **Mono** (400, 13px, 1.6): code blocks; inline code is 0.86em on a Panel
   chip; board card keys are 12px; tool-call chips
   are 11.5px; the triage report's label is 11px 500.
@@ -457,6 +485,19 @@ place rather than introducing a heading.
   ruled list) and the close runs text beside a 320–420px action column; both
   stack under 1100px, where the four-job track goes two-up (one-up under
   640px).
+- **Blog (`renderBlogIndex` and `renderPost` in `build.mjs`, styled in
+  `src/site.css`):** the index sits in a 1200px container with 40px gutters
+  (16px under 640px). Its head sets the `h1` and lede on the left and the RSS
+  feed button on the right, bottom-aligned and wrapping, ruled off below. The
+  newest post follows as a feature split 5:7, text beside its screenshot,
+  ruled below; under 1100px it stacks with the image first, and a post
+  without an image takes the full width. Older posts follow as a ruled list,
+  the date in a 180px column beside the title and description (stacked under
+  640px). A post is a 720px reading column: the head (crumb, `h1`,
+  standfirst, byline) ruled off, then the body. Figures widen past the column
+  to 960px, centred on it and kept 40px inside the viewport (16px under
+  640px), their captions held to the column. The footer keeps the 720px
+  column, 64px below the body: the ruled edit link, then More posts.
 - **Header:** sticky, 56px, Paper with a Border bottom edge; the scroll
   padding accounts for it.
 
@@ -485,7 +526,7 @@ of lifting.
 Gentle, consistent corners: 8px for controls, code blocks, tables and nav
 items; 10px for docs screenshots, pager links and board cards;
 12px for the outermost frames, the simulated app window and the gate
-screenshot beside it on the homepage, and the Tammy page's conversation frame, one
+figure beside it on the homepage, the blog's feature screenshot, and the Tammy page's conversation frame, one
 step larger than the cards they hold; 8px for chat avatars and the triage
 report;
 5px for inline code chips; full rounding for chips, pills,
@@ -519,14 +560,15 @@ Quiet and exact: thin borders, flat fills, nothing raised.
 - **Shadow Strategy:** none (see Elevation & Depth).
 - **Border:** 1px Border.
 - The site has no freestanding content card. The docs box only code, tables,
-  the inline table of contents and the pager; the homepage and the Tammy page
-  rule their lists instead of boxing them (see Ruled lists).
+  the inline table of contents and the pager; the homepage, the Tammy page
+  and the blog rule their lists instead of boxing them (see Ruled lists).
 
 ### Navigation
 
 - **Header:** wordmark (28px mark in Enamel Blue, "Prepcook" 18px 700 Ink) on
-  the left; Docs, Tammy and GitHub as 14px 500 links that take a Panel fill on
-  hover and when current; the theme toggle at the end. Under 480px the
+  the left; Docs, Tammy, Blog and GitHub as 14px 500 links that take a Panel
+  fill on hover and when current (Blog is current on the index and on every
+  post); the theme toggle at the end. Under 480px the
   external GitHub link is dropped.
 - **Docs sidebar:** uppercase group labels, 14px 500 links; the current page
   takes the Enamel Wash fill with Deep Enamel 600 text.
@@ -534,6 +576,13 @@ Quiet and exact: thin borders, flat fills, nothing raised.
   turns Enamel Blue on hover.
 - **Pager:** previous and next as bordered 10px cards, label above title;
   the border turns Enamel Blue on hover.
+- **Blog post footer:** the "Edit this post on GitHub" link under a Border
+  rule, then More posts: a 20px 700 Ink heading over the three newest other
+  posts as a compact ruled list (a 150px date column, 18px rows), and a 14px
+  row of All posts and RSS feed links.
+- **RSS feed:** a secondary button on the blog index and a link in each
+  post's footer, both led by the same authored 14px feed icon (two stroked
+  arcs and a dot in `currentColor`, 6px before the label).
 
 ### Code
 
@@ -558,8 +607,13 @@ items separated by 1px Border lines top and bottom, 14–18px of vertical
 padding, a heading or label column and the text. Used for the extra
 capabilities, the quickstart steps (time in Deep Enamel 600 in a 170px column
 beside the step), the integrations (a definition list with a 160px term
-column) and the Tammy row. The mode notes beside the gate screenshot use a
+column) and the Tammy row. The mode notes beside the gate figure use a
 1px left rule instead.
+
+The blog's post lists are the same form: each post a row of 24px vertical
+padding ruled below, its date in a column beside the title link and its
+description at 68ch; a post's More posts list is the compact version (see
+Navigation).
 
 On the Tammy page the same form carries three more lists:
 
@@ -586,9 +640,21 @@ cell in 13px Muted Text.
 Product screenshots in light and dark pairs (`<picture>` switches on
 `prefers-color-scheme`, the script forces the matching source when the reader
 picks a theme and swaps any full-size link to the matching image), framed with
-the 1px Border. In the docs they take a 10px corner; the homepage's gate
-screenshot takes the 12px frame corner on Surface and is captioned in 13px
-Muted Text.
+the 1px Border. In the docs and in a blog post's figures they take a 10px
+corner (a post's figures widen to 960px, captioned in 14px Muted Text). The
+blog's feature screenshot takes the 12px frame corner on Surface, with its
+dark twin when one exists, and links to the post without being a second tab
+stop.
+
+The homepage's gate figure ("Nothing merges without a person") takes the
+12px frame corner on Surface and is captioned in 13px Muted Text. When the
+board film has been recorded, the build replaces its screenshot with the
+film: a muted, looping recording of the real board (WebM, with MP4 as the
+second source when present) that plays inline on its own, at the same frame,
+with the board screenshot as its poster and an `aria-label` describing what
+it shows. Under `prefers-reduced-motion` the script stops it before it
+plays: it waits paused on the poster with the browser's controls. Without
+the film, the figure keeps its light and dark screenshot pair.
 
 ### The simulated board
 
