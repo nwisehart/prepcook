@@ -657,7 +657,9 @@ board film has been recorded, the build replaces its screenshot with the
 film: a muted, looping recording of the real board (WebM, with MP4 as the
 second source when present) that plays inline on its own, at the same frame,
 with the board screenshot as its poster and an `aria-label` describing what
-it shows. Under `prefers-reduced-motion` the script stops it before it
+it shows. The film comes in a light and a dark recording, paired like the
+screenshots: the dark sources carry the dark media query and come first,
+the poster swaps to the dark screenshot, and the theme toggle switches both. Under `prefers-reduced-motion` the script stops it before it
 plays: it waits paused on the poster with the browser's controls. Without
 the film, the figure keeps its light and dark screenshot pair.
 

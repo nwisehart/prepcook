@@ -13,14 +13,18 @@
     return darkQuery.matches ? 'dark' : 'light';
   }
 
-  // <picture> sources pick the -dark image (its WebP sizes and its PNG)
-  // through prefers-color-scheme, which follows the system, not the toggle.
-  // When the reader has chosen a theme, each dark source is forced on or off
-  // to match it; the light sources carry no media and follow whichever dark
-  // ones are off.
+  // <picture> and <video> sources pick the -dark image or film through
+  // prefers-color-scheme, which follows the system, not the toggle. When the
+  // reader has chosen a theme, each dark source is forced on or off to match
+  // it; the light sources carry no media and follow whichever dark ones are
+  // off. A video only rereads its sources when loaded again, and its poster
+  // swaps through data-dark-poster.
   function syncImages() {
     var explicit = root.getAttribute('data-theme');
-    var sources = document.querySelectorAll('picture source[media]');
+    var sources = document.querySelectorAll(
+      'picture source[media], video source[media]'
+    );
+    var films = [];
     sources.forEach(function (source) {
       var original = source.getAttribute('data-media');
       if (original === null) {
@@ -33,9 +37,27 @@
       if (explicit === 'light') media = 'not all';
       if (source.getAttribute('media') !== media) {
         source.setAttribute('media', media);
+        var parent = source.parentNode;
+        if (parent.tagName === 'VIDEO' && films.indexOf(parent) === -1) {
+          films.push(parent);
+        }
       }
     });
     var dark = effectiveTheme() === 'dark';
+    document
+      .querySelectorAll('video[data-dark-poster]')
+      .forEach(function (video) {
+        if (!video.hasAttribute('data-light-poster')) {
+          video.setAttribute('data-light-poster', video.getAttribute('poster'));
+        }
+        video.setAttribute(
+          'poster',
+          video.getAttribute(dark ? 'data-dark-poster' : 'data-light-poster')
+        );
+      });
+    films.forEach(function (video) {
+      video.load();
+    });
     document.querySelectorAll('a[data-dark-href]').forEach(function (link) {
       if (!link.hasAttribute('data-light-href')) {
         link.setAttribute('data-light-href', link.getAttribute('href'));

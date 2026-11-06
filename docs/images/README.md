@@ -59,6 +59,8 @@ cleans up the merged card, so it files those two again before and after, and
 the board is left as seeded. `--list` prints the storyboard, `--out` picks
 another folder, and the script's header lists the rest. It writes
 `board.webm`, and with a system `ffmpeg` on the `PATH` (`brew install ffmpeg`)
-also `board.mp4` and `board.gif`. Recording needs Playwright's Chromium and
+also `board.mp4` and `board.gif`. Run it again with `--theme dark` for the
+dark film, `board-dark.webm`, `.mp4` and `.gif`, which the site and the
+README show to readers in dark mode. Recording needs Playwright's Chromium and
 the ffmpeg it records with: `npx playwright install chromium ffmpeg`.
 

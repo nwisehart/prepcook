@@ -828,7 +828,7 @@
       },
       {
         "name": "board-film",
-        "value": "<video autoplay muted loop playsinline>, poster docs/images/board.png",
+        "value": "<video autoplay muted loop playsinline>, poster docs/images/board.png (board-dark.png in dark); dark sources board-dark.webm/.mp4 first under the dark media query",
         "purpose": "The homepage gate figure's recording of the real board, when the build finds docs/media/board.webm; under prefers-reduced-motion the script removes autoplay, pauses it on the poster and shows controls."
       }
     ],

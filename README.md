@@ -40,7 +40,12 @@ Docs and a tour: [prepcook.dev](https://prepcook.dev/)
   </picture>
 </p>
 
-![The board in motion: a bug approved out of Plan, a merged card cleaned up out of Shipped](docs/media/board.gif)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/board-dark.gif">
+    <img src="docs/media/board.gif" alt="The board in motion: a bug approved out of Plan, a merged card cleaned up out of Shipped" width="880">
+  </picture>
+</p>
 
 ## What it does
 
