@@ -45,12 +45,6 @@ colors:
   error-dark: '#f0a39b'
   error-soft-dark: '#432a28'
 typography:
-  display:
-    fontFamily: "Figtree, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
-    fontSize: '50px'
-    fontWeight: 700
-    lineHeight: 1
-    letterSpacing: '-1px'
   home-headline:
     fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
     fontSize: 'clamp(32px, 3.4vw, 50px)'
@@ -63,24 +57,12 @@ typography:
     fontWeight: 700
     lineHeight: 1.1
     letterSpacing: '-0.03em'
-  lead:
-    fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
-    fontSize: '24px'
-    fontWeight: 600
-    lineHeight: 1.35
-    letterSpacing: '-0.3px'
   headline:
     fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
     fontSize: '32px'
     fontWeight: 700
     lineHeight: 1.3
     letterSpacing: '-0.5px'
-  title-lg:
-    fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
-    fontSize: '26px'
-    fontWeight: 700
-    lineHeight: 1.25
-    letterSpacing: '-0.4px'
   title:
     fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
     fontSize: '22px'
@@ -135,7 +117,7 @@ spacing:
   xl: '24px'
   2xl: '32px'
   3xl: '48px'
-  section: '72px'
+  section: '112px'
 components:
   button-primary:
     backgroundColor: '{colors.enamel-blue}'
@@ -173,17 +155,6 @@ components:
     textColor: '{colors.enamel-blue-deep}'
     rounded: '{rounded.md}'
     padding: '5px 10px'
-  card:
-    backgroundColor: '{colors.surface}'
-    textColor: '{colors.body-text}'
-    rounded: '{rounded.lg}'
-    padding: '20px'
-  step-badge:
-    backgroundColor: '{colors.enamel-blue-soft}'
-    textColor: '{colors.enamel-blue-deep}'
-    typography: '{typography.mono}'
-    rounded: '{rounded.full}'
-    size: '26px'
   code-inline:
     backgroundColor: '{colors.panel}'
     textColor: '{colors.ink}'
@@ -347,7 +318,7 @@ is a step darker than the app's #4A7FBF so white button text on it clears
   hover lightens to `enamel-blue-hover-dark` (the contrast exception above),
   link text to `enamel-blue-text-dark`.
 - **Enamel Wash** (`enamel-blue-soft`): the current page in the docs sidebar,
-  the numbered stage badges, the board's "PR open" chip and project tile, a
+  the board's "PR open" chip and project tile, a
   teammate's avatar in the chat thread, and text selection, always paired with Deep Enamel text
   (`enamel-blue-soft-fg-dark` in dark mode).
 
@@ -356,9 +327,9 @@ is a step darker than the app's #4A7FBF so white button text on it clears
 - **Paper** (`paper`): the page ground, the sticky header behind it, the
   ground of the simulated app window and the conversation frame, and the tile
   behind Tammy's mark in her avatar.
-- **Surface** (`surface`): cards, stage lists, install cards, tables, the
-  inline table of contents, secondary buttons, code-block headers, and the
-  board's cards and controls; the thread pane and team-channel pane of the
+- **Surface** (`surface`): tables, the inline table of contents, pager
+  links, secondary and icon buttons, code-block headers, the backing of the
+  homepage's gate screenshot, and the board's cards and controls; the thread pane and team-channel pane of the
   conversation frame.
 - **Panel** (`panel`): hover and selected fill for header links, secondary
   buttons and the board's controls, the active segment of the Chef/Prep
@@ -369,10 +340,10 @@ is a step darker than the app's #4A7FBF so white button text on it clears
 - **Border** (`border`): every 1px edge, section rules above doc `h2`s, the
   blockquote bar, the rules of the ruled lists, and the spent segments of the
   open-bugs bar.
-- **Divider** (`divider`): hairlines inside a surface (between stages, table
-  rows, under a code-block header) and the edge of the triage report.
-- **Ink** (`ink`): headings, the wordmark, strong text, the lead pitch, board
-  card titles and tally figures.
+- **Divider** (`divider`): hairlines inside a surface (between table rows,
+  under a code-block header) and the edge of the triage report.
+- **Ink** (`ink`): headings, the header name, strong text, board card titles
+  and tally figures.
 - **Body Text** (`body-text`): running text, the default.
 - **Muted Text** (`muted-text`): labels, captions, helper lines, the footer,
   table-of-contents links, board column helpers and card keys, message
@@ -381,8 +352,8 @@ is a step darker than the app's #4A7FBF so white button text on it clears
 ### Status (inside the simulated board only)
 
 Mirrored from the app so the drawn board reads exactly like the real one. The
-stylesheet carries the amber tokens; the board homepage and the Tammy page add
-green and red beside them.
+shared stylesheet carries all of them, amber, green and red, with their dark
+values; only the homepage and the Tammy page draw with them.
 
 - **Needs-You Amber** (`attention`, `attention-fg`, `attention-soft`,
   `attention-border`): the dot, text, fill and edge of a card that needs a
@@ -419,35 +390,30 @@ for things a reader would copy or type.
 
 ### Hierarchy
 
-- **Display** (700, 50px, 1, -1px tracking): the wordmark hero of the current
-  `src/home.html`, set in em so the mark scales with it; 38px under 640px. The
-  board homepage has no wordmark hero, so this role leaves with that template.
-- **Home Headline** (700, fluid, 1.02, tight tracking): the board homepage's
+- **Home Headline** (700, fluid, 1.02, tight tracking): the homepage's
   one-line pitch, `h1`, balanced and held to 26ch; the Tammy page's two-line
   pitch at 24ch under her wordmark.
 - **Home Section** (700, fluid, 1.1, tight tracking): section headings on the
-  board homepage and the Tammy page, balanced and held to 22ch.
-- **Lead** (600, 24px, 1.35): the one-sentence pitch under the wordmark on the
-  current home page, in Ink, centred, 640px max; 20px under 640px.
+  homepage and the Tammy page, balanced and held to 22ch.
 - **Headline** (700, 32px, 1.3): a docs page's `h1`; 26px under 640px.
-- **Title Large** (700, 26px, 1.25): band headings of the current home page.
 - **Title** (700, 22px, 1.3): docs `h2`, ruled above with a Border line and
   24px of padding; 20px under 640px. Also the board header's project name.
-- **Title Small** (700, 17px): card, stage and install-card headings; docs
-  `h3` is 18px; stage-track and ruled-list headings run 18–19px.
-- **Body** (400, 16px, 1.65): running text, docs measure 780px. The home
-  problem statement is 17px, left-aligned in a 640px column; the board
+- **Title Small** (700, 17px): the "Prepcook" name in the simulated app's
+  sidebar; docs `h3` is 18px; stage-track and ruled-list headings run
+  18–19px.
+- **Body** (400, 16px, 1.65): running text, docs measure 780px. The
+  homepage's opening paragraph under the headline is 17px at 66ch; the
   homepage's and Tammy page's section ledes are 18px at 62ch (16px under
   640px), and the lede under the conversation is 18px Ink at 68ch.
-- **Body Small** (400, 15px): text inside cards, stages, the stage track and
-  ruled lists. Chat message bodies use it at 1.55 line height, capped at
+- **Body Small** (400, 15px): text in the stage track, the ruled lists and
+  the mode notes. Chat message bodies use it at 1.55 line height, capped at
   60ch (14.5px under 640px; 13.5px in the team-channel pane); the "never"
   list sets its items at 18px Ink (16px under 640px).
 - **Control / Nav** (600 / 500, 14px): buttons, header links, sidebar links.
 - **Label** (700, 11px, 0.08em, uppercase, Muted Text): navigation only, the
   docs-sidebar group titles and the docs breadcrumb.
 - **Mono** (400, 13px, 1.6): code blocks; inline code is 0.86em on a Panel
-  chip; stage numbers are 12px 500; board card keys are 12px; tool-call chips
+  chip; board card keys are 12px; tool-call chips
   are 11.5px; the triage report's label is 11px 500.
 
 ### Named Rules
@@ -460,19 +426,15 @@ place rather than introducing a heading.
 
 ## Layout
 
-- **Containers:** header, footer and docs at 1360px max; the current home page
-  at 1120px; hand-written article pages at 820px; the docs article at 780px.
-  Gutters are 24px, 16px under 640px.
+- **Containers:** header, footer and docs at 1360px max; the docs article at
+  780px; the homepage and Tammy page openings at 1440px and their sections at
+  1200px (below). Gutters are 24px, 16px under 640px.
 - **Docs grid:** sidebar 248px, article, on-this-page 216px, 48px gaps. Under
   1200px the on-this-page column folds into an inline `details` block above
   the article and the sidebar narrows to 232px. Under 900px the sidebar
   becomes a slide-in drawer (300px or 86vw) over a scrim, opened from a menu
   button.
-- **Home rhythm (current `src/home.html`):** hero padded 64px top, bands 72px
-  apart, cards and gallery items on 16px and 24–32px gaps. Feature grids run
-  three columns, two under 960px, one under 640px. Stage rows put the name in
-  a 240px column beside the text, stacking under 960px.
-- **Board homepage (`mock/home.html`):** the opening and the simulated board
+- **Homepage (`src/home.html`, `src/home.css`):** the opening and the simulated board
   run to 1440px; the pitch sits beside a 340–400px action column (the command,
   Get started, a one-line note) in a short band of about 220px, and the app
   window fills the rest of the first viewport (its height tracks the viewport
@@ -483,9 +445,9 @@ place rather than introducing a heading.
   under 900px; the five columns hold at least 176px each and scroll sideways
   at a fixed 244px under 640px. Everything stacks under 1100px; the stage
   track goes two-up there and one-up under 640px.
-- **Tammy page (`mock/tammy.html`):** the same 1440px opening and 1200px
-  sections as the board homepage. The opening is Tammy's wordmark (168px wide,
-  132px under 640px) over the headline, beside the action row (Set her up,
+- **Tammy page (`src/tammy.html`, `src/tammy.css`):** the same 1440px opening
+  and 1200px sections as the homepage. The opening is Tammy's wordmark (168px
+  wide, 132px under 640px) over the headline, beside the action row (Set her up,
   GitHub, a one-line note). Below it the conversation frame splits 7:5, the
   customer's thread beside the kitchen, at a viewport-tracking height between
   640px and 700px; the kitchen stacks a two-column board (3:2, Plan and
@@ -521,16 +483,16 @@ of lifting.
 ## Shapes
 
 Gentle, consistent corners: 8px for controls, code blocks, tables and nav
-items; 10px for cards, stage lists, screenshots, pager links and board cards;
-12px for the outermost frames, the simulated app window and the screenshot
-beside it on the board homepage, and the Tammy page's conversation frame, one
+items; 10px for docs screenshots, pager links and board cards;
+12px for the outermost frames, the simulated app window and the gate
+screenshot beside it on the homepage, and the Tammy page's conversation frame, one
 step larger than the cards they hold; 8px for chat avatars and the triage
 report;
-5px for inline code chips; full rounding for stage badges, chips, pills,
+5px for inline code chips; full rounding for chips, pills,
 tags, tool-call chips and switches. Inside a control the steps go smaller: 6px for the Chef/Prep segments
 and the project tile, 2px for the open-bugs bar segments. Status and stage
 dots are circles. Every container has a 1px border; screenshots get the same
-border and a 10px corner (12px on the board homepage) so they sit on the page
+border and a 10px corner (12px on the homepage) so they sit on the page
 like cards. The focus outline is 2px Enamel Blue, offset 2px, with a 4px
 corner.
 
@@ -549,19 +511,16 @@ Quiet and exact: thin borders, flat fills, nothing raised.
 - **Icon button:** 36px square, Surface fill, Border edge; used for the theme
   toggle and the mobile menu.
 
-### Cards / Containers
+### Containers
 
-- **Corner Style:** 10px.
+- **Corner Style:** 8px for code blocks, tables and the inline table of
+  contents; 10px for pager links and board cards.
 - **Background:** Surface on Paper.
 - **Shadow Strategy:** none (see Elevation & Depth).
 - **Border:** 1px Border.
-- **Internal Padding:** 20px for feature and install cards, 20px × 24px for
-  stage rows, 24px for the Tammy teaser.
-- Link rows sit at the bottom of a feature card, pushed down so a row of cards
-  aligns.
-- The board homepage uses no feature cards; its sections use the stage track
-  and ruled lists below. The card remains the container for the docs and the
-  other pages.
+- The site has no freestanding content card. The docs box only code, tables,
+  the inline table of contents and the pager; the homepage and the Tammy page
+  rule their lists instead of boxing them (see Ruled lists).
 
 ### Navigation
 
@@ -580,20 +539,13 @@ Quiet and exact: thin borders, flat fills, nothing raised.
 
 - **Block:** Raised body in a bordered 8px container, with a Surface header
   strip carrying the language in 12px mono and a ghost Copy button. Scrolls
-  sideways rather than wrapping. On the board homepage the install command
-  block sets its command at 16px.
+  sideways rather than wrapping. On the homepage the install command blocks
+  (the opening and the close) set the command at 16px.
 - **Inline:** Panel chip, 5px corners, 0.86em, Ink.
-
-### The stage list
-
-The five stages of the method as one bordered Surface list, each row a
-numbered Enamel Wash badge (26px, mono) beside the stage name and a one-line
-helper, then the stage's description. Divider lines separate the rows. It
-mirrors the board's left-to-right columns as a top-down reading order.
 
 ### The stage track
 
-The board homepage's telling of the same five stages, left to right as the
+The homepage's telling of the method's five stages, left to right as the
 board runs: five columns standing on a 2px Enamel Blue rule, each with a 12px
 dot at its start, the stage name, one line in Deep Enamel 600 saying what the
 stage proves, then a short paragraph. The last stage (Clean up) takes a Border
@@ -601,7 +553,7 @@ rule and a Muted Text dot. No boxes; the rule is the structure.
 
 ### Ruled lists
 
-Where the board homepage lists things, it rules them rather than boxing them:
+Where the homepage lists things, it rules them rather than boxing them:
 items separated by 1px Border lines top and bottom, 14–18px of vertical
 padding, a heading or label column and the text. Used for the extra
 capabilities, the quickstart steps (time in Deep Enamel 600 in a 170px column
@@ -631,14 +583,16 @@ cell in 13px Muted Text.
 
 ### Screenshot figure
 
-Full-width product screenshots in light and dark pairs (`<picture>` switches
-on `prefers-color-scheme`, and a script swaps the link target to the matching
-full-size image), framed with the 1px Border and 10px corner, captioned in
-13px Muted Text.
+Product screenshots in light and dark pairs (`<picture>` switches on
+`prefers-color-scheme`, the script forces the matching source when the reader
+picks a theme and swaps any full-size link to the matching image), framed with
+the 1px Border. In the docs they take a 10px corner; the homepage's gate
+screenshot takes the 12px frame corner on Surface and is captioned in 13px
+Muted Text.
 
 ### The simulated board
 
-The signature component of the board homepage: the app's own board drawn in
+The signature component of the homepage: the app's own board drawn in
 code at full size, labelled as a simulation, running the Pantry demo's bugs
 through the real stage rules.
 
@@ -726,7 +680,7 @@ a copy of Slack's interface or branding, and it is labelled as a simulation.
   the label TRIAGE REPORT in 11px 500 mono Ink, then a definition grid (What,
   Where, Fix for now, Confidence) with terms in Muted Text, at 12px, above the
   Convert to bug / Close actions.
-- **The sim bar:** above the frame, as on the board homepage: the bordered
+- **The sim bar:** above the frame, as on the homepage: the bordered
   "Simulated conversation on the Pantry demo" tag on the left, then the Show
   her tools switch (a 34 × 20px full-round track, Border when off and Enamel
   Blue when on, with a Surface knob that slides 14px; 13px 600 Ink label; a
@@ -747,14 +701,13 @@ a copy of Slack's interface or branding, and it is labelled as a simulation.
 
 ### Do:
 
-- **Do** take every colour from the custom properties in `site/src/site.css`
-  (and, for the board status colours, each mock's own mirror of them), and
-  keep them identical to the board app's tokens, except the dark-mode primary
+- **Do** take every colour, the board status colours included, from the
+  custom properties in `site/src/site.css`, and keep them identical to the board app's tokens, except the dark-mode primary
   hover, which is darker for contrast.
 - **Do** separate surfaces with a 1px Border and a tonal step; keep everything
   flat.
 - **Do** show the product with its own screenshots, always as a light and dark
-  pair, framed like a card.
+  pair, framed with the 1px Border.
 - **Do** let a section heading carry itself: a sentence that says something,
   with nothing above it.
 - **Do** label every simulation (the board, the conversation) as a

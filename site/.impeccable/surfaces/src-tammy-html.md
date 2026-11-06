@@ -1,13 +1,13 @@
 ---
 version: 1
-slug: "src-tammy-html"
-primary_target: "src/tammy.html"
-related_targets: ["mock/tammy.html"]
+slug: 'src-tammy-html'
+primary_target: 'src/tammy.html'
+related_targets: ['src/tammy.css', 'src/tammy.js']
 ---
 
 # Surface brief: Tammy page
 
-Scope: the prepcook.dev Tammy page (`site/src/tammy.html`), mocked as a standalone page at `site/mock/tammy.html` beside the homepage mock. Mode: Persuade, with the product leading the first viewport.
+Scope: the prepcook.dev Tammy page: `site/src/tammy.html`, with its stylesheet `site/src/tammy.css` and conversation script `site/src/tammy.js`. Mode: Persuade, with the product leading the first viewport.
 
 Audience and job: the team lead who runs a support channel and is weighing Tammy alongside Prepcook. They must see what the customer sees and what the team sees, believe she never overpromises, and reach her quickstart.
 

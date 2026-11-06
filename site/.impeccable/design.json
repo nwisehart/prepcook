@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T18:00:00.000Z",
+  "generatedAt": "2026-11-06T20:00:00.000Z",
   "title": "Design System: Prepcook website",
   "extensions": {
     "colorMeta": {
@@ -695,37 +695,25 @@
       }
     },
     "typographyMeta": {
-      "display": {
-        "displayName": "Display",
-        "purpose": "The wordmark hero of the current src/home.html; 38px under 640px. The board homepage has no wordmark hero."
-      },
       "home-headline": {
         "displayName": "Home Headline",
-        "purpose": "The board homepage h1, the one-line pitch; balanced, 26ch max."
+        "purpose": "The homepage h1, the one-line pitch, balanced and 26ch max; the Tammy page's two-line pitch at 24ch under her wordmark."
       },
       "home-section": {
         "displayName": "Home Section",
-        "purpose": "Board homepage section headings; balanced, 22ch max, no label above."
-      },
-      "lead": {
-        "displayName": "Lead",
-        "purpose": "The one-sentence pitch under the wordmark on the current home page; 20px under 640px."
+        "purpose": "Section headings on the homepage and the Tammy page; balanced, 22ch max, no label above."
       },
       "headline": {
         "displayName": "Headline",
         "purpose": "A docs page's h1; 26px under 640px."
       },
-      "title-lg": {
-        "displayName": "Title Large",
-        "purpose": "Band headings of the current home page."
-      },
       "title": {
         "displayName": "Title",
-        "purpose": "Docs h2, ruled above; 20px under 640px."
+        "purpose": "Docs h2, ruled above; 20px under 640px. Also the simulated board header's project name."
       },
       "title-sm": {
         "displayName": "Title Small",
-        "purpose": "Card, stage and install-card headings."
+        "purpose": "The \"Prepcook\" name in the simulated app's sidebar; docs h3 is 18px; stage-track and ruled-list headings run 18-19px."
       },
       "body": {
         "displayName": "Body",
@@ -733,7 +721,7 @@
       },
       "body-sm": {
         "displayName": "Body Small",
-        "purpose": "Text inside cards and stages."
+        "purpose": "Text in the stage track, the ruled lists and the mode notes; chat message bodies at 1.55 line height."
       },
       "control": {
         "displayName": "Control",
@@ -838,14 +826,9 @@
         "purpose": "On-this-page folds inline; sidebar narrows to 232px."
       },
       {
-        "name": "two-up",
-        "value": "959px",
-        "purpose": "Feature grids go to two columns; stage rows stack."
-      },
-      {
         "name": "drawer",
         "value": "899px",
-        "purpose": "Docs sidebar becomes a slide-in drawer; on the board homepage the app sidebar hides and the window is 560px tall. On the Tammy page the conversation frame stacks, the thread at 460px."
+        "purpose": "Docs sidebar becomes a slide-in drawer; on the homepage the app sidebar hides and the window is 560px tall. On the Tammy page the conversation frame stacks, the thread at 460px."
       },
       {
         "name": "phone",
@@ -860,12 +843,12 @@
       {
         "name": "board-sidebar-narrow",
         "value": "1359px",
-        "purpose": "Board homepage: app sidebar narrows to 192px and the mode description hides."
+        "purpose": "Homepage: app sidebar narrows to 192px and the mode description hides."
       },
       {
         "name": "board-stack",
         "value": "1099px",
-        "purpose": "Board homepage and Tammy page: opening, content splits and close stack; stage track and four-job track two-up."
+        "purpose": "Homepage and Tammy page: opening, content splits and close stack; stage track and four-job track two-up."
       }
     ],
     "themes": {
@@ -908,22 +891,6 @@
       "css": ".ds-sidebar { width: 248px; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-sidebar-title { margin: 0 0 6px; padding: 0 10px; color: var(--text-low, #6a6f78); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; } .ds-sidebar a { display: block; padding: 5px 10px; border-radius: 8px; color: var(--text, #4b4f56); font-size: 14px; font-weight: 500; line-height: 1.4; text-decoration: none; } .ds-sidebar a:hover { background: var(--panel, #efede8); color: var(--text-high, #1f2328); } .ds-sidebar a[aria-current='page'] { background: var(--brand-soft, #e7eef8); color: var(--brand-soft-fg, #2f5285); font-weight: 600; } .ds-sidebar a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; }"
     },
     {
-      "name": "Feature Card",
-      "kind": "card",
-      "refersTo": "card",
-      "description": "A bordered flat surface holding one idea, with its link pinned to the bottom.",
-      "html": "<article class=\"ds-card\"><h3>Reproduce first</h3><p>A bug card's Plan stage makes the failure happen, and only then explains it.</p><a href=\"#\">Reproduce first</a></article>",
-      "css": ".ds-card { display: flex; flex-direction: column; max-width: 340px; padding: 20px; border: 1px solid var(--border, #e4e1da); border-radius: 10px; background: var(--surface, #ffffff); color: var(--text, #4b4f56); font: 400 15px/1.65 var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-card h3 { margin: 0 0 8px; color: var(--text-high, #1f2328); font-size: 17px; font-weight: 700; } .ds-card p { margin: 0 0 12px; } .ds-card a { margin-top: auto; color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; } .ds-card a:hover { text-decoration-thickness: 2px; } .ds-card a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
-    },
-    {
-      "name": "Stage List",
-      "kind": "custom",
-      "refersTo": "step-badge",
-      "description": "The signature list of the method: numbered stages in one bordered surface.",
-      "html": "<ol class=\"ds-stages\"><li><span class=\"ds-step\">1</span><div><h3>Plan</h3><p class=\"ds-helper\">Reproduce it, then explain it</p></div></li><li><span class=\"ds-step\">2</span><div><h3>Execute</h3><p class=\"ds-helper\">The smallest fix, with tests</p></div></li></ol>",
-      "css": ".ds-stages { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border, #e4e1da); border-radius: 10px; background: var(--surface, #ffffff); font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-stages li { display: flex; gap: 12px; padding: 20px 24px; } .ds-stages li + li { border-top: 1px solid var(--divider, #f0eee9); } .ds-step { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 999px; background: var(--brand-soft, #e7eef8); color: var(--brand-soft-fg, #2f5285); font: 500 12px var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); } .ds-stages h3 { margin: 0; color: var(--text-high, #1f2328); font-size: 17px; font-weight: 700; line-height: 26px; } .ds-helper { margin: 0; color: var(--text-low, #6a6f78); font-size: 13px; }"
-    },
-    {
       "name": "Code Block",
       "kind": "custom",
       "refersTo": "code-block",
@@ -943,21 +910,21 @@
       "name": "Simulated Board: card and sim bar",
       "kind": "custom",
       "refersTo": "board-card",
-      "description": "The board homepage signature: a card that needs a person (amber strip, Approve / Review) under the sim bar (Simulated tag, Open bugs tally with segment bar, Merged tally, Chef/Prep control, Pause).",
+      "description": "The homepage signature: a card that needs a person (amber strip, Approve / Review) under the sim bar (Simulated tag, Open bugs tally with segment bar, Merged tally, Chef/Prep control, Pause).",
       "html": "<div class=\"ds-sim\"><div class=\"ds-simbar\"><p class=\"ds-simtag\">Simulated run on the Pantry demo</p><div class=\"ds-tally\" role=\"group\" aria-label=\"Open bugs\"><span>Open bugs</span><strong>5</strong><span class=\"ds-bar\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i><i></i><i class=\"off\"></i><i class=\"off\"></i><i class=\"off\"></i></span></div><div class=\"ds-tally ds-merged\" role=\"group\" aria-label=\"Merged\"><span>Merged</span><strong>3</strong></div><div class=\"ds-seg\" role=\"group\" aria-label=\"Autonomy mode\"><button type=\"button\" aria-pressed=\"true\">Chef mode</button><button type=\"button\" aria-pressed=\"false\">Prep mode</button></div><button class=\"ds-ctl\" type=\"button\" aria-pressed=\"false\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"3.5\" y=\"3\" width=\"3\" height=\"10\" rx=\"1\" fill=\"currentColor\"/><rect x=\"9.5\" y=\"3\" width=\"3\" height=\"10\" rx=\"1\" fill=\"currentColor\"/></svg><span>Pause</span></button></div><div class=\"ds-k ds-need\"><div class=\"ds-strip\"><span class=\"ds-dot ds-amber\"></span>Needs you · the RCA is ready</div><div class=\"ds-kbody\"><div class=\"ds-ktop\"><span class=\"ds-key\">DEF-2</span><span class=\"ds-chip ds-bug\">bug</span></div><p class=\"ds-ktitle\">Sharing a list fails for a user who exists</p><div class=\"ds-status\">Confidence high · no open questions</div><div class=\"ds-actions\"><button type=\"button\" class=\"ds-fbtn ds-primary\">Approve</button><button type=\"button\" class=\"ds-fbtn\">Review</button></div></div></div></div>",
       "css": ".ds-sim { display: grid; gap: 12px; max-width: 620px; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-simbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; } .ds-simtag { margin: 0; padding: 3px 9px; border: 1px solid var(--border, #e4e1da); border-radius: 999px; color: var(--text-low, #6a6f78); font-size: 12px; font-weight: 500; } .ds-tally { display: flex; align-items: baseline; gap: 8px; color: var(--text-low, #6a6f78); font-size: 13px; font-weight: 500; } .ds-tally strong { color: var(--text-high, #1f2328); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; } .ds-merged strong { color: var(--success, #1e7b4c); } .ds-bar { display: inline-flex; gap: 3px; align-self: center; } .ds-bar i { width: 6px; height: 14px; border-radius: 2px; background: var(--brand, #3f6aa6); transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1); } .ds-bar i.off { background: var(--border, #e4e1da); } .ds-seg { display: inline-flex; padding: 2px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--surface, #ffffff); } .ds-seg button, .ds-ctl { height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text, #4b4f56); font: 500 13px var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); cursor: pointer; } .ds-seg button[aria-pressed='true'] { background: var(--panel, #efede8); color: var(--text-high, #1f2328); font-weight: 600; } .ds-seg button:hover { color: var(--text-high, #1f2328); } .ds-ctl { display: inline-flex; align-items: center; gap: 6px; height: 36px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--surface, #ffffff); color: var(--text-high, #1f2328); font-weight: 600; } .ds-ctl:hover { background: var(--panel, #efede8); } .ds-ctl svg { width: 14px; height: 14px; } .ds-seg button:focus-visible, .ds-ctl:focus-visible, .ds-fbtn:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; } .ds-k { max-width: 260px; border: 1px solid var(--border, #e4e1da); border-radius: 10px; background: var(--surface, #ffffff); overflow: hidden; transition: border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1); } .ds-k.ds-need { border-color: var(--attention-border, #ebd9a8); } .ds-strip { display: flex; align-items: center; gap: 7px; padding: 7px 14px; background: var(--attention-soft, #fff4d6); color: var(--attention-fg, #9a6700); font-size: 12px; font-weight: 700; } .ds-dot { display: inline-block; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--brand, #3f6aa6); } .ds-amber { background: var(--attention, #d29a1c); } .ds-kbody { display: flex; flex-direction: column; gap: 7px; padding: 11px 14px 12px; } .ds-ktop { display: flex; align-items: center; gap: 6px; } .ds-key { color: var(--text-low, #6a6f78); font: 12px var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); } .ds-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 500; } .ds-bug { background: var(--error-soft, #fbe7e4); color: var(--error, #9b2c1f); } .ds-ktitle { margin: 0; color: var(--text-high, #1f2328); font-size: 13.5px; font-weight: 600; line-height: 1.35; } .ds-status { color: var(--text-low, #6a6f78); font-size: 12px; line-height: 1.35; } .ds-actions { display: flex; gap: 8px; margin-top: 2px; } .ds-fbtn { flex: 1; height: 30px; padding: 0 10px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--surface, #ffffff); color: var(--text-high, #1f2328); font: 600 13px var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); cursor: pointer; transition: background-color 0.15s, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1); } .ds-fbtn:active { transform: scale(0.96); } .ds-fbtn.ds-primary { border-color: var(--brand, #3f6aa6); background: var(--brand, #3f6aa6); color: var(--on-brand, #ffffff); } .ds-fbtn.ds-primary:active { background: var(--brand-hover, #2f5285); }"
     },
     {
       "name": "Stage Track",
       "kind": "custom",
-      "description": "The five stages left to right on a 2px Enamel Blue rule with dots; the last stage on a Border rule. Replaces boxed feature rows on the board homepage.",
+      "description": "The five stages left to right on a 2px Enamel Blue rule with dots; the last stage on a Border rule.",
       "html": "<ol class=\"ds-track\"><li><h3>Plan</h3><p class=\"ds-proves\">The bug happens, for the reported reason.</p><p>A harness makes the failure happen before the root-cause analysis is written.</p></li><li><h3>Execute</h3><p class=\"ds-proves\">The smallest change turns the harness green.</p><p>A new session fixes the mechanism and adds regression tests.</p></li><li><h3>Clean up</h3><p class=\"ds-proves\">Nothing left behind but what was learned.</p><p>The worktrees are archived; the analysis stays.</p></li></ol>",
       "css": ".ds-track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; max-width: 720px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-track li { position: relative; padding-top: 26px; border-top: 2px solid var(--brand, #3f6aa6); } .ds-track li:last-child { border-top-color: var(--border, #e4e1da); } .ds-track li::before { content: ''; position: absolute; top: -7px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--brand, #3f6aa6); box-shadow: 0 0 0 3px var(--bg, #f7f6f3); } .ds-track li:last-child::before { background: var(--text-low, #6a6f78); } .ds-track h3 { margin: 0 0 4px; color: var(--text-high, #1f2328); font-size: 19px; font-weight: 700; } .ds-proves { margin: 0 0 10px; color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 600; line-height: 1.4; } .ds-track p:not(.ds-proves) { margin: 0; font-size: 15px; line-height: 1.6; }"
     },
     {
       "name": "Ruled List",
       "kind": "custom",
-      "description": "Items separated by 1px Border rules instead of boxed in cards; the list form on the board homepage and the Tammy page (where the 'never' list marks each item with a short Enamel Blue dash).",
+      "description": "Items separated by 1px Border rules instead of boxed in cards; the list form on the homepage and the Tammy page (where the 'never' list marks each item with a short Enamel Blue dash).",
       "html": "<ul class=\"ds-ruled\"><li><h3>Investigations before bugs</h3><p>An investigation card runs Plan exactly as a bug does and stops until a person converts it or closes it.</p><a href=\"#\">Investigations and incidents</a></li><li><h3>Works alongside people</h3><p>It answers on a ticket only when it is its turn.</p><a href=\"#\">Working alongside people</a></li></ul>",
       "css": ".ds-ruled { max-width: 460px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-ruled li { padding: 18px 0; border-top: 1px solid var(--border, #e4e1da); } .ds-ruled li:last-child { border-bottom: 1px solid var(--border, #e4e1da); } .ds-ruled h3 { margin: 0 0 8px; color: var(--text-high, #1f2328); font-size: 18px; font-weight: 700; } .ds-ruled p { margin: 0 0 10px; font-size: 15px; line-height: 1.65; } .ds-ruled a { color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; } .ds-ruled a:hover { text-decoration-thickness: 2px; } .ds-ruled a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
     },
@@ -1018,9 +985,9 @@
       }
     ],
     "dos": [
-      "Do take every colour from the custom properties in `site/src/site.css` (and, for the board status colours, each mock's own mirror of them), and keep them identical to the board app's tokens, except the dark-mode primary hover, which is darker for contrast.",
+      "Do take every colour, the board status colours included, from the custom properties in `site/src/site.css`, and keep them identical to the board app's tokens, except the dark-mode primary hover, which is darker for contrast.",
       "Do separate surfaces with a 1px Border and a tonal step; keep everything flat.",
-      "Do show the product with its own screenshots, always as a light and dark pair, framed like a card.",
+      "Do show the product with its own screenshots, always as a light and dark pair, framed with the 1px Border.",
       "Do let a section heading carry itself: a sentence that says something, with nothing above it.",
       "Do label every simulation (the board, the conversation) as a simulation, pause it off screen, and under reduced motion start it paused: the board at its first state, the conversation shown whole.",
       "Do set keys, paths, commands and versions in JetBrains Mono.",

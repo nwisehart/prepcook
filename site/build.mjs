@@ -435,6 +435,15 @@ function tammyStructuredData() {
   };
 }
 
+// The <head> lines that load a hand-written page's own stylesheet and script,
+// both served from static/ beside site.css.
+function pageAssets(name) {
+  return (
+    `<link rel="stylesheet" href="static/${name}.css" />\n` +
+    `    <script src="static/${name}.js" defer></script>`
+  );
+}
+
 function page({
   out,
   title,
@@ -443,6 +452,7 @@ function page({
   section,
   docs = false,
   jsonLd = null,
+  head = '',
 }) {
   const root = rootPrefix(out);
   const html = fill(LAYOUT, {
@@ -457,6 +467,7 @@ function page({
       ? `<button class="icon-button menu-button" type="button" aria-label="Open the docs menu" aria-expanded="false" aria-controls="sidebar"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>`
       : '',
     main,
+    pageHead: head,
   });
   return responsiveImages(
     html.replace(
@@ -701,10 +712,6 @@ function firstParagraph(src) {
     : '';
 }
 
-// Where the README's problem paragraph turns from the problem to the method;
-// the home page shows the two halves as separate paragraphs.
-const PROBLEM_TURN = 'Prepcook puts those three steps';
-
 // The README's tagline: its first paragraph, entirely in bold. It is the
 // home page's lead and the start of its meta description.
 function readmeTagline() {
@@ -717,114 +724,24 @@ function readmeTagline() {
   return m[1].replace(/\s+/g, ' ').trim();
 }
 
-// Pieces of README.md and docs/images/README.md the home page shows, read at
-// build time so the home page cannot drift from them.
+// The install command the home page shows, read from Quickstart step 1 of
+// README.md at build time so the home page cannot drift from it.
 function homeValues() {
-  const readme = read('README.md');
-  const tokens = new Marked({ gfm: true }).lexer(readme);
-  const inline = (md, src = 'README.md') =>
-    rewriteHtml(new Marked({ gfm: true }).parseInline(md), src, 'index.html');
-
-  // The opening: the one-line tagline in bold, the problem paragraph (split
-  // in two on the home page where it turns from the problem to the method),
-  // and the paragraph that explains the name.
-  const paragraphs = tokens.filter(
-    (t) => t.type === 'paragraph' && !t.text.startsWith('<')
-  );
-  const problem = paragraphs[1].text.replace(/\s+/g, ' ');
-  const turn = problem.indexOf(PROBLEM_TURN);
-  if (turn === -1)
-    throw new Error(
-      `README.md: the second paragraph must contain "${PROBLEM_TURN}"`
-    );
-  const kitchen = paragraphs.find((t) => t.text.startsWith('A prep cook '));
-  if (!kitchen)
-    throw new Error('README.md: no paragraph starting "A prep cook"');
-  const kitchenSentences = kitchen.text
-    .replace(/\s+/g, ' ')
-    .split(/(?<=\.) (?=[A-Z])/);
-
-  const alt = boardAlt();
-
-  // "What it does": one paragraph per stage, each opening with **Stage.**
-  const start = tokens.findIndex(
-    (t) => t.type === 'heading' && t.text === 'What it does'
-  );
-  const stages = {};
-  for (const t of tokens.slice(start + 1)) {
-    if (t.type === 'heading') break;
-    const m =
-      t.type === 'paragraph' &&
-      t.text.match(/^\*\*([A-Za-z ]+)\.\*\*\s+([\s\S]*)$/);
-    if (m) stages[m[1]] = inline(m[2].replace(/\s+/g, ' '));
-  }
-  const helpers = {
-    Plan: 'Reproduce it, then explain it',
-    Execute: 'The smallest fix, with tests',
-    Review: 'Fresh eyes on the fix',
-    Shipped: 'PR open or merged; you clean up',
-    'Clean up': 'Worktrees archived',
-  };
-  const stageHtml = Object.entries(helpers)
-    .map(([name, helper], i) => {
-      if (!stages[name])
-        throw new Error(`README.md: no "What it does" paragraph for ${name}`);
-      return (
-        `<li class="stage"><div class="stage-name"><span class="stage-step">${i + 1}</span>` +
-        `<h3>${name}</h3><p class="stage-helper">${helper}</p></div>` +
-        `<p>${stages[name]}</p></li>`
-      );
-    })
-    .join('\n');
-
-  // The install commands from Quickstart step 1: the npx block (it starts
-  // with `npx`) and the release-tarball block (the one that runs `curl`).
+  const tokens = new Marked({ gfm: true }).lexer(read('README.md'));
   const installAt = tokens.findIndex(
     (t) => t.type === 'heading' && t.text.startsWith('1. Install and start')
   );
-  const installCode = [];
-  for (const t of tokens.slice(installAt + 1)) {
+  let npx;
+  for (const t of installAt === -1 ? [] : tokens.slice(installAt + 1)) {
     if (t.type === 'heading') break;
-    if (t.type === 'code') installCode.push(t);
+    if (t.type === 'code' && t.text.startsWith('npx ')) {
+      npx = t;
+      break;
+    }
   }
-  const npx = installCode.find((t) => t.text.startsWith('npx '));
-  const tarball = installCode.find((t) => /^curl /m.test(t.text));
-  if (installAt === -1 || !npx || !tarball)
-    throw new Error(
-      'README.md: Quickstart step 1 needs an npx code block and a curl code block'
-    );
-
-  // Captions: the first sentence of each row's "What it must show".
-  const shots = {};
-  for (const line of read('docs/images/README.md').split('\n')) {
-    const m = line.match(/^\| `([a-z-]+)\.png` \| (.+?) \|/);
-    if (m) shots[m[1]] = m[2].split(/(?<=\.) (?=[A-Z])/)[0];
-  }
-  const values = {
-    pitchLead: escapeHtml(readmeTagline()),
-    pitchProblem: inline(problem.slice(0, turn).trim()),
-    pitchMethod: inline(problem.slice(turn)),
-    whyTheName: inline(kitchenSentences.slice(0, 2).join(' ')),
-    boardAlt: escapeHtml(alt),
-    boardCaption: escapeHtml(alt),
-    stages: stageHtml,
-    installTarball: codeBlockHtml(tarball.text, tarball.lang),
-    installNpx: codeBlockHtml(npx.text, npx.lang),
-  };
-  for (const name of [
-    'card-rca',
-    'card-triaged',
-    'settings-integrations',
-    'settings-agents',
-    'quickstart-stand-up',
-  ]) {
-    if (!shots[name])
-      throw new Error(`docs/images/README.md: no row for ${name}.png`);
-    const html = inline(shots[name], 'docs/images/README.md');
-    values[`caption:${name}`] = html;
-    values[`alt:${name}`] = escapeHtml(stripTags(html));
-  }
-  return values;
+  if (!npx)
+    throw new Error('README.md: Quickstart step 1 needs an npx code block');
+  return { installNpx: codeBlockHtml(npx.text, npx.lang) };
 }
 
 function homeDescription() {
@@ -841,10 +758,22 @@ function pageSources() {
   return [
     {
       out: 'index.html',
-      sources: ['site/src/home.html', 'README.md', 'docs/images/README.md'],
+      sources: [
+        'site/src/home.html',
+        'site/src/home.css',
+        'site/src/home.js',
+        'README.md',
+      ],
     },
     ...PAGES.map((p) => ({ out: p.out, sources: [p.src] })),
-    { out: 'tammy.html', sources: ['site/src/tammy.html'] },
+    {
+      out: 'tammy.html',
+      sources: [
+        'site/src/tammy.html',
+        'site/src/tammy.css',
+        'site/src/tammy.js',
+      ],
+    },
   ];
 }
 
@@ -916,6 +845,11 @@ async function build() {
   }
   copy(path.join(SRC, 'site.css'), 'static/site.css');
   copy(path.join(SRC, 'site.js'), 'static/site.js');
+  // The home and Tammy pages each carry their own stylesheet and the script
+  // that runs their simulation.
+  for (const f of ['home.css', 'home.js', 'tammy.css', 'tammy.js']) {
+    copy(path.join(SRC, f), `static/${f}`);
+  }
 
   PAGES.forEach(docPage);
 
@@ -932,6 +866,7 @@ async function build() {
       main: home,
       section: 'home',
       jsonLd: homeStructuredData(),
+      head: pageAssets('home'),
     })
   );
 
@@ -945,6 +880,7 @@ async function build() {
       main: tammy,
       section: 'tammy',
       jsonLd: tammyStructuredData(),
+      head: pageAssets('tammy'),
     })
   );
 

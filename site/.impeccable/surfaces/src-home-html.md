@@ -1,13 +1,13 @@
 ---
 version: 1
-slug: "src-home-html"
-primary_target: "src/home.html"
-related_targets: ["mock/home.html"]
+slug: 'src-home-html'
+primary_target: 'src/home.html'
+related_targets: ['src/home.css', 'src/home.js']
 ---
 
 # Surface brief: homepage
 
-Scope: the prepcook.dev homepage (`site/src/home.html`), mocked as a standalone page at `site/mock/home.html` before the real template changes. Mode: Persuade, with the product leading the first viewport as it would on an Experience surface.
+Scope: the prepcook.dev homepage: `site/src/home.html`, with its stylesheet `site/src/home.css` and simulation `site/src/home.js`. Mode: Persuade, with the product leading the first viewport as it would on an Experience surface.
 
 Audience and job: the team lead deciding whether to adopt Prepcook. They must see the method working, believe a person keeps the final say, and reach the Pantry quickstart.
 
