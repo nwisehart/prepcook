@@ -40,8 +40,7 @@ Docs and a tour: [prepcook.dev](https://prepcook.dev/)
   </picture>
 </p>
 
-<!-- Uncomment the next line once scripts/board-video.mjs has generated docs/media/board.gif. -->
-<!-- ![The board in motion](docs/media/board.gif) -->
+![The board in motion: a bug approved out of Plan, a merged card cleaned up out of Shipped](docs/media/board.gif)
 
 ## What it does
 
