@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T12:00:00.000Z",
+  "generatedAt": "2026-11-06T18:00:00.000Z",
   "title": "Design System: Prepcook website",
   "extensions": {
     "colorMeta": {
@@ -215,18 +215,19 @@
       "enamel-blue-hover-dark": {
         "role": "primary",
         "displayName": "Enamel Hover (dark)",
-        "canonical": "#4a7fbf",
-        "oklch": "oklch(58.9% 0.114 254.2)",
+        "canonical": "#4676b4",
+        "oklch": "oklch(56.0% 0.110 255.5)",
         "tonalRamp": [
-          "#070c12",
-          "#15273e",
-          "#234670",
-          "#3367a6",
-          "#5b8cc8",
-          "#8fb1db",
-          "#c0d3eb",
-          "#e7effa"
-        ]
+          "#020b1b",
+          "#092240",
+          "#143a6a",
+          "#2c5b97",
+          "#5982b7",
+          "#89a7ce",
+          "#bacce4",
+          "#e9eff8"
+        ],
+        "note": "Darker than the board app's #4A7FBF so white button text clears 4.5:1 (4.66:1); the one site value that departs from the app."
       },
       "enamel-blue-text-dark": {
         "role": "primary",
@@ -763,7 +764,7 @@
         "purpose": "Draws the hollow To Do column dot. Not elevation."
       }
     ],
-    "elevation": "Flat. Nothing casts a shadow; surfaces separate by 1px borders and tonal steps. box-shadow appears only as a flat ring (the stage-track dot knockout and the hollow To Do dot). The mobile docs drawer sits over a scrim (ink at 45% light, near-black at 60% dark); in the simulated board the 'You' cursor and the 'Queue clear' veil (Paper at 94%) overlay the columns. A card moved by the cursor turns its edge Enamel Blue instead of lifting.",
+    "elevation": "Flat. Nothing casts a shadow; surfaces separate by 1px borders and tonal steps. box-shadow appears only as a flat ring (the stage-track dot knockout and the hollow To Do dot). The mobile docs drawer sits over a scrim (ink at 45% light, near-black at 60% dark); in the simulated board the 'You' cursor and the 'Queue clear' veil (Paper at 94%) overlay the columns; on the Tammy page a Paper veil covers the conversation frame between runs. A card moved by the cursor turns its edge Enamel Blue instead of lifting.",
     "focus": {
       "value": "2px solid var(--brand); outline-offset: 2px; border-radius: 4px",
       "purpose": "Every focusable element."
@@ -777,7 +778,7 @@
       {
         "name": "ease-out",
         "value": "cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "The simulated board: FLIP card moves, the mode switch, card edges, the open-bugs bar and the Queue clear veil."
+        "purpose": "The simulated board and the chat thread: FLIP card moves, the mode and Show her tools switches, card edges, the open-bugs bar, message entrances and the end-of-run veils."
       },
       {
         "name": "board-flip-move",
@@ -808,6 +809,26 @@
         "name": "sim-pausing",
         "value": "IntersectionObserver threshold 0.15 + visibilitychange",
         "purpose": "The simulation clock and every animation in the window pause off screen or in a hidden tab; reduced motion starts paused."
+      },
+      {
+        "name": "message-enter",
+        "value": "opacity 0 to 1, translateY(6px) to none, 360ms ease-out",
+        "purpose": "A chat message arriving in the thread or the team pane; off under prefers-reduced-motion."
+      },
+      {
+        "name": "typing-dots",
+        "value": "opacity 0.25 to 1 at 40%, 1.2s infinite, dots staggered 0.2s",
+        "purpose": "Tammy's typing indicator; still under prefers-reduced-motion."
+      },
+      {
+        "name": "pane-autoscroll",
+        "value": "scrollTo bottom, smooth (instant under reduced motion)",
+        "purpose": "The thread and team panes follow the newest message inside the pane; a board shorter than the triaged card scrolls to its actions."
+      },
+      {
+        "name": "conversation-pausing",
+        "value": "IntersectionObserver threshold 0.15 + visibilitychange",
+        "purpose": "The conversation's simulation clock and every animation in the frame pause off screen or in a hidden tab; reduced motion shows the whole conversation, paused, and Play replays it."
       }
     ],
     "breakpoints": [
@@ -824,12 +845,12 @@
       {
         "name": "drawer",
         "value": "899px",
-        "purpose": "Docs sidebar becomes a slide-in drawer; on the board homepage the app sidebar hides and the window is 560px tall."
+        "purpose": "Docs sidebar becomes a slide-in drawer; on the board homepage the app sidebar hides and the window is 560px tall. On the Tammy page the conversation frame stacks, the thread at 460px."
       },
       {
         "name": "phone",
         "value": "639px",
-        "purpose": "Single column, 16px gutters, smaller display sizes; board columns fix at 244px and scroll sideways."
+        "purpose": "Single column, 16px gutters, smaller display sizes; board columns fix at 244px and scroll sideways. On the Tammy page tables restack into blocks and the seats list stacks."
       },
       {
         "name": "narrow",
@@ -844,7 +865,7 @@
       {
         "name": "board-stack",
         "value": "1099px",
-        "purpose": "Board homepage: opening, gate, knowledge and close stack; stage track two-up."
+        "purpose": "Board homepage and Tammy page: opening, content splits and close stack; stage track and four-job track two-up."
       }
     ],
     "themes": {
@@ -936,14 +957,37 @@
     {
       "name": "Ruled List",
       "kind": "custom",
-      "description": "Items separated by 1px Border rules instead of boxed in cards; the board homepage list form.",
+      "description": "Items separated by 1px Border rules instead of boxed in cards; the list form on the board homepage and the Tammy page (where the 'never' list marks each item with a short Enamel Blue dash).",
       "html": "<ul class=\"ds-ruled\"><li><h3>Investigations before bugs</h3><p>An investigation card runs Plan exactly as a bug does and stops until a person converts it or closes it.</p><a href=\"#\">Investigations and incidents</a></li><li><h3>Works alongside people</h3><p>It answers on a ticket only when it is its turn.</p><a href=\"#\">Working alongside people</a></li></ul>",
       "css": ".ds-ruled { max-width: 460px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-ruled li { padding: 18px 0; border-top: 1px solid var(--border, #e4e1da); } .ds-ruled li:last-child { border-bottom: 1px solid var(--border, #e4e1da); } .ds-ruled h3 { margin: 0 0 8px; color: var(--text-high, #1f2328); font-size: 18px; font-weight: 700; } .ds-ruled p { margin: 0 0 10px; font-size: 15px; line-height: 1.65; } .ds-ruled a { color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; } .ds-ruled a:hover { text-decoration-thickness: 2px; } .ds-ruled a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
+    },
+    {
+      "name": "Chat Thread",
+      "kind": "custom",
+      "description": "The Tammy page signature: a pane header and messages with avatars, a citation line, tool-call chips (hidden by Show her tools) and the typing indicator. A generic chat thread in Prepcook's own look.",
+      "html": "<div class=\"ds-thread\"><div class=\"ds-pane-head\"><span># help</span><small>Pantry's support channel in Slack</small></div><div class=\"ds-msgs\"><div class=\"ds-msg\"><div class=\"ds-avatar ds-cust\">M</div><div class=\"ds-body\"><div class=\"ds-who\">Maya <time>10:02</time></div><p>Hi, how do I share a list with my partner?</p></div></div><div class=\"ds-msg\"><div class=\"ds-avatar ds-tammy\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"7\" fill=\"#3f6aa6\"/></svg></div><div class=\"ds-body\"><div class=\"ds-who\">Tammy <em>App</em> <time>10:02</time></div><p>Open the list, choose Share, and type their email address.</p><span class=\"ds-cite\"><svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" aria-hidden=\"true\"><path d=\"M2.5 3.5c2-.8 3.8-.8 5.5.6v9c-1.7-1.4-3.5-1.4-5.5-.6zM13.5 3.5c-2-.8-3.8-.8-5.5.6v9c1.7-1.4 3.5-1.4 5.5-.6z\"/></svg>From the menu: Sharing a list with someone</span><div class=\"ds-tools\"><span class=\"ds-tool\">search_menu</span></div></div></div><div class=\"ds-msg\"><div class=\"ds-avatar ds-team\">S</div><div class=\"ds-body\"><div class=\"ds-who\">Sam <time>10:41</time></div><p>Converting it now.</p></div></div></div></div>",
+      "css": ".ds-thread { max-width: 620px; border: 1px solid var(--border, #e4e1da); border-radius: 12px; background: var(--surface, #ffffff); overflow: hidden; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-pane-head { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 20px; border-bottom: 1px solid var(--border, #e4e1da); color: var(--text-high, #1f2328); font-size: 14px; font-weight: 700; } .ds-pane-head small { color: var(--text-low, #6a6f78); font-size: 12px; font-weight: 500; } .ds-msgs { display: flex; flex-direction: column; gap: 4px; padding: 16px 20px 20px; } .ds-msg { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 0 12px; padding: 8px 0; } .ds-avatar { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; font-weight: 700; } .ds-cust { background: var(--panel, #efede8); color: var(--text-high, #1f2328); } .ds-team { background: var(--brand-soft, #e7eef8); color: var(--brand-soft-fg, #2f5285); } .ds-tammy { background: var(--bg, #f7f6f3); border: 1px solid var(--border, #e4e1da); } .ds-tammy svg { width: 24px; height: 24px; } .ds-who { display: flex; align-items: baseline; gap: 8px; color: var(--text-high, #1f2328); font-size: 14px; font-weight: 700; } .ds-who time { color: var(--text-low, #6a6f78); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; } .ds-who em { padding: 0 6px; border-radius: 4px; background: var(--panel, #efede8); color: var(--text-low, #6a6f78); font-size: 11px; font-style: normal; font-weight: 600; } .ds-body { max-width: 60ch; } .ds-body p { margin: 2px 0 0; color: var(--text, #4b4f56); font-size: 15px; line-height: 1.55; } .ds-cite { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--text-low, #6a6f78); font-size: 13px; font-style: italic; } .ds-cite svg { width: 14px; height: 14px; flex-shrink: 0; } .ds-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; } .ds-tool { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; background: var(--panel, #efede8); color: var(--text-high, #1f2328); font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 11.5px; } .ds-tool::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--brand, #3f6aa6); }"
+    },
+    {
+      "name": "Triage Report Card",
+      "kind": "card",
+      "refersTo": "triage-report",
+      "description": "A board card Tammy filed, triaged: investigation chip, Needs-you strip and edge, the Raised triage report with its dt/dd grid, and the Convert to bug / Close actions.",
+      "html": "<article class=\"ds-k\"><div class=\"ds-strip\"><span class=\"ds-dot\"></span>Needs you</div><div class=\"ds-kbody\"><div class=\"ds-ktop\"><span class=\"ds-key\">DEF-3</span><span class=\"ds-chip\">investigation</span></div><p class=\"ds-ktitle\">Items my partner ticked off still show as to buy</p><div class=\"ds-report\"><b>TRIAGE REPORT</b><dl><dt>What</dt><dd>Ticks save, but the other phone re-reads the list only when it opens.</dd><dt>Where</dt><dd>List sync, mobile app</dd><dt>Fix for now</dt><dd>Reopen the list</dd><dt>Confidence</dt><dd>High</dd></dl></div><div class=\"ds-actions\"><button type=\"button\" class=\"ds-fbtn ds-primary\">Convert to bug</button><button type=\"button\" class=\"ds-fbtn\">Close</button></div></div></article>",
+      "css": ".ds-k { max-width: 320px; border: 1px solid var(--attention-border, #ebd9a8); border-radius: 10px; background: var(--surface, #ffffff); overflow: hidden; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-strip { display: flex; align-items: center; gap: 7px; padding: 7px 14px; background: var(--attention-soft, #fff4d6); color: var(--attention-fg, #9a6700); font-size: 12px; font-weight: 700; } .ds-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--attention, #d29a1c); } .ds-kbody { display: flex; flex-direction: column; gap: 7px; padding: 11px 14px 12px; } .ds-ktop { display: flex; align-items: center; gap: 6px; } .ds-key { color: var(--text-low, #6a6f78); font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 12px; } .ds-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; background: var(--panel, #efede8); color: var(--text, #4b4f56); font-size: 11.5px; font-weight: 500; } .ds-ktitle { margin: 0; color: var(--text-high, #1f2328); font-size: 13.5px; font-weight: 600; line-height: 1.35; } .ds-report { padding: 9px 10px; border: 1px solid var(--divider, #f0eee9); border-radius: 8px; background: var(--raised, #fbfaf8); color: var(--text, #4b4f56); font-size: 12px; line-height: 1.5; } .ds-report b { display: block; margin-bottom: 4px; color: var(--text-high, #1f2328); font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace); font-size: 11px; font-weight: 500; } .ds-report dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; margin: 0; } .ds-report dt { color: var(--text-low, #6a6f78); } .ds-report dd { margin: 0; } .ds-actions { display: flex; gap: 8px; } .ds-fbtn { flex: 1; height: 30px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--surface, #ffffff); color: var(--text-high, #1f2328); font: 600 13px var(--font-sans, 'Figtree', sans-serif); cursor: pointer; } .ds-fbtn:hover { background: var(--panel, #efede8); } .ds-fbtn.ds-primary { border-color: var(--brand, #3f6aa6); background: var(--brand, #3f6aa6); color: var(--on-brand, #ffffff); } .ds-fbtn.ds-primary:hover { background: var(--brand-hover, #2f5285); } .ds-fbtn:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
+    },
+    {
+      "name": "Show her tools switch",
+      "kind": "custom",
+      "refersTo": "switch",
+      "description": "A labelled role=switch: Border track off, Enamel Blue on, Surface knob sliding 14px.",
+      "html": "<button class=\"ds-toggle\" type=\"button\" role=\"switch\" aria-checked=\"true\"><span class=\"ds-switch\" aria-hidden=\"true\"></span>Show her tools</button>",
+      "css": ".ds-toggle { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: var(--text-high, #1f2328); font: 600 13px var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); cursor: pointer; } .ds-switch { position: relative; width: 34px; height: 20px; border-radius: 999px; background: var(--border, #e4e1da); transition: background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1); } .ds-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface, #ffffff); transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); } .ds-toggle[aria-checked='true'] .ds-switch { background: var(--brand, #3f6aa6); } .ds-toggle[aria-checked='true'] .ds-switch::after { transform: translateX(14px); } .ds-toggle:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
     }
   ],
   "narrative": {
     "northStar": "The pass",
-    "overview": "The pass is the counter between the kitchen and the dining room, where every plate is checked before it goes out. The site is laid out like one: a clean, lit counter (the warm-paper ground) with the work set down on it to be inspected. The work is the product itself, shown in its own screenshots, its own stage names, its own documentation and, on the homepage, its own board drawn in code and running a simulated queue, and the site's job is to present it plainly enough that a lead can check it and sign off.\n\nThe system is the same one the board app uses, so the site and the product read as one object. It is flat and border-defined: surfaces are white panels with a 1px warm-grey edge, nothing is raised by a shadow, and a single enamel blue marks what can be acted on. Density is that of good documentation: generous line height, a 640–780px reading measure, and headings that state a claim on their own rather than waiting under a label. Light and dark are both first-class; the dark palette is a chosen set of warm near-blacks, not an inversion.\n\nThe kitchen appears in the words and the mark (a pleated toque) and may appear visually only in sparing, restrained nods that earn their place. The site must never become a dark hacker hero: no black-first terminal aesthetic, no neon, no animated code.",
+    "overview": "The pass is the counter between the kitchen and the dining room, where every plate is checked before it goes out. The site is laid out like one: a clean, lit counter (the warm-paper ground) with the work set down on it to be inspected. The work is the product itself, shown in its own screenshots, its own stage names, its own documentation and, on the homepage and the Tammy page, its own board drawn in code and running a simulated queue (on the Tammy page beside a customer's conversation), and the site's job is to present it plainly enough that a lead can check it and sign off.\n\nThe system is the same one the board app uses, so the site and the product read as one object. It is flat and border-defined: surfaces are white panels with a 1px warm-grey edge, nothing is raised by a shadow, and a single enamel blue marks what can be acted on. Density is that of good documentation: generous line height, a 640–780px reading measure, and headings that state a claim on their own rather than waiting under a label. Light and dark are both first-class; the dark palette is a chosen set of warm near-blacks, not an inversion.\n\nThe kitchen appears in the words and the mark (a pleated toque) and may appear visually only in sparing, restrained nods that earn their place. The site must never become a dark hacker hero: no black-first terminal aesthetic, no neon, no animated code.",
     "keyCharacteristics": [
       "Warm paper ground, white bordered surfaces, no shadows.",
       "One accent, enamel blue, for actions, links, the mark and the current page.",
@@ -974,11 +1018,11 @@
       }
     ],
     "dos": [
-      "Do take every colour from the custom properties in `site/src/site.css` (and, for the board status colours, the homepage's own mirror of them), and keep them identical to the board app's tokens.",
+      "Do take every colour from the custom properties in `site/src/site.css` (and, for the board status colours, each mock's own mirror of them), and keep them identical to the board app's tokens, except the dark-mode primary hover, which is darker for contrast.",
       "Do separate surfaces with a 1px Border and a tonal step; keep everything flat.",
       "Do show the product with its own screenshots, always as a light and dark pair, framed like a card.",
       "Do let a section heading carry itself: a sentence that says something, with nothing above it.",
-      "Do label the simulated board as a simulation, pause it off screen, and start it paused under reduced motion.",
+      "Do label every simulation (the board, the conversation) as a simulation, pause it off screen, and under reduced motion start it paused: the board at its first state, the conversation shown whole.",
       "Do set keys, paths, commands and versions in JetBrains Mono.",
       "Do design both themes at once; dark is a warm near-black palette, not an inversion.",
       "Do keep any kitchen imagery to a sparing, restrained nod that earns its place; the toque mark is the anchor."

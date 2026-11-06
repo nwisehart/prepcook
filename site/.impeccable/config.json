@@ -20,6 +20,24 @@
         ],
         "createdAt": "2026-11-06T16:58:05.786Z",
         "reason": "builder: 'Pantry' appears in the simulated app's project switcher, crumb and title exactly as the real board shows it"
+      },
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "mock/tammy.html"
+        ],
+        "createdAt": "2026-11-06T18:08:15.153Z",
+        "reason": "builder: the three dots are a literal chat typing indicator shown only while Tammy composes a reply"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "mock/tammy.html"
+        ],
+        "createdAt": "2026-11-06T18:08:15.217Z",
+        "reason": "builder: pane headers are 46px rows with 20px side padding and centred text; the table uses site.css's padded cells"
       }
     ]
   }
