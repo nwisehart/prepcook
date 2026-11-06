@@ -40,6 +40,8 @@ Docs and a tour: [prepcook.dev](https://prepcook.dev/)
   </picture>
 </p>
 
+![The board in motion: a bug approved out of Plan, a merged card cleaned up out of Shipped](docs/media/board.gif)
+
 ## What it does
 
 A card moves through five stages, left to right across the board.

@@ -1,5 +1,5 @@
-// Checks every internal reference in site/dist: each href, src and srcset
-// candidate (every one of them, so each WebP size of a screenshot) in
+// Checks every internal reference in site/dist: each href, src, poster and
+// srcset candidate (every one of them, so each WebP size of a screenshot) in
 // an HTML page that is not an absolute URL (http:, https:, mailto:, data:)
 // must be relative, must not point at a .md file, must resolve to a file in
 // dist, and its #anchor must be an id on the target page.
@@ -13,6 +13,12 @@
 //
 // sitemap.xml must list every page in dist, and every <loc> in it must be a
 // page in dist.
+//
+// blog/feed.xml, the RSS feed, is read away from the site, so every URL in
+// it (each <link>, <guid> and atom:link, and each href, src and srcset
+// candidate in a post's content:encoded) must be absolute; one under
+// SITE_URL must resolve to a file in dist, its #anchor to an id there, and
+// each item's <link> to a page.
 //
 // Run on its own (`node check-links.mjs`) or as the last step of build.mjs.
 
@@ -67,7 +73,7 @@ function selfUrls(html) {
 
 function references(html) {
   const refs = [];
-  for (const m of html.matchAll(/\s(href|src)="([^"]*)"/g)) {
+  for (const m of html.matchAll(/\s(href|src|poster)="([^"]*)"/g)) {
     refs.push(decode(m[2]));
   }
   for (const m of html.matchAll(/\ssrcset="([^"]*)"/g)) {
@@ -112,10 +118,9 @@ function checkSitemap(dist) {
   return failures;
 }
 
-export function checkLinks(dist) {
-  const failures = checkSitemap(dist);
+function idsReader() {
   const ids = new Map();
-  const idsOf = (file) => {
+  return (file) => {
     if (!ids.has(file)) {
       const html = fs.readFileSync(file, 'utf8');
       ids.set(
@@ -125,6 +130,68 @@ export function checkLinks(dist) {
     }
     return ids.get(file);
   };
+}
+
+// The feed's URLs that are not absolute, or that point into the site at
+// something dist does not have.
+function checkFeed(dist, idsOf) {
+  const file = path.join(dist, 'blog', 'feed.xml');
+  if (!fs.existsSync(file)) return ['blog/feed.xml is missing'];
+  const xml = fs.readFileSync(file, 'utf8');
+  const failures = [];
+  const urls = [];
+  for (const m of xml.matchAll(/<(link|guid)\b[^>]*>([^<]*)<\/\1>/g)) {
+    urls.push({ url: decode(m[2].trim()), item: false });
+  }
+  for (const m of xml.matchAll(/<item>[\s\S]*?<link>([^<]*)<\/link>/g)) {
+    urls.push({ url: decode(m[1].trim()), item: true });
+  }
+  for (const m of xml.matchAll(/<atom:link\b[^>]*\shref="([^"]*)"/g)) {
+    urls.push({ url: decode(m[1]), item: false });
+  }
+  for (const m of xml.matchAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g)) {
+    for (const url of references(m[1])) urls.push({ url, item: false });
+  }
+  for (const { url, item } of urls) {
+    if (!/^(?:https?:|mailto:)/i.test(url)) {
+      failures.push(`blog/feed.xml: ${url || 'an empty URL'} is not absolute`);
+      continue;
+    }
+    if (!url.startsWith(SITE_URL)) {
+      if (SELF.test(url))
+        failures.push(`blog/feed.xml: ${url} is not under ${SITE_URL}`);
+      continue;
+    }
+    const rest = url.slice(SITE_URL.length);
+    const hashAt = rest.indexOf('#');
+    const target = decodeURI(
+      (hashAt === -1 ? rest : rest.slice(0, hashAt)).split('?')[0]
+    );
+    const anchor =
+      hashAt === -1 ? '' : decodeURIComponent(rest.slice(hashAt + 1));
+    let resolved = path.join(dist, target);
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+      resolved = path.join(resolved, 'index.html');
+    }
+    if (!fs.existsSync(resolved)) {
+      failures.push(`blog/feed.xml: ${url} is missing from the site`);
+      continue;
+    }
+    if (item && !resolved.endsWith('.html')) {
+      failures.push(`blog/feed.xml: item link ${url} is not a page`);
+    }
+    if (anchor && resolved.endsWith('.html') && !idsOf(resolved).has(anchor)) {
+      failures.push(
+        `blog/feed.xml: no #${anchor} on ${path.relative(dist, resolved)}`
+      );
+    }
+  }
+  return failures;
+}
+
+export function checkLinks(dist) {
+  const idsOf = idsReader();
+  const failures = [...checkSitemap(dist), ...checkFeed(dist, idsOf)];
 
   for (const file of htmlFiles(dist)) {
     const page = path.relative(dist, file);
