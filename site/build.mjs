@@ -150,6 +150,7 @@ const DESCRIPTIONS = {
 const COPIED = [
   ...listFiles('docs/images', (f) => f.endsWith('.png')),
   ...listFiles('assets/brand', (f) => f.endsWith('.svg')),
+  ...listFiles('assets/videos', (f) => /\.(mp4|jpg)$/.test(f)),
 ];
 const COPIED_SET = new Set(COPIED);
 
