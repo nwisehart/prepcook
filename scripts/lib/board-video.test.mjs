@@ -23,6 +23,8 @@ import {
   gifArgs,
   gifPaletteArgs,
   mp4Args,
+  OUTPUTS,
+  outputsFor,
   PACE,
   plannedMs,
   READING_BEATS,
@@ -274,3 +276,17 @@ test(
     assert.ok(bytes.indexOf("moov") < bytes.indexOf("mdat"));
   },
 );
+
+test("the dark film is named board-dark, beside the light board.*", () => {
+  assert.deepEqual(outputsFor("light"), OUTPUTS);
+  assert.deepEqual(OUTPUTS, {
+    webm: "board.webm",
+    mp4: "board.mp4",
+    gif: "board.gif",
+  });
+  assert.deepEqual(outputsFor("dark"), {
+    webm: "board-dark.webm",
+    mp4: "board-dark.mp4",
+    gif: "board-dark.gif",
+  });
+});

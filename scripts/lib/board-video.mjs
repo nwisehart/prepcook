@@ -110,11 +110,18 @@ export function plannedMs(storyboard = STORYBOARD, pace = PACE) {
 }
 
 // The files written into --out, next to each other.
-export const OUTPUTS = {
-  webm: "board.webm",
-  mp4: "board.mp4",
-  gif: "board.gif",
-};
+// The film's files per theme: board.* for the light film, board-dark.* for
+// the dark one, so the site can play whichever matches the reader's theme.
+export function outputsFor(theme) {
+  const suffix = theme === "dark" ? "-dark" : "";
+  return {
+    webm: `board${suffix}.webm`,
+    mp4: `board${suffix}.mp4`,
+    gif: `board${suffix}.gif`,
+  };
+}
+
+export const OUTPUTS = outputsFor("light");
 
 // The MP4 and the GIF widths, and the GIF's limit: GitHub renders a README
 // image of any size, but one over a few megabytes makes the page slow.
@@ -255,7 +262,8 @@ function run(ffmpeg, args) {
   }
 }
 
-// Writes OUTPUTS into `outDir` from the recording at `raw`. With ffmpeg the
+// Writes `outputs` (OUTPUTS unless a theme's names are given) into `outDir`
+// from the recording at `raw`. With ffmpeg the
 // WebM is cut to the storyboard and the MP4 and GIF are made from it;
 // without, the recording is copied as it is, and an MP4 or GIF left from an
 // earlier run is removed so the three never disagree. `scratch` holds the
@@ -267,14 +275,15 @@ export function writeOutputs({
   durationMs,
   ffmpeg,
   scratch,
+  outputs = OUTPUTS,
   log = console.log,
 }) {
   mkdirSync(outDir, { recursive: true });
   const at = (name) => path.join(outDir, name);
   const size = (file) => statSync(file).size;
   if (!ffmpeg) {
-    copyFileSync(raw, at(OUTPUTS.webm));
-    for (const name of [OUTPUTS.mp4, OUTPUTS.gif]) {
+    copyFileSync(raw, at(outputs.webm));
+    for (const name of [outputs.mp4, outputs.gif]) {
       if (existsSync(at(name))) {
         rmSync(at(name));
         log(
@@ -284,21 +293,21 @@ export function writeOutputs({
     }
     return {
       trimmed: false,
-      files: [{ name: OUTPUTS.webm, bytes: size(at(OUTPUTS.webm)) }],
+      files: [{ name: outputs.webm, bytes: size(at(outputs.webm)) }],
     };
   }
-  run(ffmpeg, trimArgs(raw, at(OUTPUTS.webm), startMs, durationMs));
-  run(ffmpeg, mp4Args(at(OUTPUTS.webm), at(OUTPUTS.mp4)));
+  run(ffmpeg, trimArgs(raw, at(outputs.webm), startMs, durationMs));
+  run(ffmpeg, mp4Args(at(outputs.webm), at(outputs.mp4)));
   const palette = path.join(scratch, "palette.png");
   let index = 0;
   let outcome;
   for (;;) {
     const attempt = GIF_ATTEMPTS[index];
-    run(ffmpeg, gifPaletteArgs(at(OUTPUTS.webm), palette, attempt));
-    run(ffmpeg, gifArgs(at(OUTPUTS.webm), palette, at(OUTPUTS.gif), attempt));
-    const bytes = size(at(OUTPUTS.gif));
+    run(ffmpeg, gifPaletteArgs(at(outputs.webm), palette, attempt));
+    run(ffmpeg, gifArgs(at(outputs.webm), palette, at(outputs.gif), attempt));
+    const bytes = size(at(outputs.gif));
     log(
-      `${OUTPUTS.gif}: ${attempt.width} wide at ${attempt.fps} fps is ${formatBytes(bytes)}`,
+      `${outputs.gif}: ${attempt.width} wide at ${attempt.fps} fps is ${formatBytes(bytes)}`,
     );
     outcome = afterGifAttempt(index, bytes);
     if (outcome.keep) break;
@@ -307,7 +316,7 @@ export function writeOutputs({
   return {
     trimmed: true,
     gif: { ...GIF_ATTEMPTS[index], over: outcome.over },
-    files: Object.values(OUTPUTS).map((name) => ({
+    files: Object.values(outputs).map((name) => ({
       name,
       bytes: size(at(name)),
     })),

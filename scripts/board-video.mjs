@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Records the Pantry board as a short film, 20 to 30 seconds in the light
-// theme at 1440×900 and device scale 2, with Playwright's recordVideo, from a
+// theme (or the dark one, with --theme dark) at 1440×900 and device scale 2,
+// with Playwright's recordVideo, from a
 // running Prepcook. It is a sibling of scripts/screenshots.mjs and is run the
 // same way: on a Mac with Prepcook running (`prepcook up`), the orchestrator
 // switched off (Settings → Orchestrator → Enable automatic agent launches),
@@ -8,7 +9,7 @@
 // exported.
 //
 //   PREPCOOK_API_TOKEN=… node scripts/board-video.mjs [--seed] [--url http://127.0.0.1:4100]
-//     [--repo ../prepcook-demo] [--out docs/media] [--chromium <path>]
+//     [--theme light|dark] [--repo ../prepcook-demo] [--out docs/media] [--chromium <path>]
 //     [--mask <text>]… [--list] [--doctor]
 //
 // The server (--url, else the one `prepcook status` reports), the token and
@@ -95,7 +96,8 @@
 // text of any sync error the page shows. Anything that
 // looks like a token is masked in the report.
 //
-// Outputs, next to each other in --out (default docs/media/): board.webm,
+// Outputs, next to each other in --out (default docs/media/), named board-dark.*
+// instead of board.* with --theme dark: board.webm,
 // Playwright's recording cut to the storyboard; and, when a system ffmpeg is
 // on the PATH, board.mp4 (H.264, yuv420p, faststart, 1440 wide) and board.gif
 // (960 wide at 12 fps from a two-pass palette, dropping to 10 fps and then
@@ -113,7 +115,7 @@ import {
   FILM_SECONDS,
   findFfmpeg,
   formatBytes,
-  OUTPUTS,
+  outputsFor,
   PACE,
   plannedMs,
   STORYBOARD,
@@ -165,7 +167,7 @@ const DOCTORED = ["planning", "triaged", "done"];
 const DOCTOR_SHAPES = ["issues", "pull_requests", "pull_request_issues"];
 
 function usage() {
-  return `usage: node scripts/board-video.mjs [--seed] [--url <server>] [--repo <path>]
+  return `usage: node scripts/board-video.mjs [--seed] [--url <server>] [--theme light|dark] [--repo <path>]
        [--out <dir>] [--chromium <path>] [--mask <text>]… [--list] [--doctor]`;
 }
 
@@ -180,6 +182,7 @@ function parseOptions() {
       options: {
         url: { type: "string" },
         seed: { type: "boolean", default: false },
+        theme: { type: "string", default: "light" },
         repo: { type: "string", default: path.join("..", "prepcook-demo") },
         out: { type: "string", default: path.join("docs", "media") },
         chromium: { type: "string" },
@@ -192,8 +195,14 @@ function parseOptions() {
   } catch (error) {
     throw new Fatal(`${error.message}\n${usage()}`, 2);
   }
+  if (parsed.theme !== "light" && parsed.theme !== "dark")
+    throw new Fatal(
+      `--theme is light or dark, not ${parsed.theme}\n${usage()}`,
+      2,
+    );
   return {
     ...parsed,
+    outputs: outputsFor(parsed.theme),
     // Relative paths are taken from the repository root, as screenshots.mjs
     // takes them.
     repo: path.resolve(ROOT, parsed.repo),
@@ -201,10 +210,10 @@ function parseOptions() {
   };
 }
 
-function printList(out) {
+function printList({ out, theme, outputs }) {
   const rel = path.relative(process.cwd(), out) || ".";
   console.log(
-    `A ${(plannedMs() / 1000).toFixed(1)} s film of the Pantry board, light theme, ${VIEWPORT.width}×${VIEWPORT.height} at ${SCALE}x, into ${rel}/:\n`,
+    `A ${(plannedMs() / 1000).toFixed(1)} s film of the Pantry board, ${theme} theme, ${VIEWPORT.width}×${VIEWPORT.height} at ${SCALE}x, into ${rel}/:\n`,
   );
   STORYBOARD.forEach((step, i) => {
     const ms = step.beats.reduce((total, beat) => total + PACE[beat], 0);
@@ -212,7 +221,7 @@ function printList(out) {
     console.log(`   ${step.shows}`);
   });
   console.log(
-    `\nfiles: ${OUTPUTS.webm}; with ffmpeg on the PATH also ${OUTPUTS.mp4} and ${OUTPUTS.gif}`,
+    `\nfiles: ${outputs.webm}; with ffmpeg on the PATH also ${outputs.mp4} and ${outputs.gif}`,
   );
 }
 
@@ -561,7 +570,7 @@ async function doctor(opts, client, ctx) {
 
   const browser = await launchChromium(opts.chromium);
   try {
-    const context = await newBoardContext(browser, "light");
+    const context = await newBoardContext(browser, opts.theme);
     const page = await context.newPage();
     page.prepcookWarnings = [];
     const recorder = recordShapeRequests(page);
@@ -1000,7 +1009,7 @@ async function record(opts, opening, prepare, scratch) {
   const marks = {};
   let raw;
   try {
-    const context = await newBoardContext(browser, "light", {
+    const context = await newBoardContext(browser, opts.theme, {
       recordVideo: { dir: scratch, size: VIEWPORT },
     });
     await context.addInitScript(cursorOverlay);
@@ -1059,7 +1068,7 @@ async function main() {
     return 0;
   }
   if (opts.list) {
-    printList(opts.out);
+    printList(opts);
     return 0;
   }
   const token = process.env.PREPCOOK_API_TOKEN?.trim();
@@ -1126,6 +1135,7 @@ async function main() {
       durationMs: durationMs + 1000,
       ffmpeg,
       scratch,
+      outputs: opts.outputs,
     });
     for (const file of result.files) {
       console.log(
@@ -1141,12 +1151,12 @@ async function main() {
     }
     if (result.gif?.over) {
       console.warn(
-        `warning: ${OUTPUTS.gif} is still over ${formatBytes(6_000_000)} at ${result.gif.width} wide and ${result.gif.fps} fps`,
+        `warning: ${opts.outputs.gif} is still over ${formatBytes(6_000_000)} at ${result.gif.width} wide and ${result.gif.fps} fps`,
       );
     }
     if (!result.trimmed) {
       console.log(
-        `\nffmpeg is not on the PATH, so ${OUTPUTS.webm} is the recording as it is (the page load included) and there is no ${OUTPUTS.mp4} or ${OUTPUTS.gif}. Install it and run again:\n\n  brew install ffmpeg\n`,
+        `\nffmpeg is not on the PATH, so ${opts.outputs.webm} is the recording as it is (the page load included) and there is no ${opts.outputs.mp4} or ${opts.outputs.gif}. Install it and run again:\n\n  brew install ffmpeg\n`,
       );
     }
   } finally {

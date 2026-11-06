@@ -11,6 +11,7 @@
 // at the end and fails the build on any broken reference.
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -446,12 +447,28 @@ function tammyStructuredData() {
   };
 }
 
+// A static/ file's URL with a hash of its content as the query, so a deploy
+// that changes the file changes the URL and no browser pairs a new page with
+// a stylesheet or script it cached before (Pages lets them cache 10 minutes).
+// The file must already be copied into dist.
+const assetHashes = new Map();
+function assetUrl(rel) {
+  if (!assetHashes.has(rel)) {
+    const hash = createHash('sha256')
+      .update(fs.readFileSync(path.join(DIST, rel)))
+      .digest('hex')
+      .slice(0, 10);
+    assetHashes.set(rel, hash);
+  }
+  return `${rel}?v=${assetHashes.get(rel)}`;
+}
+
 // The <head> lines that load a hand-written page's own stylesheet and script,
 // both served from static/ beside site.css.
 function pageAssets(name) {
   return (
-    `<link rel="stylesheet" href="static/${name}.css" />\n` +
-    `    <script src="static/${name}.js" defer></script>`
+    `<link rel="stylesheet" href="${assetUrl(`static/${name}.css`)}" />\n` +
+    `    <script src="${assetUrl(`static/${name}.js`)}" defer></script>`
   );
 }
 
@@ -489,6 +506,8 @@ function page({
       : '',
     main,
     pageHead: head,
+    siteCss: assetUrl('static/site.css'),
+    siteJs: assetUrl('static/site.js'),
   });
   return responsiveImages(
     html.replace(
@@ -769,13 +788,28 @@ function homeValues() {
 // board.webm is there, the home page's figure marked data-board-film plays it,
 // with board.mp4 as the second source when that is there too and the board
 // screenshot as its poster; without it, the figure keeps the screenshot
-// home.html gives it.
+// home.html gives it. When the dark film (board-dark.webm, and its MP4) is
+// there too, its sources come first under the dark media query, as a
+// <picture>'s do, and site.js switches them, and the poster, with the theme.
 const BOARD_FILM = 'docs/media/board.webm';
+const BOARD_FILM_MP4 = 'docs/media/board.mp4';
+const BOARD_FILM_DARK = 'docs/media/board-dark.webm';
+const BOARD_FILM_DARK_MP4 = 'docs/media/board-dark.mp4';
+const DARK = '(prefers-color-scheme: dark)';
 const FILM_ALT =
   'The Pantry board in motion: a bug approved out of Plan into Execute, and a merged card cleaned up out of Shipped';
-const BOARD_FILM_MP4 = 'docs/media/board.mp4';
 const FILM_SLOT =
   /(<figure\b[^>]*\bdata-board-film\b[^>]*>\s*)<picture>[\s\S]*?<\/picture>/;
+
+function filmSources(webm, mp4, media) {
+  const at = media ? ` media="${media}"` : '';
+  return [
+    `<source src="${webm}" type="video/webm"${at} />`,
+    ...(COPIED_SET.has(mp4)
+      ? [`<source src="${mp4}" type="video/mp4"${at} />`]
+      : []),
+  ];
+}
 
 function withBoardFilm(home, alt) {
   if (!COPIED_SET.has(BOARD_FILM)) return home;
@@ -783,16 +817,18 @@ function withBoardFilm(home, alt) {
     throw new Error(
       'site/src/home.html: no <figure data-board-film> with a <picture> for the film to replace'
     );
+  const dark = COPIED_SET.has(BOARD_FILM_DARK);
   const sources = [
-    `<source src="${BOARD_FILM}" type="video/webm" />`,
-    ...(COPIED_SET.has(BOARD_FILM_MP4)
-      ? [`<source src="${BOARD_FILM_MP4}" type="video/mp4" />`]
-      : []),
+    ...(dark ? filmSources(BOARD_FILM_DARK, BOARD_FILM_DARK_MP4, DARK) : []),
+    ...filmSources(BOARD_FILM, BOARD_FILM_MP4),
   ];
+  const darkPoster = dark
+    ? ' data-dark-poster="docs/images/board-dark.png"'
+    : '';
   return home.replace(
     FILM_SLOT,
     (_, open) =>
-      `${open}<video class="board-film" autoplay muted loop playsinline poster="docs/images/board.png" width="1440" height="900" aria-label="${escapeHtml(alt)}">${sources.join('')}</video>`
+      `${open}<video class="board-film" autoplay muted loop playsinline poster="docs/images/board.png"${darkPoster} width="1440" height="900" aria-label="${escapeHtml(alt)}">${sources.join('')}</video>`
   );
 }
 
