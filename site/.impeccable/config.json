@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "mock/home.html"
+        ],
+        "createdAt": "2026-11-06T16:58:05.744Z",
+        "reason": "builder: the 2px-inset segmented control replicates the board app's own ButtonGroup; the buttons carry their own 12px padding"
+      },
+      {
+        "rule": "repeated-container-text",
+        "value": "*",
+        "files": [
+          "mock/home.html"
+        ],
+        "createdAt": "2026-11-06T16:58:05.786Z",
+        "reason": "builder: 'Pantry' appears in the simulated app's project switcher, crumb and title exactly as the real board shows it"
+      }
+    ]
+  }
+}

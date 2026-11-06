@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T06:20:23.082Z",
+  "generatedAt": "2026-11-06T12:00:00.000Z",
   "title": "Design System: Prepcook website",
   "extensions": {
     "colorMeta": {
@@ -419,16 +419,296 @@
           "#d0d1d3",
           "#eeeeef"
         ]
+      },
+      "attention": {
+        "role": "status",
+        "displayName": "Needs-You Amber",
+        "canonical": "#d29a1c",
+        "oklch": "oklch(72.1% 0.142 81.1)",
+        "tonalRamp": [
+          "#130900",
+          "#322000",
+          "#583d00",
+          "#805c09",
+          "#ac7d0f",
+          "#c9a564",
+          "#e6cea3",
+          "#fcecd2"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "attention-fg": {
+        "role": "status",
+        "displayName": "Needs-You Amber Text",
+        "canonical": "#9a6700",
+        "oklch": "oklch(55.4% 0.117 75.0)",
+        "tonalRamp": [
+          "#130900",
+          "#331f00",
+          "#5b3b00",
+          "#865900",
+          "#aa7d38",
+          "#c7a474",
+          "#e5cdad",
+          "#fbecd8"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "attention-soft": {
+        "role": "status",
+        "displayName": "Needs-You Amber Wash",
+        "canonical": "#fff4d6",
+        "oklch": "oklch(96.8% 0.041 90.2)",
+        "tonalRamp": [
+          "#0d0b06",
+          "#282419",
+          "#484231",
+          "#6b634b",
+          "#8e866e",
+          "#b1aa98",
+          "#d5d1c4",
+          "#f1eee6"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "attention-border": {
+        "role": "status",
+        "displayName": "Needs-You Amber Edge",
+        "canonical": "#ebd9a8",
+        "oklch": "oklch(88.8% 0.067 90.3)",
+        "tonalRamp": [
+          "#0e0b04",
+          "#2a2312",
+          "#4c4125",
+          "#716239",
+          "#94855d",
+          "#b5aa8c",
+          "#d8d1bc",
+          "#f3eee1"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "success": {
+        "role": "status",
+        "displayName": "Merged Green",
+        "canonical": "#1e7b4c",
+        "oklch": "oklch(51.8% 0.113 156.1)",
+        "tonalRamp": [
+          "#020f06",
+          "#082b19",
+          "#164e30",
+          "#24744a",
+          "#4f986d",
+          "#84b998",
+          "#b8dbc4",
+          "#dff5e6"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "success-soft": {
+        "role": "status",
+        "displayName": "Merged Green Wash",
+        "canonical": "#e3f3ea",
+        "oklch": "oklch(95.0% 0.021 161.5)",
+        "tonalRamp": [
+          "#090c0a",
+          "#202622",
+          "#3c4540",
+          "#5a6760",
+          "#7d8a83",
+          "#a4aea8",
+          "#ccd3cf",
+          "#ebf0ed"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "error": {
+        "role": "status",
+        "displayName": "Bug Red",
+        "canonical": "#9b2c1f",
+        "oklch": "oklch(46.3% 0.149 30.2)",
+        "tonalRamp": [
+          "#190403",
+          "#40140e",
+          "#6f281e",
+          "#a23e31",
+          "#c86555",
+          "#e29386",
+          "#f9c2b8",
+          "#ffe9e5"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "error-soft": {
+        "role": "status",
+        "displayName": "Bug Red Wash",
+        "canonical": "#fbe7e4",
+        "oklch": "oklch(94.3% 0.022 27.8)",
+        "tonalRamp": [
+          "#0e0a0a",
+          "#292221",
+          "#4a3f3e",
+          "#6e5f5d",
+          "#928280",
+          "#b4a8a6",
+          "#d7cfcd",
+          "#f2edec"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "attention-dark": {
+        "role": "status",
+        "displayName": "Needs-You Amber (dark)",
+        "canonical": "#e7b94c",
+        "oklch": "oklch(80.7% 0.135 85.7)",
+        "tonalRamp": [
+          "#120a00",
+          "#302100",
+          "#543f03",
+          "#7d5e07",
+          "#a6801d",
+          "#c4a768",
+          "#e2cfa5",
+          "#faedd3"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "attention-fg-dark": {
+        "role": "status",
+        "displayName": "Needs-You Amber Text (dark)",
+        "canonical": "#e7b94c",
+        "oklch": "oklch(80.7% 0.135 85.7)",
+        "tonalRamp": [
+          "#120a00",
+          "#302100",
+          "#543f03",
+          "#7d5e07",
+          "#a6801d",
+          "#c4a768",
+          "#e2cfa5",
+          "#faedd3"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "attention-soft-dark": {
+        "role": "status",
+        "displayName": "Needs-You Amber Wash (dark)",
+        "canonical": "#3a3120",
+        "oklch": "oklch(31.8% 0.031 82.9)",
+        "tonalRamp": [
+          "#0d0b07",
+          "#27231c",
+          "#484236",
+          "#6b6251",
+          "#8e8574",
+          "#b1aa9d",
+          "#d5d0c7",
+          "#f1eee8"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "attention-border-dark": {
+        "role": "status",
+        "displayName": "Needs-You Amber Edge (dark)",
+        "canonical": "#5a4a1f",
+        "oklch": "oklch(41.6% 0.064 88.9)",
+        "tonalRamp": [
+          "#0e0b04",
+          "#2a2312",
+          "#4c4126",
+          "#71623b",
+          "#94855f",
+          "#b5aa8d",
+          "#d8d0bd",
+          "#f3eee2"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "success-dark": {
+        "role": "status",
+        "displayName": "Merged Green (dark)",
+        "canonical": "#5fc08a",
+        "oklch": "oklch(73.4% 0.122 157.1)",
+        "tonalRamp": [
+          "#010f06",
+          "#042c18",
+          "#0b4f30",
+          "#167649",
+          "#47996c",
+          "#80ba97",
+          "#b5dcc3",
+          "#ddf6e6"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "success-soft-dark": {
+        "role": "status",
+        "displayName": "Merged Green Wash (dark)",
+        "canonical": "#1f3a2c",
+        "oklch": "oklch(32.2% 0.042 160.2)",
+        "tonalRamp": [
+          "#070d09",
+          "#1c2721",
+          "#35473d",
+          "#516a5c",
+          "#748d7f",
+          "#9db0a5",
+          "#c7d5cd",
+          "#e8f1ec"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "error-dark": {
+        "role": "status",
+        "displayName": "Bug Red (dark)",
+        "canonical": "#f0a39b",
+        "oklch": "oklch(78.8% 0.093 25.9)",
+        "tonalRamp": [
+          "#140706",
+          "#371b19",
+          "#603430",
+          "#8d4f4a",
+          "#b2736d",
+          "#cf9d97",
+          "#ebc7c3",
+          "#fee9e6"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
+      },
+      "error-soft-dark": {
+        "role": "status",
+        "displayName": "Bug Red Wash (dark)",
+        "canonical": "#432a28",
+        "oklch": "oklch(31.5% 0.038 24.5)",
+        "tonalRamp": [
+          "#0f0a09",
+          "#2c2120",
+          "#503d3b",
+          "#765c5a",
+          "#997f7c",
+          "#baa5a3",
+          "#dccdcc",
+          "#f5eceb"
+        ],
+        "scope": "Simulated board only; mirrored from packages/web-core/src/app/styles/new/index.css."
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "The home-page wordmark only; 38px under 640px."
+        "purpose": "The wordmark hero of the current src/home.html; 38px under 640px. The board homepage has no wordmark hero."
+      },
+      "home-headline": {
+        "displayName": "Home Headline",
+        "purpose": "The board homepage h1, the one-line pitch; balanced, 26ch max."
+      },
+      "home-section": {
+        "displayName": "Home Section",
+        "purpose": "Board homepage section headings; balanced, 22ch max, no label above."
       },
       "lead": {
         "displayName": "Lead",
-        "purpose": "The one-sentence pitch under the wordmark; 20px under 640px."
+        "purpose": "The one-sentence pitch under the wordmark on the current home page; 20px under 640px."
       },
       "headline": {
         "displayName": "Headline",
@@ -436,7 +716,7 @@
       },
       "title-lg": {
         "displayName": "Title Large",
-        "purpose": "Home-page band headings."
+        "purpose": "Band headings of the current home page."
       },
       "title": {
         "displayName": "Title",
@@ -464,15 +744,26 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Uppercase eyebrows, sidebar group titles, the breadcrumb."
+        "purpose": "Navigation only: docs-sidebar group titles and the docs breadcrumb. Never an eyebrow above a heading."
       },
       "mono": {
         "displayName": "Mono",
         "purpose": "Code blocks, keys, paths, commands and versions."
       }
     },
-    "shadows": [],
-    "elevation": "Flat. No box-shadow anywhere; surfaces separate by 1px borders and tonal steps. The mobile docs drawer sits over a scrim (ink at 45% light, near-black at 60% dark).",
+    "shadows": [
+      {
+        "name": "knockout-ring",
+        "value": "0 0 0 3px var(--bg)",
+        "purpose": "Flat Paper halo cutting a stage-track dot out of its rule. Not elevation."
+      },
+      {
+        "name": "hollow-dot-ring",
+        "value": "inset 0 0 0 2px var(--text-low)",
+        "purpose": "Draws the hollow To Do column dot. Not elevation."
+      }
+    ],
+    "elevation": "Flat. Nothing casts a shadow; surfaces separate by 1px borders and tonal steps. box-shadow appears only as a flat ring (the stage-track dot knockout and the hollow To Do dot). The mobile docs drawer sits over a scrim (ink at 45% light, near-black at 60% dark); in the simulated board the 'You' cursor and the 'Queue clear' veil (Paper at 94%) overlay the columns. A card moved by the cursor turns its edge Enamel Blue instead of lifting.",
     "focus": {
       "value": "2px solid var(--brand); outline-offset: 2px; border-radius: 4px",
       "purpose": "Every focusable element."
@@ -482,6 +773,41 @@
         "name": "drawer-slide",
         "value": "transform 0.18s ease, visibility 0.18s",
         "purpose": "The mobile docs sidebar sliding in; off under prefers-reduced-motion."
+      },
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The simulated board: FLIP card moves, the mode switch, card edges, the open-bugs bar and the Queue clear veil."
+      },
+      {
+        "name": "board-flip-move",
+        "value": "720ms across columns, 420ms within one, ease-out",
+        "purpose": "Each card plays from its old box to its new one after a render; off under prefers-reduced-motion."
+      },
+      {
+        "name": "board-card-enter",
+        "value": "opacity 0 to 1, translateY(-10px) to none, 500ms ease-out",
+        "purpose": "A newly filed card arriving in To Do."
+      },
+      {
+        "name": "cursor-glide",
+        "value": "cubic-bezier(0.45, 0, 0.2, 1)",
+        "purpose": "The 'You' cursor travelling to the card that needs a person."
+      },
+      {
+        "name": "working-breathe",
+        "value": "opacity to 0.35 at 50%, 1.6s ease-in-out infinite",
+        "purpose": "The working dot on a card status line; stopped under prefers-reduced-motion."
+      },
+      {
+        "name": "button-press",
+        "value": "transform scale(0.96), 0.15s ease-out",
+        "purpose": "A card action button pressed by the cursor."
+      },
+      {
+        "name": "sim-pausing",
+        "value": "IntersectionObserver threshold 0.15 + visibilitychange",
+        "purpose": "The simulation clock and every animation in the window pause off screen or in a hidden tab; reduced motion starts paused."
       }
     ],
     "breakpoints": [
@@ -498,17 +824,27 @@
       {
         "name": "drawer",
         "value": "899px",
-        "purpose": "Docs sidebar becomes a slide-in drawer."
+        "purpose": "Docs sidebar becomes a slide-in drawer; on the board homepage the app sidebar hides and the window is 560px tall."
       },
       {
         "name": "phone",
         "value": "639px",
-        "purpose": "Single column, 16px gutters, smaller display sizes."
+        "purpose": "Single column, 16px gutters, smaller display sizes; board columns fix at 244px and scroll sideways."
       },
       {
         "name": "narrow",
         "value": "479px",
         "purpose": "The external GitHub header link is hidden."
+      },
+      {
+        "name": "board-sidebar-narrow",
+        "value": "1359px",
+        "purpose": "Board homepage: app sidebar narrows to 192px and the mode description hides."
+      },
+      {
+        "name": "board-stack",
+        "value": "1099px",
+        "purpose": "Board homepage: opening, gate, knowledge and close stack; stage track two-up."
       }
     ],
     "themes": {
@@ -581,52 +917,76 @@
       "description": "Keys, paths and commands inside running text.",
       "html": "<p class=\"ds-prose\">Run <code class=\"ds-code-inline\">prepcook status</code> to see what is running.</p>",
       "css": ".ds-prose { color: var(--text, #4b4f56); font: 400 16px/1.65 var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); } .ds-code-inline { padding: 1px 5px; border-radius: 5px; background: var(--panel, #efede8); color: var(--text-high, #1f2328); font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); font-size: 0.86em; }"
+    },
+    {
+      "name": "Simulated Board: card and sim bar",
+      "kind": "custom",
+      "refersTo": "board-card",
+      "description": "The board homepage signature: a card that needs a person (amber strip, Approve / Review) under the sim bar (Simulated tag, Open bugs tally with segment bar, Merged tally, Chef/Prep control, Pause).",
+      "html": "<div class=\"ds-sim\"><div class=\"ds-simbar\"><p class=\"ds-simtag\">Simulated run on the Pantry demo</p><div class=\"ds-tally\" role=\"group\" aria-label=\"Open bugs\"><span>Open bugs</span><strong>5</strong><span class=\"ds-bar\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i><i></i><i class=\"off\"></i><i class=\"off\"></i><i class=\"off\"></i></span></div><div class=\"ds-tally ds-merged\" role=\"group\" aria-label=\"Merged\"><span>Merged</span><strong>3</strong></div><div class=\"ds-seg\" role=\"group\" aria-label=\"Autonomy mode\"><button type=\"button\" aria-pressed=\"true\">Chef mode</button><button type=\"button\" aria-pressed=\"false\">Prep mode</button></div><button class=\"ds-ctl\" type=\"button\" aria-pressed=\"false\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><rect x=\"3.5\" y=\"3\" width=\"3\" height=\"10\" rx=\"1\" fill=\"currentColor\"/><rect x=\"9.5\" y=\"3\" width=\"3\" height=\"10\" rx=\"1\" fill=\"currentColor\"/></svg><span>Pause</span></button></div><div class=\"ds-k ds-need\"><div class=\"ds-strip\"><span class=\"ds-dot ds-amber\"></span>Needs you · the RCA is ready</div><div class=\"ds-kbody\"><div class=\"ds-ktop\"><span class=\"ds-key\">DEF-2</span><span class=\"ds-chip ds-bug\">bug</span></div><p class=\"ds-ktitle\">Sharing a list fails for a user who exists</p><div class=\"ds-status\">Confidence high · no open questions</div><div class=\"ds-actions\"><button type=\"button\" class=\"ds-fbtn ds-primary\">Approve</button><button type=\"button\" class=\"ds-fbtn\">Review</button></div></div></div></div>",
+      "css": ".ds-sim { display: grid; gap: 12px; max-width: 620px; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-simbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; } .ds-simtag { margin: 0; padding: 3px 9px; border: 1px solid var(--border, #e4e1da); border-radius: 999px; color: var(--text-low, #6a6f78); font-size: 12px; font-weight: 500; } .ds-tally { display: flex; align-items: baseline; gap: 8px; color: var(--text-low, #6a6f78); font-size: 13px; font-weight: 500; } .ds-tally strong { color: var(--text-high, #1f2328); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; } .ds-merged strong { color: var(--success, #1e7b4c); } .ds-bar { display: inline-flex; gap: 3px; align-self: center; } .ds-bar i { width: 6px; height: 14px; border-radius: 2px; background: var(--brand, #3f6aa6); transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1); } .ds-bar i.off { background: var(--border, #e4e1da); } .ds-seg { display: inline-flex; padding: 2px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--surface, #ffffff); } .ds-seg button, .ds-ctl { height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text, #4b4f56); font: 500 13px var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); cursor: pointer; } .ds-seg button[aria-pressed='true'] { background: var(--panel, #efede8); color: var(--text-high, #1f2328); font-weight: 600; } .ds-seg button:hover { color: var(--text-high, #1f2328); } .ds-ctl { display: inline-flex; align-items: center; gap: 6px; height: 36px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--surface, #ffffff); color: var(--text-high, #1f2328); font-weight: 600; } .ds-ctl:hover { background: var(--panel, #efede8); } .ds-ctl svg { width: 14px; height: 14px; } .ds-seg button:focus-visible, .ds-ctl:focus-visible, .ds-fbtn:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; } .ds-k { max-width: 260px; border: 1px solid var(--border, #e4e1da); border-radius: 10px; background: var(--surface, #ffffff); overflow: hidden; transition: border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1); } .ds-k.ds-need { border-color: var(--attention-border, #ebd9a8); } .ds-strip { display: flex; align-items: center; gap: 7px; padding: 7px 14px; background: var(--attention-soft, #fff4d6); color: var(--attention-fg, #9a6700); font-size: 12px; font-weight: 700; } .ds-dot { display: inline-block; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--brand, #3f6aa6); } .ds-amber { background: var(--attention, #d29a1c); } .ds-kbody { display: flex; flex-direction: column; gap: 7px; padding: 11px 14px 12px; } .ds-ktop { display: flex; align-items: center; gap: 6px; } .ds-key { color: var(--text-low, #6a6f78); font: 12px var(--font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace); } .ds-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 500; } .ds-bug { background: var(--error-soft, #fbe7e4); color: var(--error, #9b2c1f); } .ds-ktitle { margin: 0; color: var(--text-high, #1f2328); font-size: 13.5px; font-weight: 600; line-height: 1.35; } .ds-status { color: var(--text-low, #6a6f78); font-size: 12px; line-height: 1.35; } .ds-actions { display: flex; gap: 8px; margin-top: 2px; } .ds-fbtn { flex: 1; height: 30px; padding: 0 10px; border: 1px solid var(--border, #e4e1da); border-radius: 8px; background: var(--surface, #ffffff); color: var(--text-high, #1f2328); font: 600 13px var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); cursor: pointer; transition: background-color 0.15s, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1); } .ds-fbtn:active { transform: scale(0.96); } .ds-fbtn.ds-primary { border-color: var(--brand, #3f6aa6); background: var(--brand, #3f6aa6); color: var(--on-brand, #ffffff); } .ds-fbtn.ds-primary:active { background: var(--brand-hover, #2f5285); }"
+    },
+    {
+      "name": "Stage Track",
+      "kind": "custom",
+      "description": "The five stages left to right on a 2px Enamel Blue rule with dots; the last stage on a Border rule. Replaces boxed feature rows on the board homepage.",
+      "html": "<ol class=\"ds-track\"><li><h3>Plan</h3><p class=\"ds-proves\">The bug happens, for the reported reason.</p><p>A harness makes the failure happen before the root-cause analysis is written.</p></li><li><h3>Execute</h3><p class=\"ds-proves\">The smallest change turns the harness green.</p><p>A new session fixes the mechanism and adds regression tests.</p></li><li><h3>Clean up</h3><p class=\"ds-proves\">Nothing left behind but what was learned.</p><p>The worktrees are archived; the analysis stays.</p></li></ol>",
+      "css": ".ds-track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; max-width: 720px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-track li { position: relative; padding-top: 26px; border-top: 2px solid var(--brand, #3f6aa6); } .ds-track li:last-child { border-top-color: var(--border, #e4e1da); } .ds-track li::before { content: ''; position: absolute; top: -7px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--brand, #3f6aa6); box-shadow: 0 0 0 3px var(--bg, #f7f6f3); } .ds-track li:last-child::before { background: var(--text-low, #6a6f78); } .ds-track h3 { margin: 0 0 4px; color: var(--text-high, #1f2328); font-size: 19px; font-weight: 700; } .ds-proves { margin: 0 0 10px; color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 600; line-height: 1.4; } .ds-track p:not(.ds-proves) { margin: 0; font-size: 15px; line-height: 1.6; }"
+    },
+    {
+      "name": "Ruled List",
+      "kind": "custom",
+      "description": "Items separated by 1px Border rules instead of boxed in cards; the board homepage list form.",
+      "html": "<ul class=\"ds-ruled\"><li><h3>Investigations before bugs</h3><p>An investigation card runs Plan exactly as a bug does and stops until a person converts it or closes it.</p><a href=\"#\">Investigations and incidents</a></li><li><h3>Works alongside people</h3><p>It answers on a ticket only when it is its turn.</p><a href=\"#\">Working alongside people</a></li></ul>",
+      "css": ".ds-ruled { max-width: 460px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans, 'Figtree', ui-sans-serif, system-ui, sans-serif); color: var(--text, #4b4f56); } .ds-ruled li { padding: 18px 0; border-top: 1px solid var(--border, #e4e1da); } .ds-ruled li:last-child { border-bottom: 1px solid var(--border, #e4e1da); } .ds-ruled h3 { margin: 0 0 8px; color: var(--text-high, #1f2328); font-size: 18px; font-weight: 700; } .ds-ruled p { margin: 0 0 10px; font-size: 15px; line-height: 1.65; } .ds-ruled a { color: var(--brand-text, #2f5285); font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; } .ds-ruled a:hover { text-decoration-thickness: 2px; } .ds-ruled a:focus-visible { outline: 2px solid var(--brand, #3f6aa6); outline-offset: 2px; border-radius: 4px; }"
     }
   ],
   "narrative": {
     "northStar": "The pass",
-    "overview": "The pass is the counter between the kitchen and the dining room, where every plate is checked before it goes out. The site is laid out like one: a clean, lit counter (the warm-paper ground) with the work set down on it to be inspected. The work is the product itself, shown in its own screenshots, its own stage names and its own documentation, and the site's job is to present it plainly enough that a lead can check it and sign off.\n\nThe system is the same one the board app uses, so the site and the product read as one object. It is flat and border-defined: surfaces are white panels with a 1px warm-grey edge, nothing is raised by a shadow, and a single enamel blue marks what can be acted on. Density is that of good documentation: generous line height, a 640–780px reading measure, small uppercase labels that name each section before its heading. Light and dark are both first-class; the dark palette is a chosen set of warm near-blacks, not an inversion.\n\nThe kitchen appears in the words and the mark (a pleated toque) and may appear visually only in sparing, restrained nods that earn their place. The site must never become a dark hacker hero: no black-first terminal aesthetic, no neon, no animated code.",
+    "overview": "The pass is the counter between the kitchen and the dining room, where every plate is checked before it goes out. The site is laid out like one: a clean, lit counter (the warm-paper ground) with the work set down on it to be inspected. The work is the product itself, shown in its own screenshots, its own stage names, its own documentation and, on the homepage, its own board drawn in code and running a simulated queue, and the site's job is to present it plainly enough that a lead can check it and sign off.\n\nThe system is the same one the board app uses, so the site and the product read as one object. It is flat and border-defined: surfaces are white panels with a 1px warm-grey edge, nothing is raised by a shadow, and a single enamel blue marks what can be acted on. Density is that of good documentation: generous line height, a 640–780px reading measure, and headings that state a claim on their own rather than waiting under a label. Light and dark are both first-class; the dark palette is a chosen set of warm near-blacks, not an inversion.\n\nThe kitchen appears in the words and the mark (a pleated toque) and may appear visually only in sparing, restrained nods that earn their place. The site must never become a dark hacker hero: no black-first terminal aesthetic, no neon, no animated code.",
     "keyCharacteristics": [
       "Warm paper ground, white bordered surfaces, no shadows.",
       "One accent, enamel blue, for actions, links, the mark and the current page.",
       "Figtree for everything readable, JetBrains Mono for keys, paths and code.",
-      "Product screenshots, in light and dark pairs, carry the visual weight.",
+      "The product carries the visual weight: screenshots in light and dark pairs, and on the homepage the simulated board itself.",
       "Quiet and exact: thin borders, flat fills, precise spacing."
     ],
     "rules": [
       {
         "name": "The One Accent Rule",
-        "body": "Enamel blue is the only hue on the site's own surfaces. Colour beyond it arrives only inside product screenshots.",
+        "body": "Enamel blue is the only accent on the site's own surfaces. Status colour (amber, green, red) appears only inside the simulated board and in product screenshots, where it means what it means in the app.",
         "section": "colors"
       },
       {
-        "name": "The Reserved Amber Rule",
-        "body": "The stylesheet carries the app's amber \"Needs you\" tokens so the two systems stay in step, but the site does not use them. Amber means a person is needed on a card; it never decorates a page.",
+        "name": "The Needs-You Amber Rule",
+        "body": "Amber appears only inside the simulated board, and only where a person is needed: a card's Needs-you strip and edge, its amber dot, the Needs-you pill. It never decorates a page, a heading or a call to action.",
         "section": "colors"
       },
       {
-        "name": "The Label-Then-Heading Rule",
-        "body": "A home-page section opens with an uppercase 11px label naming its category, then its heading. The label orients; the heading says something.",
+        "name": "The Heading Carries Itself Rule",
+        "body": "A section heading stands alone, with no eyebrow, kicker or category label above it, and says something a reader can check (\"Nothing merges without a person\"). The uppercase 11px label belongs to navigation, the docs-sidebar group titles and the breadcrumb, where it names a place rather than introducing a heading.",
         "section": "typography"
       },
       {
         "name": "The Flat Counter Rule",
-        "body": "Surfaces are separated by borders and tone, never by shadow or blur. If something needs to stand out, give it the accent, not height.",
+        "body": "Surfaces are separated by borders and tone, never by shadow or blur. If something needs to stand out, give it the accent, not height: a card being moved by the cursor turns its edge Enamel Blue instead of lifting.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "Do take every colour from the custom properties in `site/src/site.css`, and keep them identical to the board app's tokens.",
+      "Do take every colour from the custom properties in `site/src/site.css` (and, for the board status colours, the homepage's own mirror of them), and keep them identical to the board app's tokens.",
       "Do separate surfaces with a 1px Border and a tonal step; keep everything flat.",
       "Do show the product with its own screenshots, always as a light and dark pair, framed like a card.",
-      "Do open home-page sections with an 11px uppercase label before the heading.",
+      "Do let a section heading carry itself: a sentence that says something, with nothing above it.",
+      "Do label the simulated board as a simulation, pause it off screen, and start it paused under reduced motion.",
       "Do set keys, paths, commands and versions in JetBrains Mono.",
       "Do design both themes at once; dark is a warm near-black palette, not an inversion.",
       "Do keep any kitchen imagery to a sparing, restrained nod that earns its place; the toque mark is the anchor."
     ],
     "donts": [
       "Don't add shadows, glows or blur to lift a surface.",
-      "Don't introduce a second accent hue, and don't use the amber \"Needs you\" colour for decoration.",
+      "Don't introduce a second accent hue, and don't use amber, green or red outside the simulated board; amber always means a person is needed.",
+      "Don't put an eyebrow, kicker or uppercase category label above a heading; the uppercase label is for navigation.",
       "Don't turn the site into a dark hacker hero: no black-first terminal aesthetic, no neon green, no animated code.",
       "Don't use emoji or exclamation marks, in copy or as icons."
     ]
