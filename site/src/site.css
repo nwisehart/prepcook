@@ -818,9 +818,11 @@ kbd {
   line-height: 0;
 }
 
-.shot img {
+.shot img,
+.shot video {
   display: block;
   width: 100%;
+  height: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -1082,6 +1084,108 @@ kbd {
 
 .tammy .feature h3 {
   font-size: 16px;
+}
+
+/* The blog */
+
+.post-page .crumb a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.post-page .crumb a:hover {
+  color: var(--text-high);
+}
+
+.byline {
+  margin: -4px 0 32px;
+  color: var(--text-low);
+  font-size: 14px;
+}
+
+.prose figure {
+  margin: 28px 0;
+}
+
+.prose figure img {
+  display: block;
+  width: 100%;
+}
+
+.prose figcaption {
+  margin-top: 10px;
+  color: var(--text-low);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.post-list {
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prose .post-list {
+  padding-left: 0;
+}
+
+.post-list li {
+  margin: 0;
+  padding: 20px 0;
+  border-top: 1px solid var(--border);
+}
+
+.post-list li:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.post-title {
+  color: var(--text-high);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.post-title:hover {
+  color: var(--brand-text);
+  text-decoration: underline;
+}
+
+.post-list .post-meta,
+.more-posts .post-meta {
+  margin: 4px 0 6px;
+  color: var(--text-low);
+  font-size: 14px;
+}
+
+.prose .post-description,
+.post-description {
+  margin: 0;
+}
+
+.more-links {
+  margin: 20px 0 0;
+  font-size: 14px;
+}
+
+.more-posts {
+  margin: 32px 0 0;
+}
+
+.more-posts h2 {
+  margin: 0;
+  color: var(--text-high);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.more-posts .post-list {
+  margin-top: 12px;
+}
+
+.more-posts .post-title {
+  font-size: 17px;
 }
 
 /* Narrower screens */

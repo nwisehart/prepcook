@@ -1,6 +1,7 @@
 // The site's one script: the theme toggle, the docs menu on narrow screens,
-// and the copy buttons on code blocks. Everything works without it except
-// those three.
+// the copy buttons on code blocks, and holding the board film still for
+// readers who ask for less motion. Everything works without it except those
+// four.
 (function () {
   var root = document.documentElement;
   var STORAGE_KEY = 'prepcook-theme';
@@ -114,6 +115,16 @@
       if (menuButton) menuButton.focus();
     }
   });
+
+  // The home page's board film plays on its own unless the reader has asked
+  // for less motion; then it waits, paused on its poster, with controls.
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('video[autoplay]').forEach(function (video) {
+      video.removeAttribute('autoplay');
+      video.pause();
+      video.controls = true;
+    });
+  }
 
   // Copy buttons on code blocks.
   document.querySelectorAll('.code-block').forEach(function (block) {

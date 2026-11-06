@@ -1,5 +1,6 @@
 // Checks the JSON-LD in the built site: it parses, and each entity carries the
-// fields search engines read. Run after the build (`pnpm run build` runs it).
+// fields search engines read (on the home and Tammy pages and every blog
+// post). Run after the build (`pnpm run build` runs it).
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -112,8 +113,65 @@ test('the Tammy page describes Tammy', () => {
   assert.equal(tammy.codeRepository, 'https://github.com/nwisehart/tammy');
 });
 
+// The posts in dist: every page under blog/ but the index.
+function posts() {
+  const dir = path.join(DIST, 'blog');
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.html') && f !== 'index.html')
+    .map((f) => `blog/${f}`);
+}
+
+function meta(html, property) {
+  const m = html.match(
+    new RegExp(`<meta property="${property}" content="([^"]*)"`)
+  );
+  return m ? m[1].replace(/&amp;/g, '&') : null;
+}
+
+test('each post is a BlogPosting', () => {
+  for (const page of posts()) {
+    const [post, ...others] = ofType(entities(page), 'BlogPosting');
+    assert.ok(post, `${page}: no BlogPosting`);
+    assert.equal(others.length, 0, `${page}: more than one BlogPosting`);
+    assertFields(post, [
+      'headline',
+      'description',
+      'datePublished',
+      'author',
+      'mainEntityOfPage',
+      'url',
+    ]);
+    const url = `https://prepcook.dev/${page}`;
+    assert.equal(post.url, url);
+    assert.deepEqual(post.mainEntityOfPage, { '@type': 'WebPage', '@id': url });
+    assert.ok(post.headline.length <= 110, `${page}: headline too long`);
+    assert.match(post.datePublished, /^\d{4}-\d{2}-\d{2}/);
+    assert.equal(post.author['@type'], 'Person');
+    assert.ok(post.author.name, `${page}: the author has no name`);
+
+    const html = fs.readFileSync(path.join(DIST, page), 'utf8');
+    assert.equal(meta(html, 'og:type'), 'article');
+    assert.equal(meta(html, 'article:published_time'), post.datePublished);
+    if (post.image !== undefined) {
+      assert.ok(post.image.startsWith('https://prepcook.dev/'), post.image);
+      assert.ok(
+        fs.existsSync(
+          path.join(DIST, post.image.slice('https://prepcook.dev/'.length))
+        ),
+        `${page}: image ${post.image} is not in the site`
+      );
+      assert.equal(meta(html, 'og:image'), post.image);
+    }
+  }
+});
+
 test('no other page carries JSON-LD', () => {
-  for (const page of ['get-started.html', 'docs/method.html']) {
+  for (const page of [
+    'get-started.html',
+    'docs/method.html',
+    'blog/index.html',
+  ]) {
     const html = fs.readFileSync(path.join(DIST, page), 'utf8');
     assert.ok(!html.includes('application/ld+json'), page);
   }
