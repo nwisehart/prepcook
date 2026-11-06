@@ -65,10 +65,10 @@ typography:
     letterSpacing: '-0.03em'
   headline:
     fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
-    fontSize: '32px'
+    fontSize: 'clamp(30px, 3vw, 42px)'
     fontWeight: 700
-    lineHeight: 1.3
-    letterSpacing: '-0.5px'
+    lineHeight: 1.1
+    letterSpacing: '-0.03em'
   title:
     fontFamily: 'Figtree, ui-sans-serif, system-ui, sans-serif'
     fontSize: '22px'
@@ -411,13 +411,18 @@ for things a reader would copy or type.
   under its crumb.
 - **Home Section** (700, fluid, 1.1, tight tracking): section headings on the
   homepage and the Tammy page, balanced and held to 22ch.
-- **Headline** (700, 32px, 1.3): a docs page's `h1`; 26px under 640px.
-- **Title** (700, 22px, 1.3): docs `h2`, ruled above with a Border line and
-  24px of padding; 20px under 640px. Also the board header's project name.
+- **Headline** (700, fluid 30–42px, 1.1, tight tracking): a docs page's
+  `h1`, balanced; 28px under 640px. The paragraph under it is the page's
+  lead: 18px Ink at 1.6 (17px under 640px).
+- **Title** (700, 22px, 1.3): the board header's project name. Docs `h2`s
+  set it at 24px with -0.02em tracking, ruled above with a Border line, 56px
+  above and 28px of padding; 20px under 640px.
 - **Title Small** (700, 17px): the "Prepcook" name in the simulated app's
   sidebar; docs `h3` is 18px; stage-track and ruled-list headings run
   18–19px.
-- **Body** (400, 16px, 1.65): running text, docs measure 780px. The
+- **Body** (400, 16px, 1.65): running text. In the docs, paragraphs, lists
+  and quotes hold to 38rem (about 70 characters of Figtree) while tables and
+  code take the 780px column. The
   homepage's opening paragraph under the headline is 17px at 66ch; the
   homepage's and Tammy page's section ledes are 18px at 62ch (16px under
   640px), and the lede under the conversation is 18px Ink at 68ch.

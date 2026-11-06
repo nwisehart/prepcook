@@ -709,11 +709,11 @@
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "A docs page's h1; 26px under 640px."
+        "purpose": "A docs page's h1, fluid and balanced; 28px under 640px. The paragraph under it is the lead, 18px Ink."
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Docs h2, ruled above; 20px under 640px. Also the simulated board header's project name."
+        "purpose": "The simulated board header's project name. Docs h2s set it at 24px, ruled above, 56px above; 20px under 640px."
       },
       "title-sm": {
         "displayName": "Title Small",

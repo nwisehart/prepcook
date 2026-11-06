@@ -373,19 +373,21 @@ kbd {
 }
 
 .prose h1 {
-  margin: 0 0 16px;
-  font-size: 32px;
+  margin: 0 0 18px;
+  font-size: clamp(30px, 3vw, 42px);
   font-weight: 700;
-  letter-spacing: -0.5px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
 }
 
 .prose h2 {
-  margin: 48px 0 12px;
-  padding-top: 24px;
+  margin: 56px 0 14px;
+  padding-top: 28px;
   border-top: 1px solid var(--border);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.02em;
 }
 
 .prose h3 {
@@ -650,7 +652,23 @@ kbd {
 .doc-main {
   min-width: 0;
   max-width: 780px;
-  padding: 32px 0 0;
+  padding: 36px 0 0;
+}
+
+/* Running text keeps a readable measure (about 75 characters of Figtree);
+   tables and code take the whole column. */
+.doc-main .prose > p,
+.doc-main .prose > ul,
+.doc-main .prose > ol,
+.doc-main .prose > blockquote {
+  max-width: 38rem;
+}
+
+/* The paragraph under a page's title reads as its lead. */
+.doc-main .prose > h1 + p {
+  color: var(--text-high);
+  font-size: 18px;
+  line-height: 1.6;
 }
 
 .crumb {
@@ -714,8 +732,8 @@ kbd {
 }
 
 .edit {
-  margin: 48px 0 0;
-  padding-top: 16px;
+  margin: 64px 0 0;
+  padding-top: 18px;
   border-top: 1px solid var(--border);
   font-size: 14px;
 }
@@ -729,7 +747,7 @@ kbd {
 
 .pager a {
   display: block;
-  padding: 12px 16px;
+  padding: 14px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -1125,7 +1143,10 @@ kbd {
     font-size: 17px;
   }
   .prose h1 {
-    font-size: 26px;
+    font-size: 28px;
+  }
+  .doc-main .prose > h1 + p {
+    font-size: 17px;
   }
   .prose h2 {
     font-size: 20px;
